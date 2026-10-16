@@ -59,18 +59,16 @@ def ingest_pdf(pdf_path: Path) -> list[Document]:
     return documents
 
 
-def main():
+def document_loader():
     documents = ingest_pdf(PDF_PATH)
 
     if documents:
-        first_page = documents[0]
+        print('Returning documents')
+        return documents
+    
+    else:
+        print('No documents found')
+        return 
 
-        print("\nFirst page metadata:")
-        print(first_page.metadata)
-
-        print("\nFirst page text preview:")
-        print(first_page.get_content())
 
 
-if __name__ == "__main__":
-    main()
