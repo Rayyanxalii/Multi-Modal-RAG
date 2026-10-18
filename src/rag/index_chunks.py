@@ -1,4 +1,3 @@
-
 import json
 import os
 import uuid
@@ -93,6 +92,14 @@ def index_chunks() -> None:
     client = get_client()
 
     ensure_collection(client)
+    
+    indexed_count = client.count(
+        collection_name=COLLECTION_NAME,
+        exact=True,
+    ).count
+    
+    print(f"Chunks in JSONL: {len(chunks)}")
+    print(f"Points currently in Qdrant: {indexed_count}")
 
     for start in range(0, len(chunks), BATCH_SIZE):
         batch = chunks[start:start + BATCH_SIZE]
