@@ -60,7 +60,7 @@ def search_chunks(question: str, top_k: int = 5) -> list[dict]:
         payload = point.payload or {}
 
         results.append({
-            "score": point.score,
+            "dense_score": point.score,
             "chunk_id": payload.get("chunk_id"),
             "document_id": payload.get("document_id"),
             "page_numbers": payload.get("page_numbers", []),
@@ -93,7 +93,7 @@ def main():
     for rank, result in enumerate(results, start=1):
         print("\n" + "=" * 75)
         print(f"Rank: {rank}")
-        print(f"Score: {result['score']:.4f}")
+        print(f"Score: {result['dense_score']:.4f}")
         print(f"Chunk ID: {result['chunk_id']}")
         print(f"Pages: {result['page_numbers']}")
         print(f"Headings: {result['headings']}")
