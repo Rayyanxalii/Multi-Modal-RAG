@@ -72,6 +72,7 @@ def get_chunk_metadata(chunk: Any) -> dict:
     }
 
 
+
 def create_chunks(pdf_path: Path) -> list[dict]:
     if not pdf_path.exists():
         raise FileNotFoundError(

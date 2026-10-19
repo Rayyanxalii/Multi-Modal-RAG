@@ -24,6 +24,8 @@ BATCH_SIZE = 16
 load_dotenv(PROJECT_ROOT / ".env")
 
 
+
+
 def load_chunks() -> list[dict]:
     if not CHUNKS_PATH.exists():
         raise FileNotFoundError(
@@ -41,6 +43,7 @@ def load_chunks() -> list[dict]:
         raise ValueError("The chunks file is empty.")
 
     return chunks
+
 
 
 

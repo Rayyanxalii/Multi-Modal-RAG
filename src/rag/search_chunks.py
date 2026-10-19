@@ -26,6 +26,9 @@ def get_client() -> QdrantClient:
     return QdrantClient(url=url, api_key=api_key)
 
 
+
+
+
 def search_chunks(question: str, top_k: int = 5) -> list[dict]:
     if not question.strip():
         raise ValueError("Question cannot be empty.")
@@ -69,6 +72,10 @@ def search_chunks(question: str, top_k: int = 5) -> list[dict]:
         })
 
     return results
+
+
+
+
 
 
 def main():
