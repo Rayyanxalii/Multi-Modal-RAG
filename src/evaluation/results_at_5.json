@@ -1,0 +1,1304 @@
+[
+  {
+    "retriever": "Dense (Qdrant)",
+    "top_k": 5,
+    "num_queries": 23,
+    "avg_precision@5": 0.3478,
+    "avg_recall@5": 0.7616,
+    "avg_mrr@5": 0.8514,
+    "avg_hit_rate@5": 0.913,
+    "per_query": [
+      {
+        "query": "What is an attention function and how does it map inputs to outputs?",
+        "retrieved": [
+          "attention_0011",
+          "attention_0017",
+          "attention_0012",
+          "attention_0018",
+          "attention_0013"
+        ],
+        "relevant": [
+          "attention_0011",
+          "attention_0012"
+        ],
+        "precision@5": 0.4,
+        "recall@5": 1.0,
+        "mrr@5": 1.0,
+        "hit_rate@5": 1.0
+      },
+      {
+        "query": "How is Scaled Dot-Product Attention calculated?",
+        "retrieved": [
+          "attention_0012",
+          "attention_0014",
+          "attention_0013",
+          "attention_0018",
+          "attention_0011"
+        ],
+        "relevant": [
+          "attention_0014",
+          "attention_0013",
+          "attention_0012"
+        ],
+        "precision@5": 0.6,
+        "recall@5": 1.0,
+        "mrr@5": 1.0,
+        "hit_rate@5": 1.0
+      },
+      {
+        "query": "Why is the dot product scaled by the square root of dk in scaled dot-product attention?",
+        "retrieved": [
+          "attention_0014",
+          "attention_0012",
+          "attention_0013",
+          "attention_0015",
+          "attention_0018"
+        ],
+        "relevant": [
+          "attention_0014",
+          "attention_0013"
+        ],
+        "precision@5": 0.4,
+        "recall@5": 1.0,
+        "mrr@5": 1.0,
+        "hit_rate@5": 1.0
+      },
+      {
+        "query": "How does multi-head attention work?",
+        "retrieved": [
+          "attention_0016",
+          "attention_0015",
+          "attention_0012",
+          "attention_0017",
+          "attention_0066"
+        ],
+        "relevant": [
+          "attention_0012",
+          "attention_0015",
+          "attention_0016"
+        ],
+        "precision@5": 0.6,
+        "recall@5": 1.0,
+        "mrr@5": 1.0,
+        "hit_rate@5": 1.0
+      },
+      {
+        "query": "What are the three ways the Transformer uses multi-head attention?",
+        "retrieved": [
+          "attention_0017",
+          "attention_0055",
+          "attention_0006",
+          "attention_0012",
+          "attention_0016"
+        ],
+        "relevant": [
+          "attention_0017",
+          "attention_0018"
+        ],
+        "precision@5": 0.2,
+        "recall@5": 0.5,
+        "mrr@5": 1.0,
+        "hit_rate@5": 1.0
+      },
+      {
+        "query": "What is the structure of the Transformer encoder?",
+        "retrieved": [
+          "attention_0008",
+          "attention_0009",
+          "attention_0010",
+          "attention_0017",
+          "attention_0055"
+        ],
+        "relevant": [
+          "attention_0008",
+          "attention_0009"
+        ],
+        "precision@5": 0.4,
+        "recall@5": 1.0,
+        "mrr@5": 1.0,
+        "hit_rate@5": 1.0
+      },
+      {
+        "query": "How is the Transformer decoder different from the encoder?",
+        "retrieved": [
+          "attention_0010",
+          "attention_0017",
+          "attention_0008",
+          "attention_0055",
+          "attention_0009"
+        ],
+        "relevant": [
+          "attention_0018",
+          "attention_0009",
+          "attention_0010"
+        ],
+        "precision@5": 0.4,
+        "recall@5": 0.6667,
+        "mrr@5": 1.0,
+        "hit_rate@5": 1.0
+      },
+      {
+        "query": "What is positional encoding and why is it needed in the Transformer?",
+        "retrieved": [
+          "attention_0022",
+          "attention_0023",
+          "attention_0019",
+          "attention_0017",
+          "attention_0055"
+        ],
+        "relevant": [
+          "attention_0022",
+          "attention_0023"
+        ],
+        "precision@5": 0.4,
+        "recall@5": 1.0,
+        "mrr@5": 1.0,
+        "hit_rate@5": 1.0
+      },
+      {
+        "query": "What is self-attention and what tasks has it been applied to?",
+        "retrieved": [
+          "attention_0024",
+          "attention_0017",
+          "attention_0026",
+          "attention_0018",
+          "attention_0065"
+        ],
+        "relevant": [
+          "attention_0007",
+          "attention_0006"
+        ],
+        "precision@5": 0.0,
+        "recall@5": 0.0,
+        "mrr@5": 0.0,
+        "hit_rate@5": 0.0
+      },
+      {
+        "query": "Why does self-attention help model long-range dependencies better than recurrent layers?",
+        "retrieved": [
+          "attention_0026",
+          "attention_0024",
+          "attention_0025",
+          "attention_0027",
+          "attention_0065"
+        ],
+        "relevant": [
+          "attention_0026",
+          "attention_0024",
+          "attention_0021",
+          "attention_0025"
+        ],
+        "precision@5": 0.6,
+        "recall@5": 0.75,
+        "mrr@5": 1.0,
+        "hit_rate@5": 1.0
+      },
+      {
+        "query": "How does self-attention compare to recurrent and convolutional layers in terms of computational complexity?",
+        "retrieved": [
+          "attention_0024",
+          "attention_0027",
+          "attention_0026",
+          "attention_0006",
+          "attention_0065"
+        ],
+        "relevant": [
+          "attention_0026",
+          "attention_0025",
+          "attention_0024",
+          "attention_0021",
+          "attention_0027"
+        ],
+        "precision@5": 0.6,
+        "recall@5": 0.6,
+        "mrr@5": 1.0,
+        "hit_rate@5": 1.0
+      },
+      {
+        "query": "What is a position-wise feed-forward network and how is it used in the Transformer?",
+        "retrieved": [
+          "attention_0019",
+          "attention_0007",
+          "attention_0017",
+          "attention_0005",
+          "attention_0025"
+        ],
+        "relevant": [
+          "attention_0019"
+        ],
+        "precision@5": 0.2,
+        "recall@5": 1.0,
+        "mrr@5": 1.0,
+        "hit_rate@5": 1.0
+      },
+      {
+        "query": "How are embeddings and the output softmax layer handled in the Transformer?",
+        "retrieved": [
+          "attention_0020",
+          "attention_0021",
+          "attention_0017",
+          "attention_0009",
+          "attention_0008"
+        ],
+        "relevant": [
+          "attention_0020"
+        ],
+        "precision@5": 0.2,
+        "recall@5": 1.0,
+        "mrr@5": 1.0,
+        "hit_rate@5": 1.0
+      },
+      {
+        "query": "What optimizer and learning rate schedule were used to train the Transformer?",
+        "retrieved": [
+          "attention_0031",
+          "attention_0038",
+          "attention_0036",
+          "attention_0040",
+          "attention_0030"
+        ],
+        "relevant": [
+          "attention_0031"
+        ],
+        "precision@5": 0.2,
+        "recall@5": 1.0,
+        "mrr@5": 1.0,
+        "hit_rate@5": 1.0
+      },
+      {
+        "query": "What regularization techniques were used during Transformer training?",
+        "retrieved": [
+          "attention_0032",
+          "attention_0036",
+          "attention_0033",
+          "attention_0035",
+          "attention_0034"
+        ],
+        "relevant": [
+          "attention_0037",
+          "attention_0032"
+        ],
+        "precision@5": 0.2,
+        "recall@5": 0.5,
+        "mrr@5": 1.0,
+        "hit_rate@5": 1.0
+      },
+      {
+        "query": "What datasets were used to train the Transformer and how were they prepared?",
+        "retrieved": [
+          "attention_0036",
+          "attention_0038",
+          "attention_0028",
+          "attention_0029",
+          "attention_0040"
+        ],
+        "relevant": [
+          "attention_0029"
+        ],
+        "precision@5": 0.2,
+        "recall@5": 1.0,
+        "mrr@5": 0.25,
+        "hit_rate@5": 1.0
+      },
+      {
+        "query": "What BLEU scores did the Transformer achieve on machine translation tasks?",
+        "retrieved": [
+          "attention_0038",
+          "attention_0040",
+          "attention_0033",
+          "attention_0055",
+          "attention_0002"
+        ],
+        "relevant": [
+          "attention_0038",
+          "attention_0002",
+          "attention_0036"
+        ],
+        "precision@5": 0.4,
+        "recall@5": 0.6667,
+        "mrr@5": 1.0,
+        "hit_rate@5": 1.0
+      },
+      {
+        "query": "How does the Transformer perform on English constituency parsing?",
+        "retrieved": [
+          "attention_0050",
+          "attention_0052",
+          "attention_0053",
+          "attention_0054",
+          "attention_0051"
+        ],
+        "relevant": [
+          "attention_0051",
+          "attention_0050",
+          "attention_0053",
+          "attention_0054",
+          "attention_0052"
+        ],
+        "precision@5": 1.0,
+        "recall@5": 1.0,
+        "mrr@5": 1.0,
+        "hit_rate@5": 1.0
+      },
+      {
+        "query": "Why was the Transformer architecture proposed and what problems does it solve compared to RNNs?",
+        "retrieved": [
+          "attention_0007",
+          "attention_0003",
+          "attention_0005",
+          "attention_0041",
+          "attention_0040"
+        ],
+        "relevant": [
+          "attention_0002",
+          "attention_0005",
+          "attention_0004"
+        ],
+        "precision@5": 0.2,
+        "recall@5": 0.3333,
+        "mrr@5": 0.3333,
+        "hit_rate@5": 1.0
+      },
+      {
+        "query": "What is additive attention and how does it differ from dot-product attention?",
+        "retrieved": [
+          "attention_0014",
+          "attention_0012",
+          "attention_0013",
+          "attention_0018",
+          "attention_0011"
+        ],
+        "relevant": [
+          "attention_0014",
+          "attention_0013"
+        ],
+        "precision@5": 0.4,
+        "recall@5": 1.0,
+        "mrr@5": 1.0,
+        "hit_rate@5": 1.0
+      },
+      {
+        "query": "What hardware and how long did it take to train the Transformer?",
+        "retrieved": [
+          "attention_0030",
+          "attention_0038",
+          "attention_0040",
+          "attention_0005",
+          "attention_0055"
+        ],
+        "relevant": [
+          "attention_0030"
+        ],
+        "precision@5": 0.2,
+        "recall@5": 1.0,
+        "mrr@5": 1.0,
+        "hit_rate@5": 1.0
+      },
+      {
+        "query": "What effect does the number of attention heads have on Transformer performance?",
+        "retrieved": [
+          "attention_0017",
+          "attention_0007",
+          "attention_0006",
+          "attention_0003",
+          "attention_0005"
+        ],
+        "relevant": [
+          "attention_0042",
+          "attention_0048",
+          "attention_0041"
+        ],
+        "precision@5": 0.0,
+        "recall@5": 0.0,
+        "mrr@5": 0.0,
+        "hit_rate@5": 0.0
+      },
+      {
+        "query": "How does the Transformer generalise the concept of attention beyond translation?",
+        "retrieved": [
+          "attention_0055",
+          "attention_0017",
+          "attention_0005",
+          "attention_0007",
+          "attention_0002"
+        ],
+        "relevant": [
+          "attention_0050",
+          "attention_0055"
+        ],
+        "precision@5": 0.2,
+        "recall@5": 0.5,
+        "mrr@5": 1.0,
+        "hit_rate@5": 1.0
+      }
+    ]
+  },
+  {
+    "retriever": "Sparse (BM25)",
+    "top_k": 5,
+    "num_queries": 23,
+    "avg_precision@5": 0.3217,
+    "avg_recall@5": 0.7036,
+    "avg_mrr@5": 0.7101,
+    "avg_hit_rate@5": 0.8261,
+    "per_query": [
+      {
+        "query": "What is an attention function and how does it map inputs to outputs?",
+        "retrieved": [
+          "attention_0001",
+          "attention_0011",
+          "attention_0009",
+          "attention_0020",
+          "attention_0013"
+        ],
+        "relevant": [
+          "attention_0011",
+          "attention_0012"
+        ],
+        "precision@5": 0.2,
+        "recall@5": 0.5,
+        "mrr@5": 0.5,
+        "hit_rate@5": 1.0
+      },
+      {
+        "query": "How is Scaled Dot-Product Attention calculated?",
+        "retrieved": [
+          "attention_0012",
+          "attention_0013",
+          "attention_0014",
+          "attention_0001",
+          "attention_0018"
+        ],
+        "relevant": [
+          "attention_0014",
+          "attention_0013",
+          "attention_0012"
+        ],
+        "precision@5": 0.6,
+        "recall@5": 1.0,
+        "mrr@5": 1.0,
+        "hit_rate@5": 1.0
+      },
+      {
+        "query": "Why is the dot product scaled by the square root of dk in scaled dot-product attention?",
+        "retrieved": [
+          "attention_0012",
+          "attention_0013",
+          "attention_0014",
+          "attention_0018",
+          "attention_0017"
+        ],
+        "relevant": [
+          "attention_0014",
+          "attention_0013"
+        ],
+        "precision@5": 0.4,
+        "recall@5": 1.0,
+        "mrr@5": 0.5,
+        "hit_rate@5": 1.0
+      },
+      {
+        "query": "How does multi-head attention work?",
+        "retrieved": [
+          "attention_0016",
+          "attention_0015",
+          "attention_0012",
+          "attention_0003",
+          "attention_0027"
+        ],
+        "relevant": [
+          "attention_0012",
+          "attention_0015",
+          "attention_0016"
+        ],
+        "precision@5": 0.6,
+        "recall@5": 1.0,
+        "mrr@5": 1.0,
+        "hit_rate@5": 1.0
+      },
+      {
+        "query": "What are the three ways the Transformer uses multi-head attention?",
+        "retrieved": [
+          "attention_0015",
+          "attention_0016",
+          "attention_0017",
+          "attention_0012",
+          "attention_0024"
+        ],
+        "relevant": [
+          "attention_0017",
+          "attention_0018"
+        ],
+        "precision@5": 0.2,
+        "recall@5": 0.5,
+        "mrr@5": 0.3333,
+        "hit_rate@5": 1.0
+      },
+      {
+        "query": "What is the structure of the Transformer encoder?",
+        "retrieved": [
+          "attention_0009",
+          "attention_0010",
+          "attention_0001",
+          "attention_0017",
+          "attention_0018"
+        ],
+        "relevant": [
+          "attention_0008",
+          "attention_0009"
+        ],
+        "precision@5": 0.2,
+        "recall@5": 0.5,
+        "mrr@5": 1.0,
+        "hit_rate@5": 1.0
+      },
+      {
+        "query": "How is the Transformer decoder different from the encoder?",
+        "retrieved": [
+          "attention_0010",
+          "attention_0009",
+          "attention_0001",
+          "attention_0017",
+          "attention_0019"
+        ],
+        "relevant": [
+          "attention_0018",
+          "attention_0009",
+          "attention_0010"
+        ],
+        "precision@5": 0.4,
+        "recall@5": 0.6667,
+        "mrr@5": 1.0,
+        "hit_rate@5": 1.0
+      },
+      {
+        "query": "What is positional encoding and why is it needed in the Transformer?",
+        "retrieved": [
+          "attention_0022",
+          "attention_0023",
+          "attention_0001",
+          "attention_0025",
+          "attention_0027"
+        ],
+        "relevant": [
+          "attention_0022",
+          "attention_0023"
+        ],
+        "precision@5": 0.4,
+        "recall@5": 1.0,
+        "mrr@5": 1.0,
+        "hit_rate@5": 1.0
+      },
+      {
+        "query": "What is self-attention and what tasks has it been applied to?",
+        "retrieved": [
+          "attention_0025",
+          "attention_0026",
+          "attention_0027",
+          "attention_0024",
+          "attention_0001"
+        ],
+        "relevant": [
+          "attention_0007",
+          "attention_0006"
+        ],
+        "precision@5": 0.0,
+        "recall@5": 0.0,
+        "mrr@5": 0.0,
+        "hit_rate@5": 0.0
+      },
+      {
+        "query": "Why does self-attention help model long-range dependencies better than recurrent layers?",
+        "retrieved": [
+          "attention_0025",
+          "attention_0026",
+          "attention_0027",
+          "attention_0024",
+          "attention_0049"
+        ],
+        "relevant": [
+          "attention_0026",
+          "attention_0024",
+          "attention_0021",
+          "attention_0025"
+        ],
+        "precision@5": 0.6,
+        "recall@5": 0.75,
+        "mrr@5": 1.0,
+        "hit_rate@5": 1.0
+      },
+      {
+        "query": "How does self-attention compare to recurrent and convolutional layers in terms of computational complexity?",
+        "retrieved": [
+          "attention_0024",
+          "attention_0027",
+          "attention_0026",
+          "attention_0017",
+          "attention_0018"
+        ],
+        "relevant": [
+          "attention_0026",
+          "attention_0025",
+          "attention_0024",
+          "attention_0021",
+          "attention_0027"
+        ],
+        "precision@5": 0.6,
+        "recall@5": 0.6,
+        "mrr@5": 1.0,
+        "hit_rate@5": 1.0
+      },
+      {
+        "query": "What is a position-wise feed-forward network and how is it used in the Transformer?",
+        "retrieved": [
+          "attention_0019",
+          "attention_0001",
+          "attention_0009",
+          "attention_0017",
+          "attention_0018"
+        ],
+        "relevant": [
+          "attention_0019"
+        ],
+        "precision@5": 0.2,
+        "recall@5": 1.0,
+        "mrr@5": 1.0,
+        "hit_rate@5": 1.0
+      },
+      {
+        "query": "How are embeddings and the output softmax layer handled in the Transformer?",
+        "retrieved": [
+          "attention_0020",
+          "attention_0021",
+          "attention_0017",
+          "attention_0010",
+          "attention_0018"
+        ],
+        "relevant": [
+          "attention_0020"
+        ],
+        "precision@5": 0.2,
+        "recall@5": 1.0,
+        "mrr@5": 1.0,
+        "hit_rate@5": 1.0
+      },
+      {
+        "query": "What optimizer and learning rate schedule were used to train the Transformer?",
+        "retrieved": [
+          "attention_0031",
+          "attention_0030",
+          "attention_0029",
+          "attention_0020",
+          "attention_0021"
+        ],
+        "relevant": [
+          "attention_0031"
+        ],
+        "precision@5": 0.2,
+        "recall@5": 1.0,
+        "mrr@5": 1.0,
+        "hit_rate@5": 1.0
+      },
+      {
+        "query": "What regularization techniques were used during Transformer training?",
+        "retrieved": [
+          "attention_0028",
+          "attention_0032",
+          "attention_0029",
+          "attention_0036",
+          "attention_0037"
+        ],
+        "relevant": [
+          "attention_0037",
+          "attention_0032"
+        ],
+        "precision@5": 0.4,
+        "recall@5": 1.0,
+        "mrr@5": 0.5,
+        "hit_rate@5": 1.0
+      },
+      {
+        "query": "What datasets were used to train the Transformer and how were they prepared?",
+        "retrieved": [
+          "attention_0029",
+          "attention_0030",
+          "attention_0020",
+          "attention_0021",
+          "attention_0009"
+        ],
+        "relevant": [
+          "attention_0029"
+        ],
+        "precision@5": 0.2,
+        "recall@5": 1.0,
+        "mrr@5": 1.0,
+        "hit_rate@5": 1.0
+      },
+      {
+        "query": "What BLEU scores did the Transformer achieve on machine translation tasks?",
+        "retrieved": [
+          "attention_0038",
+          "attention_0039",
+          "attention_0002",
+          "attention_0055",
+          "attention_0033"
+        ],
+        "relevant": [
+          "attention_0038",
+          "attention_0002",
+          "attention_0036"
+        ],
+        "precision@5": 0.4,
+        "recall@5": 0.6667,
+        "mrr@5": 1.0,
+        "hit_rate@5": 1.0
+      },
+      {
+        "query": "How does the Transformer perform on English constituency parsing?",
+        "retrieved": [
+          "attention_0050",
+          "attention_0052",
+          "attention_0051",
+          "attention_0054",
+          "attention_0053"
+        ],
+        "relevant": [
+          "attention_0051",
+          "attention_0050",
+          "attention_0053",
+          "attention_0054",
+          "attention_0052"
+        ],
+        "precision@5": 1.0,
+        "recall@5": 1.0,
+        "mrr@5": 1.0,
+        "hit_rate@5": 1.0
+      },
+      {
+        "query": "Why was the Transformer architecture proposed and what problems does it solve compared to RNNs?",
+        "retrieved": [
+          "attention_0008",
+          "attention_0027",
+          "attention_0025",
+          "attention_0026",
+          "attention_0024"
+        ],
+        "relevant": [
+          "attention_0002",
+          "attention_0005",
+          "attention_0004"
+        ],
+        "precision@5": 0.0,
+        "recall@5": 0.0,
+        "mrr@5": 0.0,
+        "hit_rate@5": 0.0
+      },
+      {
+        "query": "What is additive attention and how does it differ from dot-product attention?",
+        "retrieved": [
+          "attention_0012",
+          "attention_0013",
+          "attention_0014",
+          "attention_0001",
+          "attention_0015"
+        ],
+        "relevant": [
+          "attention_0014",
+          "attention_0013"
+        ],
+        "precision@5": 0.4,
+        "recall@5": 1.0,
+        "mrr@5": 0.5,
+        "hit_rate@5": 1.0
+      },
+      {
+        "query": "What hardware and how long did it take to train the Transformer?",
+        "retrieved": [
+          "attention_0030",
+          "attention_0020",
+          "attention_0021",
+          "attention_0009",
+          "attention_0010"
+        ],
+        "relevant": [
+          "attention_0030"
+        ],
+        "precision@5": 0.2,
+        "recall@5": 1.0,
+        "mrr@5": 1.0,
+        "hit_rate@5": 1.0
+      },
+      {
+        "query": "What effect does the number of attention heads have on Transformer performance?",
+        "retrieved": [
+          "attention_0017",
+          "attention_0018",
+          "attention_0027",
+          "attention_0026",
+          "attention_0024"
+        ],
+        "relevant": [
+          "attention_0042",
+          "attention_0048",
+          "attention_0041"
+        ],
+        "precision@5": 0.0,
+        "recall@5": 0.0,
+        "mrr@5": 0.0,
+        "hit_rate@5": 0.0
+      },
+      {
+        "query": "How does the Transformer generalise the concept of attention beyond translation?",
+        "retrieved": [
+          "attention_0038",
+          "attention_0039",
+          "attention_0017",
+          "attention_0018",
+          "attention_0027"
+        ],
+        "relevant": [
+          "attention_0050",
+          "attention_0055"
+        ],
+        "precision@5": 0.0,
+        "recall@5": 0.0,
+        "mrr@5": 0.0,
+        "hit_rate@5": 0.0
+      }
+    ]
+  },
+  {
+    "retriever": "Hybrid (RRF)",
+    "top_k": 5,
+    "num_queries": 23,
+    "avg_precision@5": 0.3478,
+    "avg_recall@5": 0.7558,
+    "avg_mrr@5": 0.7971,
+    "avg_hit_rate@5": 0.8696,
+    "per_query": [
+      {
+        "query": "What is an attention function and how does it map inputs to outputs?",
+        "retrieved": [
+          "attention_0011",
+          "attention_0013",
+          "attention_0012",
+          "attention_0015",
+          "attention_0027"
+        ],
+        "relevant": [
+          "attention_0011",
+          "attention_0012"
+        ],
+        "precision@5": 0.4,
+        "recall@5": 1.0,
+        "mrr@5": 1.0,
+        "hit_rate@5": 1.0
+      },
+      {
+        "query": "How is Scaled Dot-Product Attention calculated?",
+        "retrieved": [
+          "attention_0012",
+          "attention_0014",
+          "attention_0013",
+          "attention_0018",
+          "attention_0015"
+        ],
+        "relevant": [
+          "attention_0014",
+          "attention_0013",
+          "attention_0012"
+        ],
+        "precision@5": 0.6,
+        "recall@5": 1.0,
+        "mrr@5": 1.0,
+        "hit_rate@5": 1.0
+      },
+      {
+        "query": "Why is the dot product scaled by the square root of dk in scaled dot-product attention?",
+        "retrieved": [
+          "attention_0012",
+          "attention_0014",
+          "attention_0013",
+          "attention_0018",
+          "attention_0015"
+        ],
+        "relevant": [
+          "attention_0014",
+          "attention_0013"
+        ],
+        "precision@5": 0.4,
+        "recall@5": 1.0,
+        "mrr@5": 0.5,
+        "hit_rate@5": 1.0
+      },
+      {
+        "query": "How does multi-head attention work?",
+        "retrieved": [
+          "attention_0016",
+          "attention_0015",
+          "attention_0012",
+          "attention_0017",
+          "attention_0027"
+        ],
+        "relevant": [
+          "attention_0012",
+          "attention_0015",
+          "attention_0016"
+        ],
+        "precision@5": 0.6,
+        "recall@5": 1.0,
+        "mrr@5": 1.0,
+        "hit_rate@5": 1.0
+      },
+      {
+        "query": "What are the three ways the Transformer uses multi-head attention?",
+        "retrieved": [
+          "attention_0017",
+          "attention_0016",
+          "attention_0012",
+          "attention_0015",
+          "attention_0055"
+        ],
+        "relevant": [
+          "attention_0017",
+          "attention_0018"
+        ],
+        "precision@5": 0.2,
+        "recall@5": 0.5,
+        "mrr@5": 1.0,
+        "hit_rate@5": 1.0
+      },
+      {
+        "query": "What is the structure of the Transformer encoder?",
+        "retrieved": [
+          "attention_0009",
+          "attention_0010",
+          "attention_0008",
+          "attention_0017",
+          "attention_0055"
+        ],
+        "relevant": [
+          "attention_0008",
+          "attention_0009"
+        ],
+        "precision@5": 0.4,
+        "recall@5": 1.0,
+        "mrr@5": 1.0,
+        "hit_rate@5": 1.0
+      },
+      {
+        "query": "How is the Transformer decoder different from the encoder?",
+        "retrieved": [
+          "attention_0010",
+          "attention_0017",
+          "attention_0009",
+          "attention_0008",
+          "attention_0019"
+        ],
+        "relevant": [
+          "attention_0018",
+          "attention_0009",
+          "attention_0010"
+        ],
+        "precision@5": 0.4,
+        "recall@5": 0.6667,
+        "mrr@5": 1.0,
+        "hit_rate@5": 1.0
+      },
+      {
+        "query": "What is positional encoding and why is it needed in the Transformer?",
+        "retrieved": [
+          "attention_0022",
+          "attention_0023",
+          "attention_0017",
+          "attention_0025",
+          "attention_0010"
+        ],
+        "relevant": [
+          "attention_0022",
+          "attention_0023"
+        ],
+        "precision@5": 0.4,
+        "recall@5": 1.0,
+        "mrr@5": 1.0,
+        "hit_rate@5": 1.0
+      },
+      {
+        "query": "What is self-attention and what tasks has it been applied to?",
+        "retrieved": [
+          "attention_0024",
+          "attention_0026",
+          "attention_0027",
+          "attention_0025",
+          "attention_0011"
+        ],
+        "relevant": [
+          "attention_0007",
+          "attention_0006"
+        ],
+        "precision@5": 0.0,
+        "recall@5": 0.0,
+        "mrr@5": 0.0,
+        "hit_rate@5": 0.0
+      },
+      {
+        "query": "Why does self-attention help model long-range dependencies better than recurrent layers?",
+        "retrieved": [
+          "attention_0026",
+          "attention_0025",
+          "attention_0024",
+          "attention_0027",
+          "attention_0018"
+        ],
+        "relevant": [
+          "attention_0026",
+          "attention_0024",
+          "attention_0021",
+          "attention_0025"
+        ],
+        "precision@5": 0.6,
+        "recall@5": 0.75,
+        "mrr@5": 1.0,
+        "hit_rate@5": 1.0
+      },
+      {
+        "query": "How does self-attention compare to recurrent and convolutional layers in terms of computational complexity?",
+        "retrieved": [
+          "attention_0024",
+          "attention_0027",
+          "attention_0026",
+          "attention_0017",
+          "attention_0025"
+        ],
+        "relevant": [
+          "attention_0026",
+          "attention_0025",
+          "attention_0024",
+          "attention_0021",
+          "attention_0027"
+        ],
+        "precision@5": 0.8,
+        "recall@5": 0.8,
+        "mrr@5": 1.0,
+        "hit_rate@5": 1.0
+      },
+      {
+        "query": "What is a position-wise feed-forward network and how is it used in the Transformer?",
+        "retrieved": [
+          "attention_0019",
+          "attention_0017",
+          "attention_0025",
+          "attention_0009",
+          "attention_0005"
+        ],
+        "relevant": [
+          "attention_0019"
+        ],
+        "precision@5": 0.2,
+        "recall@5": 1.0,
+        "mrr@5": 1.0,
+        "hit_rate@5": 1.0
+      },
+      {
+        "query": "How are embeddings and the output softmax layer handled in the Transformer?",
+        "retrieved": [
+          "attention_0020",
+          "attention_0021",
+          "attention_0017",
+          "attention_0009",
+          "attention_0010"
+        ],
+        "relevant": [
+          "attention_0020"
+        ],
+        "precision@5": 0.2,
+        "recall@5": 1.0,
+        "mrr@5": 1.0,
+        "hit_rate@5": 1.0
+      },
+      {
+        "query": "What optimizer and learning rate schedule were used to train the Transformer?",
+        "retrieved": [
+          "attention_0031",
+          "attention_0030",
+          "attention_0038",
+          "attention_0055",
+          "attention_0040"
+        ],
+        "relevant": [
+          "attention_0031"
+        ],
+        "precision@5": 0.2,
+        "recall@5": 1.0,
+        "mrr@5": 1.0,
+        "hit_rate@5": 1.0
+      },
+      {
+        "query": "What regularization techniques were used during Transformer training?",
+        "retrieved": [
+          "attention_0032",
+          "attention_0036",
+          "attention_0033",
+          "attention_0028",
+          "attention_0035"
+        ],
+        "relevant": [
+          "attention_0037",
+          "attention_0032"
+        ],
+        "precision@5": 0.2,
+        "recall@5": 0.5,
+        "mrr@5": 1.0,
+        "hit_rate@5": 1.0
+      },
+      {
+        "query": "What datasets were used to train the Transformer and how were they prepared?",
+        "retrieved": [
+          "attention_0029",
+          "attention_0030",
+          "attention_0040",
+          "attention_0038",
+          "attention_0055"
+        ],
+        "relevant": [
+          "attention_0029"
+        ],
+        "precision@5": 0.2,
+        "recall@5": 1.0,
+        "mrr@5": 1.0,
+        "hit_rate@5": 1.0
+      },
+      {
+        "query": "What BLEU scores did the Transformer achieve on machine translation tasks?",
+        "retrieved": [
+          "attention_0038",
+          "attention_0033",
+          "attention_0002",
+          "attention_0055",
+          "attention_0039"
+        ],
+        "relevant": [
+          "attention_0038",
+          "attention_0002",
+          "attention_0036"
+        ],
+        "precision@5": 0.4,
+        "recall@5": 0.6667,
+        "mrr@5": 1.0,
+        "hit_rate@5": 1.0
+      },
+      {
+        "query": "How does the Transformer perform on English constituency parsing?",
+        "retrieved": [
+          "attention_0050",
+          "attention_0052",
+          "attention_0053",
+          "attention_0051",
+          "attention_0054"
+        ],
+        "relevant": [
+          "attention_0051",
+          "attention_0050",
+          "attention_0053",
+          "attention_0054",
+          "attention_0052"
+        ],
+        "precision@5": 1.0,
+        "recall@5": 1.0,
+        "mrr@5": 1.0,
+        "hit_rate@5": 1.0
+      },
+      {
+        "query": "Why was the Transformer architecture proposed and what problems does it solve compared to RNNs?",
+        "retrieved": [
+          "attention_0008",
+          "attention_0003",
+          "attention_0007",
+          "attention_0041",
+          "attention_0025"
+        ],
+        "relevant": [
+          "attention_0002",
+          "attention_0005",
+          "attention_0004"
+        ],
+        "precision@5": 0.0,
+        "recall@5": 0.0,
+        "mrr@5": 0.0,
+        "hit_rate@5": 0.0
+      },
+      {
+        "query": "What is additive attention and how does it differ from dot-product attention?",
+        "retrieved": [
+          "attention_0012",
+          "attention_0014",
+          "attention_0013",
+          "attention_0011",
+          "attention_0015"
+        ],
+        "relevant": [
+          "attention_0014",
+          "attention_0013"
+        ],
+        "precision@5": 0.4,
+        "recall@5": 1.0,
+        "mrr@5": 0.5,
+        "hit_rate@5": 1.0
+      },
+      {
+        "query": "What hardware and how long did it take to train the Transformer?",
+        "retrieved": [
+          "attention_0030",
+          "attention_0055",
+          "attention_0002",
+          "attention_0041",
+          "attention_0025"
+        ],
+        "relevant": [
+          "attention_0030"
+        ],
+        "precision@5": 0.2,
+        "recall@5": 1.0,
+        "mrr@5": 1.0,
+        "hit_rate@5": 1.0
+      },
+      {
+        "query": "What effect does the number of attention heads have on Transformer performance?",
+        "retrieved": [
+          "attention_0017",
+          "attention_0018",
+          "attention_0027",
+          "attention_0006",
+          "attention_0012"
+        ],
+        "relevant": [
+          "attention_0042",
+          "attention_0048",
+          "attention_0041"
+        ],
+        "precision@5": 0.0,
+        "recall@5": 0.0,
+        "mrr@5": 0.0,
+        "hit_rate@5": 0.0
+      },
+      {
+        "query": "How does the Transformer generalise the concept of attention beyond translation?",
+        "retrieved": [
+          "attention_0017",
+          "attention_0018",
+          "attention_0055",
+          "attention_0038",
+          "attention_0011"
+        ],
+        "relevant": [
+          "attention_0050",
+          "attention_0055"
+        ],
+        "precision@5": 0.2,
+        "recall@5": 0.5,
+        "mrr@5": 0.3333,
+        "hit_rate@5": 1.0
+      }
+    ]
+  }
+]

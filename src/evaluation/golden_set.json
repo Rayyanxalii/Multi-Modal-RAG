@@ -1,0 +1,195 @@
+[
+  {
+    "query": "What is an attention function and how does it map inputs to outputs?",
+    "relevant_chunk_ids": [
+      "attention_0011",
+      "attention_0012"
+    ],
+    "notes": "attention_0011 defines attention as mapping a query+key-value pairs to a weighted-sum output; attention_0012 continues the definition and ties it to the figure."
+  },
+  {
+    "query": "How is Scaled Dot-Product Attention calculated?",
+    "relevant_chunk_ids": [
+      "attention_0013",
+      "attention_0014",
+      "attention_0012"
+    ],
+    "notes": "attention_0013 gives the formula (QK^T/sqrt(dk) softmax applied to V); attention_0014 explains the scaling motivation; attention_0012 shows the figure caption."
+  },
+  {
+    "query": "Why is the dot product scaled by the square root of dk in scaled dot-product attention?",
+    "relevant_chunk_ids": [
+      "attention_0014",
+      "attention_0013"
+    ],
+    "notes": "attention_0014 is the primary source explaining the gradient saturation problem for large dk; attention_0013 introduces the 1/sqrt(dk) factor."
+  },
+  {
+    "query": "How does multi-head attention work?",
+    "relevant_chunk_ids": [
+      "attention_0015",
+      "attention_0016",
+      "attention_0012"
+    ],
+    "notes": "attention_0015 explains the projection + parallel heads + concatenation + final projection; attention_0016 gives specific hyperparameters (h=8, dk=dv=64); attention_0012 shows the figure."
+  },
+  {
+    "query": "What are the three ways the Transformer uses multi-head attention?",
+    "relevant_chunk_ids": [
+      "attention_0017",
+      "attention_0018"
+    ],
+    "notes": "attention_0017 covers encoder-decoder attention and encoder self-attention; attention_0018 covers masked decoder self-attention."
+  },
+  {
+    "query": "What is the structure of the Transformer encoder?",
+    "relevant_chunk_ids": [
+      "attention_0008",
+      "attention_0009"
+    ],
+    "notes": "attention_0008 gives the overall encoder-decoder architecture; attention_0009 describes N=6 stacked layers, multi-head self-attention sublayer, feed-forward sublayer, residual connections and layer norm."
+  },
+  {
+    "query": "How is the Transformer decoder different from the encoder?",
+    "relevant_chunk_ids": [
+      "attention_0009",
+      "attention_0010",
+      "attention_0018"
+    ],
+    "notes": "attention_0009 describes the encoder; attention_0010 describes the decoder's third cross-attention sublayer and causal masking; attention_0018 elaborates on masking to preserve autoregressive property."
+  },
+  {
+    "query": "What is positional encoding and why is it needed in the Transformer?",
+    "relevant_chunk_ids": [
+      "attention_0022",
+      "attention_0023"
+    ],
+    "notes": "attention_0022 motivates PE (no recurrence/convolution), describes the sine/cosine formula and frequency progression; attention_0023 compares sinusoidal vs learned embeddings."
+  },
+  {
+    "query": "What is self-attention and what tasks has it been applied to?",
+    "relevant_chunk_ids": [
+      "attention_0006",
+      "attention_0007"
+    ],
+    "notes": "attention_0006 defines self-attention (intra-attention) and lists tasks; attention_0007 states the Transformer is the first model relying entirely on self-attention."
+  },
+  {
+    "query": "Why does self-attention help model long-range dependencies better than recurrent layers?",
+    "relevant_chunk_ids": [
+      "attention_0024",
+      "attention_0025",
+      "attention_0026",
+      "attention_0021"
+    ],
+    "notes": "attention_0024/0025 introduce the three desiderata (complexity, parallelism, path length); attention_0026 compares self-attention O(1) path vs recurrent O(n) path; attention_0021 has the complexity table."
+  },
+  {
+    "query": "How does self-attention compare to recurrent and convolutional layers in terms of computational complexity?",
+    "relevant_chunk_ids": [
+      "attention_0021",
+      "attention_0024",
+      "attention_0025",
+      "attention_0026",
+      "attention_0027"
+    ],
+    "notes": "attention_0021 is the complexity table (O(n^2 d) vs O(nd^2) vs O(knd^2)); attention_0024-0026 give the prose comparison; attention_0027 discusses convolutional layer stacking."
+  },
+  {
+    "query": "What is a position-wise feed-forward network and how is it used in the Transformer?",
+    "relevant_chunk_ids": [
+      "attention_0019"
+    ],
+    "notes": "attention_0019 is the only chunk describing the FFN (two linear transforms + ReLU, dff=2048, applied independently per position)."
+  },
+  {
+    "query": "How are embeddings and the output softmax layer handled in the Transformer?",
+    "relevant_chunk_ids": [
+      "attention_0020"
+    ],
+    "notes": "attention_0020 describes shared weight matrices between input/output embeddings and pre-softmax linear layer, with sqrt(dmodel) scaling."
+  },
+  {
+    "query": "What optimizer and learning rate schedule were used to train the Transformer?",
+    "relevant_chunk_ids": [
+      "attention_0031"
+    ],
+    "notes": "attention_0031 exclusively describes Adam with beta1=0.9, beta2=0.98, the warmup_steps=4000 schedule formula."
+  },
+  {
+    "query": "What regularization techniques were used during Transformer training?",
+    "relevant_chunk_ids": [
+      "attention_0032",
+      "attention_0037"
+    ],
+    "notes": "attention_0032 introduces the three regularization types; attention_0037 details residual dropout (Pdrop=0.1) and label smoothing (eps_ls=0.1)."
+  },
+  {
+    "query": "What datasets were used to train the Transformer and how were they prepared?",
+    "relevant_chunk_ids": [
+      "attention_0029"
+    ],
+    "notes": "attention_0029 covers WMT 2014 EN-DE (4.5M pairs, BPE 37K tokens) and WMT 2014 EN-FR (36M sentences, word-piece 32K), plus batching details."
+  },
+  {
+    "query": "What BLEU scores did the Transformer achieve on machine translation tasks?",
+    "relevant_chunk_ids": [
+      "attention_0002",
+      "attention_0038",
+      "attention_0036"
+    ],
+    "notes": "attention_0002 (abstract) states 28.4 EN-DE and 41.8 EN-FR; attention_0038 elaborates on results; attention_0036 is the BLEU comparison table row for Transformer base and big."
+  },
+  {
+    "query": "How does the Transformer perform on English constituency parsing?",
+    "relevant_chunk_ids": [
+      "attention_0050",
+      "attention_0051",
+      "attention_0052",
+      "attention_0053",
+      "attention_0054"
+    ],
+    "notes": "attention_0050/0051 describe the experimental setup (4-layer, WSJ, semi-supervised); attention_0052/0053 are the results table; attention_0054 gives the conclusion about outperforming previous models."
+  },
+  {
+    "query": "Why was the Transformer architecture proposed and what problems does it solve compared to RNNs?",
+    "relevant_chunk_ids": [
+      "attention_0004",
+      "attention_0005",
+      "attention_0002"
+    ],
+    "notes": "attention_0004 describes RNN sequential bottleneck; attention_0005 introduces the Transformer as the solution using only attention; attention_0002 (abstract) summarises the motivation."
+  },
+  {
+    "query": "What is additive attention and how does it differ from dot-product attention?",
+    "relevant_chunk_ids": [
+      "attention_0013",
+      "attention_0014"
+    ],
+    "notes": "attention_0013 explicitly compares additive attention (feed-forward compatibility function) vs dot-product (matrix multiply); attention_0014 explains when each is preferred."
+  },
+  {
+    "query": "What hardware and how long did it take to train the Transformer?",
+    "relevant_chunk_ids": [
+      "attention_0030"
+    ],
+    "notes": "attention_0030 is the only chunk covering 8x NVIDIA P100 GPUs, base model 100K steps / 12 hours, big model 300K steps / 3.5 days."
+  },
+  {
+    "query": "What effect does the number of attention heads have on Transformer performance?",
+    "relevant_chunk_ids": [
+      "attention_0048",
+      "attention_0041",
+      "attention_0042"
+    ],
+    "notes": "attention_0048 discusses Table 3 row A (single-head 0.9 BLEU worse, too many heads also drops quality); attention_0041/0042 are the variation table rows."
+  },
+  {
+    "query": "How does the Transformer generalise the concept of attention beyond translation?",
+    "relevant_chunk_ids": [
+      "attention_0055",
+      "attention_0050"
+    ],
+    "notes": "attention_0055 (conclusion) mentions plans for images/audio/video; attention_0050 shows constituency parsing generalisation."
+  }
+]
