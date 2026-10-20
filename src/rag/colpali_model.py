@@ -73,13 +73,14 @@ class ColPaliRetriever:
         ranked_indices = scores.argsort(descending=True)[:top_k].tolist()
 
         return [
-            {
-                "rank": rank,
-                "page": self.page_names[index],
-                "score": float(scores[index].item()),
-            }
-            for rank, index in enumerate(ranked_indices, start=1)
-        ]
+    {
+        "rank": rank,
+        "page": self.page_names[index],
+        "score": float(scores[index].item()),
+        "chunk_id": f"page_{self.page_names[index]}",
+    }
+    for rank, index in enumerate(ranked_indices, start=1)
+]
 
 
 

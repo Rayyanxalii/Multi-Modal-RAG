@@ -26,25 +26,30 @@ def search_colpali_chunks(
         top_k=min(top_pages, len(retriever.page_names)),
     )
 
-    # Convert page filenames into one-based page numbers.
+    # Map retrieved PDF page numbers to their ColPali rankings.
     page_rankings = {}
 
     for result in page_results:
-        page_name = Path(result["page"]).stem
+        # Support the page filename field returned by ColPali.
+        page_name = Path(
+            result.get("page_numbers", result.get("page", ""))
+        ).stem
+
         try:
             page_number = int(page_name.removeprefix("page_"))
         except ValueError as exc:
             raise ValueError(
-                f"Unexpected ColPali page filename: {result['page']}"
+                f"Unexpected ColPali page filename: {page_name}"
             ) from exc
 
         page_rankings[page_number] = result
 
-    # Map retrieved pages to their chunks.
+    # Map retrieved pages to the document chunks on those pages.
     ranked_chunks = {}
 
     for chunk in chunks:
         chunk_id = chunk.get("chunk_id")
+
         if not chunk_id:
             continue
 
@@ -54,29 +59,37 @@ def search_colpali_chunks(
             raw_page = chunk.get("page_number")
             raw_pages = [raw_page] if raw_page is not None else []
 
+        # Normalize a single page number to a list.
+        if not isinstance(raw_pages, (list, tuple, set)):
+            raw_pages = [raw_pages]
+
         matching_pages = [
-            page for page in raw_pages
+            page
+            for page in raw_pages
             if page in page_rankings
         ]
 
         if not matching_pages:
             continue
 
-        # Use the best-ranked matching page for each chunk.
+        # Choose the highest-ranked matching page.
         best_page = min(
             matching_pages,
-            key=lambda page: page_results.index(page_rankings[page]),
+            key=lambda page: page_rankings[page]["rank"],
         )
+
         page_result = page_rankings[best_page]
 
         ranked_chunks[chunk_id] = {
             **chunk,
+            "page_numbers": chunk.get("page_numbers", []),
+            "colpali_page_numbers": best_page,
             "colpali_rank": page_result["rank"],
             "colpali_score": page_result["score"],
-            "colpali_page_number": best_page,
             "retrieved_by": ["colpali"],
         }
 
+    # Return chunks in ColPali ranking order.
     return sorted(
         ranked_chunks.values(),
         key=lambda item: (
@@ -86,15 +99,3 @@ def search_colpali_chunks(
     )[:top_k]
 
 
-
-def main():
-    
-    results = search_colpali_chunks("What is attention mechanism?", 5, 10)
-    
-    for result in results:
-        print('Chunk ID:', result['chunk_id'])
-        
-
-
-if __name__ == "__main__":
-    main()

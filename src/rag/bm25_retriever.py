@@ -220,36 +220,4 @@ def search_headings(
     
 
 
-def main():
-    chunks = load_chunks()
 
-    _, heading_bm25 = build_field_indexes(chunks)
-
-    print(f"Loaded {len(chunks)} chunks.")
-    print("Heading BM25 index built successfully.")
-
-    query = input("\nAsk a question about the paper: ")
-
-    results = search_headings(
-        query=query,
-        chunks=chunks,
-        heading_bm25=heading_bm25,
-        top_k=10,
-    )
-
-    if not results:
-        print("No heading matches found.")
-        return
-
-    for rank, result in enumerate(results, start=1):
-        print("\n" + "=" * 60)
-        print(f"Rank: {rank}")
-        print(f"Chunk ID: {result['chunk_id']}")
-        print(f"Heading score: {result['heading_score']:.4f}")
-        print(f"Headings: {result['headings']}")
-        print(f"Pages: {result['page_numbers']}")
-        print(f"Text:\n{result['text'][:300]}")
-
-
-if __name__ == "__main__":
-    main()

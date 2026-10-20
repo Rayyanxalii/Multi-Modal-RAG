@@ -9,5 +9,5 @@ llm = Groq(
     api_key=os.getenv("GROQ_API"),
 )
 
-response = llm.complete("Explain RAG in simple terms.")
-print(response)
+# response = llm.complete("Explain RAG in simple terms.")
+# print(response)
