@@ -1,19 +1,20 @@
 from rag.search_chunks import search_chunks
 from rag.bm25_retriever import load_chunks, build_field_indexes, search_headings
+from rag.colpali_chunk_retriever import search_colpali_chunks
+
+
+
 
 
 def reciprocal_rank_fusion(
     dense_results: list[dict],
     heading_results: list[dict],
+    colpali_results: list[dict],
     k: int = 60,
     top_k: int = 10,
 ) -> list[dict]:
-    """
-    Fuse dense retrieval and heading BM25 rankings using RRF.
+    """Fuse dense, heading BM25, and ColPali chunk rankings."""
 
-    Each result must contain a unique 'chunk_id'.
-    Rank positions start at 1.
-    """
     if k < 1:
         raise ValueError("k must be at least 1.")
     if top_k < 1:
@@ -21,9 +22,10 @@ def reciprocal_rank_fusion(
 
     fused = {}
 
-    ranked_lists = {    
+    ranked_lists = {
         "dense": dense_results,
         "heading_bm25": heading_results,
+        "colpali": colpali_results,
     }
 
     for source, results in ranked_lists.items():
@@ -38,7 +40,6 @@ def reciprocal_rank_fusion(
                     "is missing chunk_id."
                 )
 
-            # Avoid counting duplicate chunks twice in one ranking.
             if chunk_id in seen_in_source:
                 continue
             seen_in_source.add(chunk_id)
@@ -52,21 +53,22 @@ def reciprocal_rank_fusion(
                     "source_ranks": {},
                 }
 
-            fused[chunk_id]["rrf_score"] += 1.0 / (k + rank)
-            fused[chunk_id]["retrieved_by"].append(source)
-            fused[chunk_id]["source_ranks"][source] = rank
+            item = fused[chunk_id]
+            item["rrf_score"] += 1.0 / (k + rank)
+            item["retrieved_by"].append(source)
+            item["source_ranks"][source] = rank
 
-            # Preserve useful chunk metadata if another retriever
-            # returned the same chunk with fewer fields.
+            # Preserve useful metadata from any retriever.
             for key, value in result.items():
-                if key not in fused[chunk_id] or fused[chunk_id][key] is None:
-                    fused[chunk_id][key] = value
+                if key not in item or item[key] is None:
+                    item[key] = value
 
     return sorted(
         fused.values(),
         key=lambda item: item["rrf_score"],
         reverse=True,
     )[:top_k]
+
 
 
 
@@ -87,11 +89,18 @@ def main():
         heading_bm25=heading_bm25,
         top_k=10,
     )
+    
+    colpali_results = search_colpali_chunks(
+    query=question,
+    top_pages=5,
+    top_k=10,
+)
 
     # Fuse the two rankings.
     fused_results = reciprocal_rank_fusion(
         dense_results=dense_results,
         heading_results=heading_results,
+        colpali_results= colpali_results,
         k=60,
         top_k=10,
     )
@@ -109,6 +118,14 @@ def main():
             f"{rank}. {result['chunk_id']} "
             f"| {result['headings']}"
         )
+        
+    print("\n COLPALI RESULTS")
+    for rank, result in enumerate(colpali_results, start=1):
+        print(
+            f"{rank}. {result['chunk_id']} "
+            f"| {result['headings']}"
+        )
+
 
     print("\nRRF FUSED RESULTS")
     for rank, result in enumerate(fused_results, start=1):

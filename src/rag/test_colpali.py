@@ -1,14 +1,7 @@
 from time import perf_counter
-from functools import lru_cache
 import torch
-from rag.colpali_model import ColPaliRetriever
+from rag.colpali_model import get_colpali_retriever
 
-
-@lru_cache(maxsize=1)
-def get_colpali_retriever() -> ColPaliRetriever:
-    return ColPaliRetriever(
-        embeddings_path="src/data/colpali/attention_colpali.pt"
-    )
 
 
 print(f"CUDA available: {torch.cuda.is_available()}")

@@ -1,5 +1,5 @@
 from pathlib import Path
-
+from functools import lru_cache
 import torch
 from sentence_transformers import MultiVectorEncoder
 
@@ -80,3 +80,11 @@ class ColPaliRetriever:
             }
             for rank, index in enumerate(ranked_indices, start=1)
         ]
+
+
+
+@lru_cache(maxsize=1)
+def get_colpali_retriever() -> ColPaliRetriever:
+    return ColPaliRetriever(
+        embeddings_path="src/data/colpali/attention_colpali.pt"
+    )
