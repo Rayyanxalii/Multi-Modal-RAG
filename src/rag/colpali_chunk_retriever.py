@@ -5,6 +5,7 @@ from rag.bm25_retriever import load_chunks
 from rag.colpali_model import get_colpali_retriever
 
 
+# maps pages to chunks and return them
 def search_colpali_chunks(
     query: str,
     top_pages: int = 5,

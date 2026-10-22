@@ -14,6 +14,7 @@ PDF_PATH = PROJECT_ROOT / "src" / "pdf" / "attention.pdf"
 OUTPUT_DIR = PROJECT_ROOT / "src" / "pdf" / "chunks"
 CHUNKS_PATH = OUTPUT_DIR / "attention_chunks.jsonl"
 MARKDOWN_PATH = OUTPUT_DIR / "attention_parsed.md"
+DOCUMENT_JSON_PATH = OUTPUT_DIR / "attention_document.json"
 
 
 def get_chunk_metadata(chunk: Any) -> dict:
@@ -87,6 +88,10 @@ def create_chunks(pdf_path: Path) -> list[dict]:
     converter = DocumentConverter()
     result = converter.convert(str(pdf_path))
     document = result.document
+    
+    document.save_as_json(DOCUMENT_JSON_PATH)
+
+    print(f"Structured document saved to: {DOCUMENT_JSON_PATH}")
 
     # 2. Save Markdown for inspection.
     markdown = document.export_to_markdown()
