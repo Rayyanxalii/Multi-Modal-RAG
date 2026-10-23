@@ -5,9 +5,9 @@ from pathlib import Path
 from rank_bm25 import BM25Okapi
 import math
 
-from sympy import python
 
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
+
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
 
 CHUNKS_PATH = (
     PROJECT_ROOT

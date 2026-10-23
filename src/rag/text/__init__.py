@@ -1,0 +1,1 @@
+"""Text retrieval package."""

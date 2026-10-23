@@ -3,6 +3,9 @@ from functools import lru_cache
 import torch
 from sentence_transformers import MultiVectorEncoder
 
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
+EMBEDDINGS_PATH = PROJECT_ROOT / "src" / "data" / "colpali" / "attention_colpali.pt"
+
 
 class ColPaliRetriever:
     """Retrieve document pages using precomputed ColPali embeddings."""
@@ -87,5 +90,5 @@ class ColPaliRetriever:
 @lru_cache(maxsize=1)
 def get_colpali_retriever() -> ColPaliRetriever:
     return ColPaliRetriever(
-        embeddings_path="src/data/colpali/attention_colpali.pt"
+        embeddings_path=EMBEDDINGS_PATH
     )

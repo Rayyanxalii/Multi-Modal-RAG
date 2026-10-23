@@ -6,7 +6,7 @@ import ollama
 from dotenv import load_dotenv
 from qdrant_client import QdrantClient
 
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
 
 load_dotenv(PROJECT_ROOT / ".env")
 

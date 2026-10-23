@@ -10,7 +10,7 @@ from docling_core.types.doc import (
 
 
 # Project paths
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
+PROJECT_ROOT = Path(__file__).resolve().parents[4]
 
 DOCUMENT_JSON_PATH = (
     PROJECT_ROOT

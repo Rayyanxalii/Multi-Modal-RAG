@@ -6,7 +6,7 @@ import fitz
 from PIL import Image
 
 
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
+PROJECT_ROOT = Path(__file__).resolve().parents[4]
 
 PDF_PATH = PROJECT_ROOT / "src" / "pdf" / "attention.pdf"
 RENDERED_PAGES_DIR = PROJECT_ROOT / "src" / "pdf" / "rendered_pages"

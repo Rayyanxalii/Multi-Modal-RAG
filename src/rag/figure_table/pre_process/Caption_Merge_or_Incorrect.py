@@ -4,7 +4,7 @@ from pathlib import Path
 from collections import defaultdict
 from itertools import combinations
 
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
+PROJECT_ROOT = Path(__file__).resolve().parents[4]
 CHUNKS_DIR = PROJECT_ROOT / "src" / "pdf" / "chunks"
 
 INPUT_PATH = CHUNKS_DIR / "attention_figures.jsonl"

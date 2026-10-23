@@ -1,8 +1,8 @@
 
 from pathlib import Path
 
-from rag.bm25_retriever import load_chunks
-from rag.colpali_model import get_colpali_retriever
+from rag.text.bm25_retriever import load_chunks
+from rag.text.colpali_model import get_colpali_retriever
 
 
 # maps pages to chunks and return them

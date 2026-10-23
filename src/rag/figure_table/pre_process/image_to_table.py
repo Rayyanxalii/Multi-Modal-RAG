@@ -7,7 +7,7 @@ from PIL import Image
 
 
 # Project paths
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
+PROJECT_ROOT = Path(__file__).resolve().parents[4]
 
 PDF_PATH = PROJECT_ROOT / "src" / "pdf" / "attention.pdf"
 
