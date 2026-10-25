@@ -1,8 +1,8 @@
 
-from rag.figure_table.query_figures_tables.dense_retrieval import (
+from rag.Figure_Table_Retrieval.query_figures_tables.dense_retrieval import (
     dense_retrieve,
 )
-from rag.figure_table.query_figures_tables.bm25_retrieval import (
+from rag.Figure_Table_Retrieval.query_figures_tables.bm25_retrieval import (
     bm25_retrieve,
 )
 

@@ -1,11 +1,11 @@
 
-from rag.text.search_chunks import search_chunks
-from rag.text.bm25_retriever import (
+from rag.Text_Retrieval.search_chunks import search_chunks
+from rag.Text_Retrieval.bm25_retriever import (
     load_chunks,
     build_field_indexes,
     search_headings,
 )
-from rag.text.colpali_chunk_retriever import search_colpali_chunks
+from rag.Text_Retrieval.colpali_chunk_retriever import search_colpali_chunks
 
 
 def reciprocal_rank_fusion(

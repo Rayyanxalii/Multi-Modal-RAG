@@ -1,5 +1,5 @@
 
-from rag.text.hybrid_retriever import main
+from rag.Text_Retrieval.hybrid_retriever import main
 from services.llm_service import llm
 
 
