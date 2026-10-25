@@ -140,7 +140,7 @@ def dense_retrieve(
             "point_id": str(point.id),
             "record_type": payload.get("record_type"),
             "record_id": payload.get("record_id"),
-            "page": payload.get("page"),
+            "page": payload.get("page_number"),
             "score": float(point.score),
             "searchable_text": payload.get("searchable_text"),
             "metadata": payload,

@@ -1,0 +1,632 @@
+{
+  "question": "what is attention?",
+  "created_at": "2026-10-25T11:22:51.956826+00:00",
+  "retrieval_config": {
+    "text_top_k": 10,
+    "figure_table_top_k": 5,
+    "figure_table_candidate_k": 10,
+    "record_type": null
+  },
+  "text_results": [
+    {
+      "dense_score": 0.7306773,
+      "chunk_id": "attention_0011",
+      "document_id": "attention",
+      "page_numbers": [
+        3
+      ],
+      "headings": [
+        "3.2 Attention"
+      ],
+      "text": "An attention function can be described as mapping a query and a set of key-value pairs to an output, where the query, keys, values, and output are all vectors. The output is computed as a weighted sum",
+      "contextualized_text": "3.2 Attention\nAn attention function can be described as mapping a query and a set of key-value pairs to an output, where the query, keys, values, and output are all vectors. The output is computed as a weighted sum",
+      "rrf_score": 0.047907090265630725,
+      "retrieved_by": [
+        "dense",
+        "heading_bm25",
+        "colpali"
+      ],
+      "source_ranks": {
+        "dense": 1,
+        "heading_bm25": 2,
+        "colpali": 5
+      },
+      "heading_score": 1.5157119428393269,
+      "cpntextualized_text": "3.2 Attention\nAn attention function can be described as mapping a query and a set of key-value pairs to an output, where the query, keys, values, and output are all vectors. The output is computed as a weighted sum",
+      "file_name": "attention.pdf",
+      "chunk_index": 11,
+      "page_number": 3,
+      "captions": [],
+      "item_types": [
+        "DocItem"
+      ],
+      "bounding_boxes": [
+        {
+          "page_number": 3,
+          "left": 107.641,
+          "top": 89.39465259999997,
+          "right": 505.24856525199976,
+          "bottom": 69.93377439292033
+        }
+      ],
+      "source_file": "attention.pdf",
+      "source_mimetype": "application/pdf",
+      "colpali_page_numbers": 3,
+      "colpali_rank": 2,
+      "colpali_score": 12.0703125
+    },
+    {
+      "dense_score": 0.66510105,
+      "chunk_id": "attention_0012",
+      "document_id": "attention",
+      "page_numbers": [
+        4
+      ],
+      "headings": [
+        "Scaled Dot-Product Attention"
+      ],
+      "text": "Figure 2: (left) Scaled Dot-Product Attention. (right) Multi-Head Attention consists of several attention layers running in parallel.\nof the values, where the weight assigned to each value is computed by a compatibility function of the query with the corresponding key.",
+      "contextualized_text": "Scaled Dot-Product Attention\nFigure 2: (left) Scaled Dot-Product Attention. (right) Multi-Head Attention consists of several attention layers running in parallel.\nof the values, where the weight assigned to each value is computed by a compatibility function of the query with the corresponding key.",
+      "rrf_score": 0.03200204813108039,
+      "retrieved_by": [
+        "dense",
+        "heading_bm25"
+      ],
+      "source_ranks": {
+        "dense": 2,
+        "heading_bm25": 3
+      },
+      "heading_score": 1.3363606277820048,
+      "cpntextualized_text": "Scaled Dot-Product Attention\nFigure 2: (left) Scaled Dot-Product Attention. (right) Multi-Head Attention consists of several attention layers running in parallel.\nof the values, where the weight assigned to each value is computed by a compatibility function of the query with the corresponding key."
+    },
+    {
+      "dense_score": 0.6243142,
+      "chunk_id": "attention_0066",
+      "document_id": "attention",
+      "page_numbers": [
+        14,
+        15
+      ],
+      "headings": [
+        "Input-Input Layer5"
+      ],
+      "text": "Figure 4: Two attention heads, also in layer 5 of 6, apparently involved in anaphora resolution. Top: Full attentions for head 5. Bottom: Isolated attentions from just the word 'its' for attention heads 5 and 6. Note that the attentions are very sharp for this word.\nFigure 5: Many of the attention heads exhibit behaviour that seems related to the structure of the sentence. We give two such examples above, from two different heads from the encoder self-attention at layer 5 of 6. The heads clearly learned to perform different tasks.",
+      "contextualized_text": "Input-Input Layer5\nFigure 4: Two attention heads, also in layer 5 of 6, apparently involved in anaphora resolution. Top: Full attentions for head 5. Bottom: Isolated attentions from just the word 'its' for attention heads 5 and 6. Note that the attentions are very sharp for this word.\nFigure 5: Many of the attention heads exhibit behaviour that seems related to the structure of the sentence. We give two such examples above, from two different heads from the encoder self-attention at layer 5 of 6. The heads clearly learned to perform different tasks.",
+      "rrf_score": 0.03177805800756621,
+      "retrieved_by": [
+        "dense",
+        "colpali"
+      ],
+      "source_ranks": {
+        "dense": 5,
+        "colpali": 1
+      },
+      "file_name": "attention.pdf",
+      "chunk_index": 66,
+      "page_number": 14,
+      "captions": [],
+      "item_types": [
+        "DocItem"
+      ],
+      "bounding_boxes": [
+        {
+          "page_number": 14,
+          "left": 108.0,
+          "top": 176.6486526,
+          "right": 505.3881887999995,
+          "bottom": 146.27877439292035
+        },
+        {
+          "page_number": 15,
+          "left": 108.0,
+          "top": 188.53165260000003,
+          "right": 504.00139487999957,
+          "bottom": 158.16077439292042
+        }
+      ],
+      "source_file": "attention.pdf",
+      "source_mimetype": "application/pdf",
+      "colpali_page_numbers": 15,
+      "colpali_rank": 1,
+      "colpali_score": 12.26953125
+    },
+    {
+      "heading_score": 4.4417914609929605,
+      "chunk_id": "attention_0001",
+      "document_id": "attention",
+      "page_numbers": [
+        1
+      ],
+      "headings": [
+        "Attention Is All You Need"
+      ],
+      "text": "Ashish Vaswani∗ Google Brain avaswani@google.com Noam Shazeer∗ Google Brain noam@google.com Niki Parmar∗ Google Research nikip@google.com Jakob Uszkoreit∗ Google Research usz@google.com\nLlion Jones∗ Google Research llion@google.com Aidan N. Gomez∗ † University of Toronto aidan@cs.toronto.edu Łukasz Kaiser∗ Google Brain lukaszkaiser@google.com Illia Polosukhin∗ ‡ illia.polosukhin@gmail.com",
+      "cpntextualized_text": "Attention Is All You Need\nAshish Vaswani∗ Google Brain avaswani@google.com Noam Shazeer∗ Google Brain noam@google.com Niki Parmar∗ Google Research nikip@google.com Jakob Uszkoreit∗ Google Research usz@google.com\nLlion Jones∗ Google Research llion@google.com Aidan N. Gomez∗ † University of Toronto aidan@cs.toronto.edu Łukasz Kaiser∗ Google Brain lukaszkaiser@google.com Illia Polosukhin∗ ‡ illia.polosukhin@gmail.com",
+      "rrf_score": 0.03131881575727918,
+      "retrieved_by": [
+        "heading_bm25",
+        "colpali"
+      ],
+      "source_ranks": {
+        "heading_bm25": 1,
+        "colpali": 7
+      },
+      "file_name": "attention.pdf",
+      "chunk_index": 1,
+      "page_number": 1,
+      "captions": [],
+      "item_types": [
+        "DocItem"
+      ],
+      "bounding_boxes": [
+        {
+          "page_number": 1,
+          "left": 116.68099999999998,
+          "top": 557.6831053999999,
+          "right": 216.0390060600002,
+          "bottom": 525.2753028
+        },
+        {
+          "page_number": 1,
+          "left": 230.69199999999998,
+          "top": 557.6831053999999,
+          "right": 309.1325310999999,
+          "bottom": 525.2753028
+        },
+        {
+          "page_number": 1,
+          "left": 323.787,
+          "top": 557.6831053999999,
+          "right": 407.4568998399997,
+          "bottom": 525.2753028
+        },
+        {
+          "page_number": 1,
+          "left": 422.11199999999997,
+          "top": 557.6831053999999,
+          "right": 497.21276514,
+          "bottom": 525.2753028
+        },
+        {
+          "page_number": 1,
+          "left": 126.88199999999998,
+          "top": 507.6861054,
+          "right": 210.55189984000017,
+          "bottom": 475.2773028
+        },
+        {
+          "page_number": 1,
+          "left": 235.40699999999995,
+          "top": 507.6861054,
+          "right": 339.9943747999997,
+          "bottom": 475.2773028
+        },
+        {
+          "page_number": 1,
+          "left": 364.84899999999993,
+          "top": 507.6861054,
+          "right": 485.11451841999957,
+          "bottom": 475.2783028
+        },
+        {
+          "page_number": 1,
+          "left": 238.0219999999999,
+          "top": 457.6891054,
+          "right": 373.9756246399996,
+          "bottom": 436.1893028
+        }
+      ],
+      "source_file": "attention.pdf",
+      "source_mimetype": "application/pdf",
+      "contextualized_text": "Attention Is All You Need\nAshish Vaswani∗ Google Brain avaswani@google.com Noam Shazeer∗ Google Brain noam@google.com Niki Parmar∗ Google Research nikip@google.com Jakob Uszkoreit∗ Google Research usz@google.com\nLlion Jones∗ Google Research llion@google.com Aidan N. Gomez∗ † University of Toronto aidan@cs.toronto.edu Łukasz Kaiser∗ Google Brain lukaszkaiser@google.com Illia Polosukhin∗ ‡ illia.polosukhin@gmail.com",
+      "colpali_page_numbers": 1,
+      "colpali_rank": 3,
+      "colpali_score": 12.03125
+    },
+    {
+      "dense_score": 0.57830036,
+      "chunk_id": "attention_0024",
+      "document_id": "attention",
+      "page_numbers": [
+        6
+      ],
+      "headings": [
+        "4 Why Self-Attention"
+      ],
+      "text": "In this section we compare various aspects of self-attention layers to the recurrent and convolutional layers commonly used for mapping one variable-length sequence of symbol representations (x1, ..., xn) to another sequence of equal length (z1, ..., zn), with xi, zi ∈ Rd , such as a hidden layer in a typical sequence transduction encoder or decoder. Motivating our use of self-attention we consider three desiderata.\nOne is the total computational complexity per layer. Another is the amount of computation that can be parallelized, as measured by the minimum number of sequential operations required.",
+      "contextualized_text": "4 Why Self-Attention\nIn this section we compare various aspects of self-attention layers to the recurrent and convolutional layers commonly used for mapping one variable-length sequence of symbol representations (x1, ..., xn) to another sequence of equal length (z1, ..., zn), with xi, zi ∈ Rd , such as a hidden layer in a typical sequence transduction encoder or decoder. Motivating our use of self-attention we consider three desiderata.\nOne is the total computational complexity per layer. Another is the amount of computation that can be parallelized, as measured by the minimum number of sequential operations required.",
+      "rrf_score": 0.029910714285714284,
+      "retrieved_by": [
+        "dense",
+        "heading_bm25"
+      ],
+      "source_ranks": {
+        "dense": 10,
+        "heading_bm25": 4
+      },
+      "heading_score": 1.3363606277820048,
+      "cpntextualized_text": "4 Why Self-Attention\nIn this section we compare various aspects of self-attention layers to the recurrent and convolutional layers commonly used for mapping one variable-length sequence of symbol representations (x1, ..., xn) to another sequence of equal length (z1, ..., zn), with xi, zi ∈ Rd , such as a hidden layer in a typical sequence transduction encoder or decoder. Motivating our use of self-attention we consider three desiderata.\nOne is the total computational complexity per layer. Another is the amount of computation that can be parallelized, as measured by the minimum number of sequential operations required."
+    },
+    {
+      "dense_score": 0.5995266,
+      "chunk_id": "attention_0027",
+      "document_id": "attention",
+      "page_numbers": [
+        7
+      ],
+      "headings": [
+        "4 Why Self-Attention"
+      ],
+      "text": "A single convolutional layer with kernel width k < n does not connect all pairs of input and output positions. Doing so requires a stack of O(n/k) convolutional layers in the case of contiguous kernels, or O(logk(n)) in the case of dilated convolutions [18], increasing the length of the longest paths between any two positions in the network. Convolutional layers are generally more expensive than recurrent layers, by a factor of k. Separable convolutions [6], however, decrease the complexity considerably, to O(k · n · d + n · d2 ). Even with k = n, however, the complexity of a separable convolution is equal to the combination of a self-attention layer and a point-wise feed-forward layer, the approach we take in our model.\nAs side benefit, self-attention could yield more interpretable models. We inspect attention distributions from our models and present and discuss examples in the appendix. Not only do individual attention heads clearly learn to perform different tasks, many appear to exhibit behavior related to the syntactic and semantic structure of the sentences.",
+      "contextualized_text": "4 Why Self-Attention\nA single convolutional layer with kernel width k < n does not connect all pairs of input and output positions. Doing so requires a stack of O(n/k) convolutional layers in the case of contiguous kernels, or O(logk(n)) in the case of dilated convolutions [18], increasing the length of the longest paths between any two positions in the network. Convolutional layers are generally more expensive than recurrent layers, by a factor of k. Separable convolutions [6], however, decrease the complexity considerably, to O(k · n · d + n · d2 ). Even with k = n, however, the complexity of a separable convolution is equal to the combination of a self-attention layer and a point-wise feed-forward layer, the approach we take in our model.\nAs side benefit, self-attention could yield more interpretable models. We inspect attention distributions from our models and present and discuss examples in the appendix. Not only do individual attention heads clearly learn to perform different tasks, many appear to exhibit behavior related to the syntactic and semantic structure of the sentences.",
+      "rrf_score": 0.029850746268656716,
+      "retrieved_by": [
+        "dense",
+        "heading_bm25"
+      ],
+      "source_ranks": {
+        "dense": 7,
+        "heading_bm25": 7
+      },
+      "heading_score": 1.3363606277820048,
+      "cpntextualized_text": "4 Why Self-Attention\nA single convolutional layer with kernel width k < n does not connect all pairs of input and output positions. Doing so requires a stack of O(n/k) convolutional layers in the case of contiguous kernels, or O(logk(n)) in the case of dilated convolutions [18], increasing the length of the longest paths between any two positions in the network. Convolutional layers are generally more expensive than recurrent layers, by a factor of k. Separable convolutions [6], however, decrease the complexity considerably, to O(k · n · d + n · d2 ). Even with k = n, however, the complexity of a separable convolution is equal to the combination of a self-attention layer and a point-wise feed-forward layer, the approach we take in our model.\nAs side benefit, self-attention could yield more interpretable models. We inspect attention distributions from our models and present and discuss examples in the appendix. Not only do individual attention heads clearly learn to perform different tasks, many appear to exhibit behavior related to the syntactic and semantic structure of the sentences."
+    },
+    {
+      "dense_score": 0.6187278,
+      "chunk_id": "attention_0065",
+      "document_id": "attention",
+      "page_numbers": [
+        12,
+        13
+      ],
+      "headings": [
+        "References"
+      ],
+      "text": "- [40] Muhua Zhu, Yue Zhang, Wenliang Chen, Min Zhang, and Jingbo Zhu. Fast and accurate shift-reduce constituent parsing. In Proceedings of the 51st Annual Meeting of the ACL (Volume 1: Long Papers), pages 434-443. ACL, August 2013.\nFigure 3: An example of the attention mechanism following long-distance dependencies in the encoder self-attention in layer 5 of 6. Many of the attention heads attend to a distant dependency of the verb 'making', completing the phrase 'making...more difficult'. Attentions here shown only for the word 'making'. Different colors represent different heads. Best viewed in color.",
+      "contextualized_text": "References\n- [40] Muhua Zhu, Yue Zhang, Wenliang Chen, Min Zhang, and Jingbo Zhu. Fast and accurate shift-reduce constituent parsing. In Proceedings of the 51st Annual Meeting of the ACL (Volume 1: Long Papers), pages 434-443. ACL, August 2013.\nFigure 3: An example of the attention mechanism following long-distance dependencies in the encoder self-attention in layer 5 of 6. Many of the attention heads attend to a distant dependency of the verb 'making', completing the phrase 'making...more difficult'. Attentions here shown only for the word 'making'. Different colors represent different heads. Best viewed in color.",
+      "rrf_score": 0.029437229437229435,
+      "retrieved_by": [
+        "dense",
+        "colpali"
+      ],
+      "source_ranks": {
+        "dense": 6,
+        "colpali": 10
+      },
+      "file_name": "attention.pdf",
+      "chunk_index": 65,
+      "page_number": 12,
+      "captions": [],
+      "item_types": [
+        "DocItem"
+      ],
+      "bounding_boxes": [
+        {
+          "page_number": 12,
+          "left": 108.0,
+          "top": 102.4606526,
+          "right": 504.0025987919993,
+          "bottom": 72.09077439292037
+        },
+        {
+          "page_number": 13,
+          "left": 108.0,
+          "top": 478.5436526,
+          "right": 504.171157584,
+          "bottom": 437.2637743929203
+        }
+      ],
+      "source_file": "attention.pdf",
+      "source_mimetype": "application/pdf",
+      "colpali_page_numbers": 13,
+      "colpali_rank": 5,
+      "colpali_score": 11.9453125
+    },
+    {
+      "dense_score": 0.5805641,
+      "chunk_id": "attention_0013",
+      "document_id": "attention",
+      "page_numbers": [
+        4
+      ],
+      "headings": [
+        "3.2.1 Scaled Dot-Product Attention"
+      ],
+      "text": "We call our particular attention \"Scaled Dot-Product Attention\" (Figure 2). The input consists of queries and keys of dimension dk, and values of dimension dv. We compute the dot products of the query with all keys, divide each by √dk, and apply a softmax function to obtain the weights on the values.\nIn practice, we compute the attention function on a set of queries simultaneously, packed together into a matrix Q. The keys and values are also packed together into matrices K and V . We compute the matrix of outputs as:\n<!-- formula-not-decoded -->\nThe two most commonly used attention functions are additive attention [2], and dot-product (multiplicative) attention. Dot-product attention is identical to our algorithm, except for the scaling factor of 1 √dk . Additive attention computes the compatibility function using a feed-forward network with a single hidden layer. While the two are similar in theoretical complexity, dot-product attention is much faster and more space-efficient in practice, since it can be implemented using highly optimized matrix multiplication code.",
+      "contextualized_text": "3.2.1 Scaled Dot-Product Attention\nWe call our particular attention \"Scaled Dot-Product Attention\" (Figure 2). The input consists of queries and keys of dimension dk, and values of dimension dv. We compute the dot products of the query with all keys, divide each by √dk, and apply a softmax function to obtain the weights on the values.\nIn practice, we compute the attention function on a set of queries simultaneously, packed together into a matrix Q. The keys and values are also packed together into matrices K and V . We compute the matrix of outputs as:\n<!-- formula-not-decoded -->\nThe two most commonly used attention functions are additive attention [2], and dot-product (multiplicative) attention. Dot-product attention is identical to our algorithm, except for the scaling factor of 1 √dk . Additive attention computes the compatibility function using a feed-forward network with a single hidden layer. While the two are similar in theoretical complexity, dot-product attention is much faster and more space-efficient in practice, since it can be implemented using highly optimized matrix multiplication code.",
+      "rrf_score": 0.02877846790890269,
+      "retrieved_by": [
+        "dense",
+        "heading_bm25"
+      ],
+      "source_ranks": {
+        "dense": 9,
+        "heading_bm25": 10
+      },
+      "heading_score": 0.986255432176263,
+      "cpntextualized_text": "3.2.1 Scaled Dot-Product Attention\nWe call our particular attention \"Scaled Dot-Product Attention\" (Figure 2). The input consists of queries and keys of dimension dk, and values of dimension dv. We compute the dot products of the query with all keys, divide each by √dk, and apply a softmax function to obtain the weights on the values.\nIn practice, we compute the attention function on a set of queries simultaneously, packed together into a matrix Q. The keys and values are also packed together into matrices K and V . We compute the matrix of outputs as:\n<!-- formula-not-decoded -->\nThe two most commonly used attention functions are additive attention [2], and dot-product (multiplicative) attention. Dot-product attention is identical to our algorithm, except for the scaling factor of 1 √dk . Additive attention computes the compatibility function using a feed-forward network with a single hidden layer. While the two are similar in theoretical complexity, dot-product attention is much faster and more space-efficient in practice, since it can be implemented using highly optimized matrix multiplication code."
+    },
+    {
+      "chunk_id": "attention_0008",
+      "document_id": "attention",
+      "file_name": "attention.pdf",
+      "chunk_index": 8,
+      "page_number": 2,
+      "page_numbers": [
+        2,
+        3
+      ],
+      "headings": [
+        "3 Model Architecture"
+      ],
+      "captions": [],
+      "item_types": [
+        "DocItem"
+      ],
+      "bounding_boxes": [
+        {
+          "page_number": 2,
+          "left": 108.0,
+          "top": 122.12165259999995,
+          "right": 505.743154821,
+          "bottom": 69.93377439292033
+        },
+        {
+          "page_number": 3,
+          "left": 210.011,
+          "top": 386.1846526,
+          "right": 401.99030199999993,
+          "bottom": 377.63277439292034
+        },
+        {
+          "page_number": 3,
+          "left": 107.691,
+          "top": 354.1326526,
+          "right": 505.24711838399935,
+          "bottom": 323.76277439292033
+        }
+      ],
+      "source_file": "attention.pdf",
+      "source_mimetype": "application/pdf",
+      "text": "Most competitive neural sequence transduction models have an encoder-decoder structure [5, 2, 35]. Here, the encoder maps an input sequence of symbol representations (x1, ..., xn) to a sequence of continuous representations z = (z1, ..., zn). Given z, the decoder then generates an output sequence (y1, ..., ym) of symbols one element at a time. At each step the model is auto-regressive [10], consuming the previously generated symbols as additional input when generating the next.\nFigure 1: The Transformer - model architecture.\nThe Transformer follows this overall architecture using stacked self-attention and point-wise, fully connected layers for both the encoder and decoder, shown in the left and right halves of Figure 1, respectively.",
+      "contextualized_text": "3 Model Architecture\nMost competitive neural sequence transduction models have an encoder-decoder structure [5, 2, 35]. Here, the encoder maps an input sequence of symbol representations (x1, ..., xn) to a sequence of continuous representations z = (z1, ..., zn). Given z, the decoder then generates an output sequence (y1, ..., ym) of symbols one element at a time. At each step the model is auto-regressive [10], consuming the previously generated symbols as additional input when generating the next.\nFigure 1: The Transformer - model architecture.\nThe Transformer follows this overall architecture using stacked self-attention and point-wise, fully connected layers for both the encoder and decoder, shown in the left and right halves of Figure 1, respectively.",
+      "colpali_page_numbers": 3,
+      "colpali_rank": 2,
+      "colpali_score": 12.0703125,
+      "retrieved_by": [
+        "colpali"
+      ],
+      "rrf_score": 0.016129032258064516,
+      "source_ranks": {
+        "colpali": 2
+      }
+    },
+    {
+      "dense_score": 0.64116263,
+      "chunk_id": "attention_0018",
+      "document_id": "attention",
+      "page_numbers": [
+        5
+      ],
+      "headings": [
+        "3.2.3 Applications of Attention in our Model"
+      ],
+      "text": "- Similarly, self-attention layers in the decoder allow each position in the decoder to attend to all positions in the decoder up to and including that position. We need to prevent leftward information flow in the decoder to preserve the auto-regressive property. We implement this inside of scaled dot-product attention by masking out (setting to -∞) all values in the input of the softmax which correspond to illegal connections. See Figure 2.",
+      "contextualized_text": "3.2.3 Applications of Attention in our Model\n- Similarly, self-attention layers in the decoder allow each position in the decoder to attend to all positions in the decoder up to and including that position. We need to prevent leftward information flow in the decoder to preserve the auto-regressive property. We implement this inside of scaled dot-product attention by masking out (setting to -∞) all values in the input of the softmax which correspond to illegal connections. See Figure 2.",
+      "rrf_score": 0.015873015873015872,
+      "retrieved_by": [
+        "dense"
+      ],
+      "source_ranks": {
+        "dense": 3
+      }
+    }
+  ],
+  "figure_table_results": [
+    {
+      "rank": 1,
+      "point_id": "de03b4dd-7c06-5ede-8a95-2fb2c8e3a1b9",
+      "record_type": "table",
+      "record_id": "attention_table_001",
+      "page": null,
+      "score": 0.41538435,
+      "searchable_text": null,
+      "metadata": {
+        "table_id": "attention_table_001",
+        "document_id": "attention",
+        "file_name": "attention.pdf",
+        "page_number": 6,
+        "page_numbers": [
+          6
+        ],
+        "bounding_boxes": [
+          {
+            "page_number": 6,
+            "left": 117.4582977294922,
+            "top": 680.1776885986328,
+            "right": 494.3563537597656,
+            "bottom": 604.6787567138672,
+            "coordinate_origin": "CoordOrigin.BOTTOMLEFT"
+          }
+        ],
+        "caption": "Table 1: Maximum path lengths, per-layer complexity and minimum number of sequential operations for different layer types. n is the sequence length, d is the representation dimension, k is the kernel size of convolutions and r the size of the neighborhood in restricted self-attention.",
+        "table_markdown": "Table 1: Maximum path lengths, per-layer complexity and minimum number of sequential operations for different layer types. n is the sequence length, d is the representation dimension, k is the kernel size of convolutions and r the size of the neighborhood in restricted self-attention.\n\n| Layer Type                  | Complexity per Layer   | Sequential Operations   | Maximum Path Length   |\n|-----------------------------|------------------------|-------------------------|-----------------------|\n| Self-Attention              | O(n2 · d)              | O(1)                    | O(1)                  |\n| Recurrent                   | O(n · d2 )             | O(n)                    | O(n)                  |\n| Convolutional               | O(k · n · d2 )         | O(1)                    | O(logk(n))            |\n| Self-Attention (restricted) | O(r · n · d)           | O(1)                    | O(n/r)                |",
+        "item_type": "TableItem",
+        "image_path": "src\\pdf\\tables\\cropped\\attention_table_001.png",
+        "image_width": 754,
+        "image_height": 151,
+        "record_type": "table",
+        "record_id": "attention_table_001"
+      },
+      "rrf_score": 0.031544957774465976,
+      "retrieval_ranks": [
+        6,
+        1
+      ]
+    },
+    {
+      "rank": 2,
+      "point_id": "d2427c0a-3a5a-5fff-b4e7-847f5cdd179b",
+      "record_type": "figure",
+      "record_id": "attention_fig_004",
+      "page": null,
+      "score": 0.63729185,
+      "searchable_text": null,
+      "metadata": {
+        "figure_id": "attention_fig_004",
+        "document_id": "attention",
+        "file_name": "attention.pdf",
+        "page_number": 13,
+        "page_numbers": [
+          13
+        ],
+        "bounding_boxes": [
+          {
+            "page_number": 13,
+            "left": 106.26558685302734,
+            "top": 728.5337142944336,
+            "right": 503.7259521484375,
+            "bottom": 490.4254760742187,
+            "coordinate_origin": "CoordOrigin.BOTTOMLEFT"
+          }
+        ],
+        "caption": "Figure 3: An example of the attention mechanism following long-distance dependencies in the encoder self-attention in layer 5 of 6. Many of the attention heads attend to a distant dependency of the verb 'making', completing the phrase 'making...more difficult'. Attentions here shown only for the word 'making'. Different colors represent different heads. Best viewed in color.",
+        "image_path": "src\\pdf\\figures\\cropped\\attention_fig_004.png",
+        "image_width": 794,
+        "image_height": 476,
+        "item_type": "PictureItem",
+        "record_type": "figure",
+        "record_id": "attention_fig_004"
+      },
+      "rrf_score": 0.01639344262295082,
+      "retrieval_ranks": [
+        1
+      ]
+    },
+    {
+      "rank": 3,
+      "point_id": "9d90d641-9924-5fe4-98bc-bbea61584322",
+      "record_type": "figure",
+      "record_id": "attention_fig_005",
+      "page": null,
+      "score": 0.62554777,
+      "searchable_text": null,
+      "metadata": {
+        "figure_id": "attention_fig_005",
+        "document_id": "attention",
+        "file_name": "attention.pdf",
+        "page_number": 14,
+        "page_numbers": [
+          14
+        ],
+        "bounding_boxes": [
+          {
+            "page_number": 14,
+            "left": 107.80976104736328,
+            "top": 621.8021087646484,
+            "right": 501.4026489257813,
+            "bottom": 188.03570556640625,
+            "coordinate_origin": "CoordOrigin.BOTTOMLEFT"
+          }
+        ],
+        "caption": "Figure 4: Two attention heads, also in layer 5 of 6, apparently involved in anaphora resolution. Top: Full attentions for head 5. Bottom: Isolated attentions from just the word 'its' for attention heads 5 and 6. Note that the attentions are very sharp for this word.",
+        "image_path": "src\\pdf\\figures\\cropped\\attention_fig_005.png",
+        "image_width": 787,
+        "image_height": 868,
+        "item_type": "PictureItem",
+        "record_type": "figure",
+        "record_id": "attention_fig_005"
+      },
+      "rrf_score": 0.016129032258064516,
+      "retrieval_ranks": [
+        2
+      ]
+    },
+    {
+      "rank": 4,
+      "point_id": "69a18f7b-ee56-50cd-ae5a-4f60049c9559",
+      "record_type": "figure",
+      "record_id": "attention_fig_002",
+      "page": null,
+      "score": 0.61530364,
+      "searchable_text": null,
+      "metadata": {
+        "figure_id": "attention_fig_002",
+        "document_id": "attention",
+        "file_name": "attention.pdf",
+        "page_number": 4,
+        "page_numbers": [
+          4
+        ],
+        "bounding_boxes": [
+          {
+            "page_number": 4,
+            "left": 174.1492462158203,
+            "top": 698.2570724487305,
+            "right": 239.5030517578125,
+            "bottom": 572.6049194335938,
+            "coordinate_origin": "CoordOrigin.BOTTOMLEFT"
+          }
+        ],
+        "caption": "Figure 2: (left) Scaled Dot-Product Attention. (right) Multi-Head Attention consists of several attention layers running in parallel.",
+        "image_path": "src\\pdf\\figures\\cropped\\attention_fig_002.png",
+        "image_width": 131,
+        "image_height": 252,
+        "item_type": "PictureItem",
+        "shared_caption": "Figure 2: (left) Scaled Dot-Product Attention. (right) Multi-Head Attention consists of several attention layers running in parallel.",
+        "parent_figure": "Figure 2",
+        "panel": "left",
+        "panel_caption": "Scaled Dot-Product Attention.",
+        "record_type": "figure",
+        "record_id": "attention_fig_002"
+      },
+      "rrf_score": 0.015873015873015872,
+      "retrieval_ranks": [
+        3
+      ]
+    },
+    {
+      "rank": 5,
+      "point_id": "f8370605-5994-5202-9ca4-203d49b4815f",
+      "record_type": "figure",
+      "record_id": "attention_fig_007",
+      "page": null,
+      "score": 0.61150724,
+      "searchable_text": null,
+      "metadata": {
+        "figure_id": "attention_fig_007",
+        "document_id": "attention",
+        "file_name": "attention.pdf",
+        "page_number": 15,
+        "page_numbers": [
+          15
+        ],
+        "bounding_boxes": [
+          {
+            "page_number": 15,
+            "left": 106.20917510986328,
+            "top": 606.9405364990234,
+            "right": 498.0159912109375,
+            "bottom": 201.9208984375,
+            "coordinate_origin": "CoordOrigin.BOTTOMLEFT"
+          }
+        ],
+        "caption": "Figure 5: Many of the attention heads exhibit behaviour that seems related to the structure of the sentence. We give two such examples above, from two different heads from the encoder self-attention at layer 5 of 6. The heads clearly learned to perform different tasks.",
+        "image_path": "src\\pdf\\figures\\cropped\\attention_fig_007.png",
+        "image_width": 784,
+        "image_height": 810,
+        "item_type": "PictureItem",
+        "record_type": "figure",
+        "record_id": "attention_fig_007"
+      },
+      "rrf_score": 0.015625,
+      "retrieval_ranks": [
+        4
+      ]
+    }
+  ],
+  "counts": {
+    "text": 10,
+    "figures_and_tables": 5
+  }
+}

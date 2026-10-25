@@ -5,7 +5,7 @@ from typing import Any
 
 # Existing text hybrid retrieval + text RRF.
 # Change "rag.rrf" if your text RRF code is in another module.
-from rag.Text_Retreival.hybrid_retriever import retrieve_and_fuse as retrieve_text_hybrid
+from rag.Text_Retrieval.hybrid_retriever import retrieve_and_fuse as retrieve_text_hybrid
 
 # Figure/table hybrid retrieval + its own RRF.
 from rag.Figure_Table_Retrieval.query_figures_tables.hybrid_retrieval import (
@@ -103,6 +103,8 @@ def run_hybrid_retrieval(
         output["saved_to"] = str(output_path)
 
     return output
+
+
 
 
 if __name__ == "__main__":
