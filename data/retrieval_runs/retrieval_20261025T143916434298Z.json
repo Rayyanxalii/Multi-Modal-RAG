@@ -1,0 +1,597 @@
+{
+  "question": "what is attentoin mechanism?",
+  "created_at": "2026-10-25T14:39:16.434065+00:00",
+  "retrieval_config": {
+    "text_top_k": 10,
+    "figure_table_top_k": 5,
+    "figure_table_candidate_k": 10,
+    "record_type": null
+  },
+  "text_results": [
+    {
+      "dense_score": 0.49844074,
+      "chunk_id": "attention_0007",
+      "document_id": "attention",
+      "page_numbers": [
+        2
+      ],
+      "headings": [
+        "2 Background"
+      ],
+      "text": "End-to-end memory networks are based on a recurrent attention mechanism instead of sequencealigned recurrence and have been shown to perform well on simple-language question answering and language modeling tasks [34].\nTo the best of our knowledge, however, the Transformer is the first transduction model relying entirely on self-attention to compute representations of its input and output without using sequencealigned RNNs or convolution. In the following sections, we will describe the Transformer, motivate self-attention and discuss its advantages over models such as [17, 18] and [9].",
+      "contextualized_text": "2 Background\nEnd-to-end memory networks are based on a recurrent attention mechanism instead of sequencealigned recurrence and have been shown to perform well on simple-language question answering and language modeling tasks [34].\nTo the best of our knowledge, however, the Transformer is the first transduction model relying entirely on self-attention to compute representations of its input and output without using sequencealigned RNNs or convolution. In the following sections, we will describe the Transformer, motivate self-attention and discuss its advantages over models such as [17, 18] and [9].",
+      "rrf_score": 0.03125763125763126,
+      "retrieved_by": [
+        "dense",
+        "colpali"
+      ],
+      "source_ranks": {
+        "dense": 3,
+        "colpali": 5
+      },
+      "file_name": "attention.pdf",
+      "chunk_index": 7,
+      "page_number": 2,
+      "captions": [],
+      "item_types": [
+        "DocItem"
+      ],
+      "bounding_boxes": [
+        {
+          "page_number": 2,
+          "left": 108.0,
+          "top": 248.7496526,
+          "right": 505.6535924639992,
+          "bottom": 218.37877439292038
+        },
+        {
+          "page_number": 2,
+          "left": 107.691,
+          "top": 210.5426526,
+          "right": 505.65717899999925,
+          "bottom": 169.26377439292037
+        }
+      ],
+      "source_file": "attention.pdf",
+      "source_mimetype": "application/pdf",
+      "colpali_page_numbers": 2,
+      "colpali_rank": 2,
+      "colpali_score": 12.216796875
+    },
+    {
+      "dense_score": 0.49108243,
+      "chunk_id": "attention_0011",
+      "document_id": "attention",
+      "page_numbers": [
+        3
+      ],
+      "headings": [
+        "3.2 Attention"
+      ],
+      "text": "An attention function can be described as mapping a query and a set of key-value pairs to an output, where the query, keys, values, and output are all vectors. The output is computed as a weighted sum",
+      "contextualized_text": "3.2 Attention\nAn attention function can be described as mapping a query and a set of key-value pairs to an output, where the query, keys, values, and output are all vectors. The output is computed as a weighted sum",
+      "rrf_score": 0.029877369007803793,
+      "retrieved_by": [
+        "dense",
+        "colpali"
+      ],
+      "source_ranks": {
+        "dense": 5,
+        "colpali": 9
+      },
+      "file_name": "attention.pdf",
+      "chunk_index": 11,
+      "page_number": 3,
+      "captions": [],
+      "item_types": [
+        "DocItem"
+      ],
+      "bounding_boxes": [
+        {
+          "page_number": 3,
+          "left": 107.641,
+          "top": 89.39465259999997,
+          "right": 505.24856525199976,
+          "bottom": 69.93377439292033
+        }
+      ],
+      "source_file": "attention.pdf",
+      "source_mimetype": "application/pdf",
+      "colpali_page_numbers": 3,
+      "colpali_rank": 3,
+      "colpali_score": 12.03515625
+    },
+    {
+      "dense_score": 0.48368472,
+      "chunk_id": "attention_0008",
+      "document_id": "attention",
+      "page_numbers": [
+        2,
+        3
+      ],
+      "headings": [
+        "3 Model Architecture"
+      ],
+      "text": "Most competitive neural sequence transduction models have an encoder-decoder structure [5, 2, 35]. Here, the encoder maps an input sequence of symbol representations (x1, ..., xn) to a sequence of continuous representations z = (z1, ..., zn). Given z, the decoder then generates an output sequence (y1, ..., ym) of symbols one element at a time. At each step the model is auto-regressive [10], consuming the previously generated symbols as additional input when generating the next.\nFigure 1: The Transformer - model architecture.\nThe Transformer follows this overall architecture using stacked self-attention and point-wise, fully connected layers for both the encoder and decoder, shown in the left and right halves of Figure 1, respectively.",
+      "contextualized_text": "3 Model Architecture\nMost competitive neural sequence transduction models have an encoder-decoder structure [5, 2, 35]. Here, the encoder maps an input sequence of symbol representations (x1, ..., xn) to a sequence of continuous representations z = (z1, ..., zn). Given z, the decoder then generates an output sequence (y1, ..., ym) of symbols one element at a time. At each step the model is auto-regressive [10], consuming the previously generated symbols as additional input when generating the next.\nFigure 1: The Transformer - model architecture.\nThe Transformer follows this overall architecture using stacked self-attention and point-wise, fully connected layers for both the encoder and decoder, shown in the left and right halves of Figure 1, respectively.",
+      "rrf_score": 0.029857397504456328,
+      "retrieved_by": [
+        "dense",
+        "colpali"
+      ],
+      "source_ranks": {
+        "dense": 8,
+        "colpali": 6
+      },
+      "file_name": "attention.pdf",
+      "chunk_index": 8,
+      "page_number": 2,
+      "captions": [],
+      "item_types": [
+        "DocItem"
+      ],
+      "bounding_boxes": [
+        {
+          "page_number": 2,
+          "left": 108.0,
+          "top": 122.12165259999995,
+          "right": 505.743154821,
+          "bottom": 69.93377439292033
+        },
+        {
+          "page_number": 3,
+          "left": 210.011,
+          "top": 386.1846526,
+          "right": 401.99030199999993,
+          "bottom": 377.63277439292034
+        },
+        {
+          "page_number": 3,
+          "left": 107.691,
+          "top": 354.1326526,
+          "right": 505.24711838399935,
+          "bottom": 323.76277439292033
+        }
+      ],
+      "source_file": "attention.pdf",
+      "source_mimetype": "application/pdf",
+      "colpali_page_numbers": 2,
+      "colpali_rank": 2,
+      "colpali_score": 12.216796875
+    },
+    {
+      "dense_score": 0.5047409,
+      "chunk_id": "attention_0014",
+      "document_id": "attention",
+      "page_numbers": [
+        4
+      ],
+      "headings": [
+        "3.2.1 Scaled Dot-Product Attention"
+      ],
+      "text": "While for small values of dk the two mechanisms perform similarly, additive attention outperforms dot product attention without scaling for larger values of dk [3]. We suspect that for large values of dk, the dot products grow large in magnitude, pushing the softmax function into regions where it has extremely small gradients 4 . To counteract this effect, we scale the dot products by 1 √dk .",
+      "contextualized_text": "3.2.1 Scaled Dot-Product Attention\nWhile for small values of dk the two mechanisms perform similarly, additive attention outperforms dot product attention without scaling for larger values of dk [3]. We suspect that for large values of dk, the dot products grow large in magnitude, pushing the softmax function into regions where it has extremely small gradients 4 . To counteract this effect, we scale the dot products by 1 √dk .",
+      "rrf_score": 0.01639344262295082,
+      "retrieved_by": [
+        "dense"
+      ],
+      "source_ranks": {
+        "dense": 1
+      }
+    },
+    {
+      "heading_score": 3.246828527289311,
+      "chunk_id": "attention_0001",
+      "document_id": "attention",
+      "page_numbers": [
+        1
+      ],
+      "headings": [
+        "Attention Is All You Need"
+      ],
+      "text": "Ashish Vaswani∗ Google Brain avaswani@google.com Noam Shazeer∗ Google Brain noam@google.com Niki Parmar∗ Google Research nikip@google.com Jakob Uszkoreit∗ Google Research usz@google.com\nLlion Jones∗ Google Research llion@google.com Aidan N. Gomez∗ † University of Toronto aidan@cs.toronto.edu Łukasz Kaiser∗ Google Brain lukaszkaiser@google.com Illia Polosukhin∗ ‡ illia.polosukhin@gmail.com",
+      "cpntextualized_text": "Attention Is All You Need\nAshish Vaswani∗ Google Brain avaswani@google.com Noam Shazeer∗ Google Brain noam@google.com Niki Parmar∗ Google Research nikip@google.com Jakob Uszkoreit∗ Google Research usz@google.com\nLlion Jones∗ Google Research llion@google.com Aidan N. Gomez∗ † University of Toronto aidan@cs.toronto.edu Łukasz Kaiser∗ Google Brain lukaszkaiser@google.com Illia Polosukhin∗ ‡ illia.polosukhin@gmail.com",
+      "rrf_score": 0.01639344262295082,
+      "retrieved_by": [
+        "heading_bm25"
+      ],
+      "source_ranks": {
+        "heading_bm25": 1
+      }
+    },
+    {
+      "chunk_id": "attention_0065",
+      "document_id": "attention",
+      "file_name": "attention.pdf",
+      "chunk_index": 65,
+      "page_number": 12,
+      "page_numbers": [
+        12,
+        13
+      ],
+      "headings": [
+        "References"
+      ],
+      "captions": [],
+      "item_types": [
+        "DocItem"
+      ],
+      "bounding_boxes": [
+        {
+          "page_number": 12,
+          "left": 108.0,
+          "top": 102.4606526,
+          "right": 504.0025987919993,
+          "bottom": 72.09077439292037
+        },
+        {
+          "page_number": 13,
+          "left": 108.0,
+          "top": 478.5436526,
+          "right": 504.171157584,
+          "bottom": 437.2637743929203
+        }
+      ],
+      "source_file": "attention.pdf",
+      "source_mimetype": "application/pdf",
+      "text": "- [40] Muhua Zhu, Yue Zhang, Wenliang Chen, Min Zhang, and Jingbo Zhu. Fast and accurate shift-reduce constituent parsing. In Proceedings of the 51st Annual Meeting of the ACL (Volume 1: Long Papers), pages 434-443. ACL, August 2013.\nFigure 3: An example of the attention mechanism following long-distance dependencies in the encoder self-attention in layer 5 of 6. Many of the attention heads attend to a distant dependency of the verb 'making', completing the phrase 'making...more difficult'. Attentions here shown only for the word 'making'. Different colors represent different heads. Best viewed in color.",
+      "contextualized_text": "References\n- [40] Muhua Zhu, Yue Zhang, Wenliang Chen, Min Zhang, and Jingbo Zhu. Fast and accurate shift-reduce constituent parsing. In Proceedings of the 51st Annual Meeting of the ACL (Volume 1: Long Papers), pages 434-443. ACL, August 2013.\nFigure 3: An example of the attention mechanism following long-distance dependencies in the encoder self-attention in layer 5 of 6. Many of the attention heads attend to a distant dependency of the verb 'making', completing the phrase 'making...more difficult'. Attentions here shown only for the word 'making'. Different colors represent different heads. Best viewed in color.",
+      "colpali_page_numbers": 13,
+      "colpali_rank": 1,
+      "colpali_score": 13.248046875,
+      "retrieved_by": [
+        "colpali"
+      ],
+      "rrf_score": 0.01639344262295082,
+      "source_ranks": {
+        "colpali": 1
+      }
+    },
+    {
+      "dense_score": 0.5014747,
+      "chunk_id": "attention_0019",
+      "document_id": "attention",
+      "page_numbers": [
+        5
+      ],
+      "headings": [
+        "3.3 Position-wise Feed-Forward Networks"
+      ],
+      "text": "In addition to attention sub-layers, each of the layers in our encoder and decoder contains a fully connected feed-forward network, which is applied to each position separately and identically. This consists of two linear transformations with a ReLU activation in between.\n<!-- formula-not-decoded -->\nWhile the linear transformations are the same across different positions, they use different parameters from layer to layer. Another way of describing this is as two convolutions with kernel size 1. The dimensionality of input and output is dmodel = 512, and the inner-layer has dimensionality dff = 2048.",
+      "contextualized_text": "3.3 Position-wise Feed-Forward Networks\nIn addition to attention sub-layers, each of the layers in our encoder and decoder contains a fully connected feed-forward network, which is applied to each position separately and identically. This consists of two linear transformations with a ReLU activation in between.\n<!-- formula-not-decoded -->\nWhile the linear transformations are the same across different positions, they use different parameters from layer to layer. Another way of describing this is as two convolutions with kernel size 1. The dimensionality of input and output is dmodel = 512, and the inner-layer has dimensionality dff = 2048.",
+      "rrf_score": 0.016129032258064516,
+      "retrieved_by": [
+        "dense"
+      ],
+      "source_ranks": {
+        "dense": 2
+      }
+    },
+    {
+      "chunk_id": "attention_0004",
+      "document_id": "attention",
+      "file_name": "attention.pdf",
+      "chunk_index": 4,
+      "page_number": 2,
+      "page_numbers": [
+        2
+      ],
+      "headings": [
+        "1 Introduction"
+      ],
+      "captions": [],
+      "item_types": [
+        "DocItem"
+      ],
+      "bounding_boxes": [
+        {
+          "page_number": 2,
+          "left": 108.0,
+          "top": 691.8396526,
+          "right": 504.16737179599943,
+          "bottom": 639.6517743929203
+        },
+        {
+          "page_number": 2,
+          "left": 108.0,
+          "top": 631.8146525999999,
+          "right": 504.35091412599996,
+          "bottom": 546.8997743929203
+        }
+      ],
+      "source_file": "attention.pdf",
+      "source_mimetype": "application/pdf",
+      "text": "Recurrent neural networks, long short-termmemory [13] and gated recurrent [7] neural networks in particular, have been firmly established as state of the art approaches in sequence modeling and transduction problems such as language modeling and machine translation [35, 2, 5]. Numerous efforts have since continued to push the boundaries of recurrent language models and encoder-decoder architectures [38, 24, 15].\nRecurrent models typically factor computation along the symbol positions of the input and output sequences. Aligning the positions to steps in computation time, they generate a sequence of hidden states ht, as a function of the previous hidden state ht-1 and the input for position t. This inherently sequential nature precludes parallelization within training examples, which becomes critical at longer sequence lengths, as memory constraints limit batching across examples. Recent work has achieved significant improvements in computational efficiency through factorization tricks [21] and conditional computation [32], while also improving model performance in case of the latter. The fundamental constraint of sequential computation, however, remains.",
+      "contextualized_text": "1 Introduction\nRecurrent neural networks, long short-termmemory [13] and gated recurrent [7] neural networks in particular, have been firmly established as state of the art approaches in sequence modeling and transduction problems such as language modeling and machine translation [35, 2, 5]. Numerous efforts have since continued to push the boundaries of recurrent language models and encoder-decoder architectures [38, 24, 15].\nRecurrent models typically factor computation along the symbol positions of the input and output sequences. Aligning the positions to steps in computation time, they generate a sequence of hidden states ht, as a function of the previous hidden state ht-1 and the input for position t. This inherently sequential nature precludes parallelization within training examples, which becomes critical at longer sequence lengths, as memory constraints limit batching across examples. Recent work has achieved significant improvements in computational efficiency through factorization tricks [21] and conditional computation [32], while also improving model performance in case of the latter. The fundamental constraint of sequential computation, however, remains.",
+      "colpali_page_numbers": 2,
+      "colpali_rank": 2,
+      "colpali_score": 12.216796875,
+      "retrieved_by": [
+        "colpali"
+      ],
+      "rrf_score": 0.016129032258064516,
+      "source_ranks": {
+        "colpali": 2
+      }
+    },
+    {
+      "chunk_id": "attention_0005",
+      "document_id": "attention",
+      "file_name": "attention.pdf",
+      "chunk_index": 5,
+      "page_number": 2,
+      "page_numbers": [
+        2
+      ],
+      "headings": [
+        "1 Introduction"
+      ],
+      "captions": [],
+      "item_types": [
+        "DocItem"
+      ],
+      "bounding_boxes": [
+        {
+          "page_number": 2,
+          "left": 107.641,
+          "top": 539.0626526,
+          "right": 505.6553182847997,
+          "bottom": 497.78377439292035
+        },
+        {
+          "page_number": 2,
+          "left": 107.691,
+          "top": 489.9466526,
+          "right": 505.73895202079996,
+          "bottom": 448.6677743929203
+        }
+      ],
+      "source_file": "attention.pdf",
+      "source_mimetype": "application/pdf",
+      "text": "Attention mechanisms have become an integral part of compelling sequence modeling and transduction models in various tasks, allowing modeling of dependencies without regard to their distance in the input or output sequences [2, 19]. In all but a few cases [27], however, such attention mechanisms are used in conjunction with a recurrent network.\nIn this work we propose the Transformer, a model architecture eschewing recurrence and instead relying entirely on an attention mechanism to draw global dependencies between input and output. The Transformer allows for significantly more parallelization and can reach a new state of the art in translation quality after being trained for as little as twelve hours on eight P100 GPUs.",
+      "contextualized_text": "1 Introduction\nAttention mechanisms have become an integral part of compelling sequence modeling and transduction models in various tasks, allowing modeling of dependencies without regard to their distance in the input or output sequences [2, 19]. In all but a few cases [27], however, such attention mechanisms are used in conjunction with a recurrent network.\nIn this work we propose the Transformer, a model architecture eschewing recurrence and instead relying entirely on an attention mechanism to draw global dependencies between input and output. The Transformer allows for significantly more parallelization and can reach a new state of the art in translation quality after being trained for as little as twelve hours on eight P100 GPUs.",
+      "colpali_page_numbers": 2,
+      "colpali_rank": 2,
+      "colpali_score": 12.216796875,
+      "retrieved_by": [
+        "colpali"
+      ],
+      "rrf_score": 0.015873015873015872,
+      "source_ranks": {
+        "colpali": 3
+      }
+    },
+    {
+      "dense_score": 0.496947,
+      "chunk_id": "attention_0017",
+      "document_id": "attention",
+      "page_numbers": [
+        5
+      ],
+      "headings": [
+        "3.2.3 Applications of Attention in our Model"
+      ],
+      "text": "The Transformer uses multi-head attention in three different ways:\n- In \"encoder-decoder attention\" layers, the queries come from the previous decoder layer, and the memory keys and values come from the output of the encoder. This allows every position in the decoder to attend over all positions in the input sequence. This mimics the typical encoder-decoder attention mechanisms in sequence-to-sequence models such as [38, 2, 9].\n- The encoder contains self-attention layers. In a self-attention layer all of the keys, values and queries come from the same place, in this case, the output of the previous layer in the encoder. Each position in the encoder can attend to all positions in the previous layer of the encoder.",
+      "contextualized_text": "3.2.3 Applications of Attention in our Model\nThe Transformer uses multi-head attention in three different ways:\n- In \"encoder-decoder attention\" layers, the queries come from the previous decoder layer, and the memory keys and values come from the output of the encoder. This allows every position in the decoder to attend over all positions in the input sequence. This mimics the typical encoder-decoder attention mechanisms in sequence-to-sequence models such as [38, 2, 9].\n- The encoder contains self-attention layers. In a self-attention layer all of the keys, values and queries come from the same place, in this case, the output of the previous layer in the encoder. Each position in the encoder can attend to all positions in the previous layer of the encoder.",
+      "rrf_score": 0.015625,
+      "retrieved_by": [
+        "dense"
+      ],
+      "source_ranks": {
+        "dense": 4
+      }
+    }
+  ],
+  "figure_table_results": [
+    {
+      "rank": 1,
+      "point_id": "d2427c0a-3a5a-5fff-b4e7-847f5cdd179b",
+      "record_type": "figure",
+      "record_id": "attention_fig_004",
+      "page": 13,
+      "score": 0.4790892,
+      "searchable_text": null,
+      "metadata": {
+        "figure_id": "attention_fig_004",
+        "document_id": "attention",
+        "file_name": "attention.pdf",
+        "page_number": 13,
+        "page_numbers": [
+          13
+        ],
+        "bounding_boxes": [
+          {
+            "page_number": 13,
+            "left": 106.26558685302734,
+            "top": 728.5337142944336,
+            "right": 503.7259521484375,
+            "bottom": 490.4254760742187,
+            "coordinate_origin": "CoordOrigin.BOTTOMLEFT"
+          }
+        ],
+        "caption": "Figure 3: An example of the attention mechanism following long-distance dependencies in the encoder self-attention in layer 5 of 6. Many of the attention heads attend to a distant dependency of the verb 'making', completing the phrase 'making...more difficult'. Attentions here shown only for the word 'making'. Different colors represent different heads. Best viewed in color.",
+        "image_path": "src\\pdf\\figures\\cropped\\attention_fig_004.png",
+        "image_width": 794,
+        "image_height": 476,
+        "item_type": "PictureItem",
+        "record_type": "figure",
+        "record_id": "attention_fig_004"
+      },
+      "rrf_score": 0.03252247488101534,
+      "retrieval_ranks": [
+        1,
+        2
+      ]
+    },
+    {
+      "rank": 2,
+      "point_id": "de03b4dd-7c06-5ede-8a95-2fb2c8e3a1b9",
+      "record_type": "table",
+      "record_id": "attention_table_001",
+      "page": 6,
+      "score": 0.4139637,
+      "searchable_text": null,
+      "metadata": {
+        "table_id": "attention_table_001",
+        "document_id": "attention",
+        "file_name": "attention.pdf",
+        "page_number": 6,
+        "page_numbers": [
+          6
+        ],
+        "bounding_boxes": [
+          {
+            "page_number": 6,
+            "left": 117.4582977294922,
+            "top": 680.1776885986328,
+            "right": 494.3563537597656,
+            "bottom": 604.6787567138672,
+            "coordinate_origin": "CoordOrigin.BOTTOMLEFT"
+          }
+        ],
+        "caption": "Table 1: Maximum path lengths, per-layer complexity and minimum number of sequential operations for different layer types. n is the sequence length, d is the representation dimension, k is the kernel size of convolutions and r the size of the neighborhood in restricted self-attention.",
+        "table_markdown": "Table 1: Maximum path lengths, per-layer complexity and minimum number of sequential operations for different layer types. n is the sequence length, d is the representation dimension, k is the kernel size of convolutions and r the size of the neighborhood in restricted self-attention.\n\n| Layer Type                  | Complexity per Layer   | Sequential Operations   | Maximum Path Length   |\n|-----------------------------|------------------------|-------------------------|-----------------------|\n| Self-Attention              | O(n2 · d)              | O(1)                    | O(1)                  |\n| Recurrent                   | O(n · d2 )             | O(n)                    | O(n)                  |\n| Convolutional               | O(k · n · d2 )         | O(1)                    | O(logk(n))            |\n| Self-Attention (restricted) | O(r · n · d)           | O(1)                    | O(n/r)                |",
+        "item_type": "TableItem",
+        "image_path": "src\\pdf\\tables\\cropped\\attention_table_001.png",
+        "image_width": 754,
+        "image_height": 151,
+        "record_type": "table",
+        "record_id": "attention_table_001"
+      },
+      "rrf_score": 0.030886196246139225,
+      "retrieval_ranks": [
+        9,
+        1
+      ]
+    },
+    {
+      "rank": 3,
+      "point_id": "1ae26402-f9b5-5c96-8081-1fac44c6932e",
+      "record_type": "figure",
+      "record_id": "attention_fig_001",
+      "page": 3,
+      "score": 0.47538894,
+      "searchable_text": null,
+      "metadata": {
+        "figure_id": "attention_fig_001",
+        "document_id": "attention",
+        "file_name": "attention.pdf",
+        "page_number": 3,
+        "page_numbers": [
+          3
+        ],
+        "bounding_boxes": [
+          {
+            "page_number": 3,
+            "left": 195.7201232910156,
+            "top": 719.240837097168,
+            "right": 416.1883850097656,
+            "bottom": 397.9071044921875,
+            "coordinate_origin": "CoordOrigin.BOTTOMLEFT"
+          }
+        ],
+        "caption": "Figure 1: The Transformer - model architecture.",
+        "image_path": "src\\pdf\\figures\\cropped\\attention_fig_001.png",
+        "image_width": 441,
+        "image_height": 642,
+        "item_type": "PictureItem",
+        "record_type": "figure",
+        "record_id": "attention_fig_001"
+      },
+      "rrf_score": 0.016129032258064516,
+      "retrieval_ranks": [
+        2
+      ]
+    },
+    {
+      "rank": 4,
+      "point_id": "35d2eec8-dac5-572c-9452-66aeb8622107",
+      "record_type": "figure",
+      "record_id": "attention_fig_003",
+      "page": 4,
+      "score": 0.46764874,
+      "searchable_text": null,
+      "metadata": {
+        "figure_id": "attention_fig_003",
+        "document_id": "attention",
+        "file_name": "attention.pdf",
+        "page_number": 4,
+        "page_numbers": [
+          4
+        ],
+        "bounding_boxes": [
+          {
+            "page_number": 4,
+            "left": 346.6099853515625,
+            "top": 720.9769134521484,
+            "right": 466.9015808105469,
+            "bottom": 553.8251037597656,
+            "coordinate_origin": "CoordOrigin.BOTTOMLEFT"
+          }
+        ],
+        "caption": "Figure 2: (left) Scaled Dot-Product Attention. (right) Multi-Head Attention consists of several attention layers running in parallel.",
+        "image_path": "src\\pdf\\figures\\cropped\\attention_fig_003.png",
+        "image_width": 241,
+        "image_height": 334,
+        "item_type": "PictureItem",
+        "shared_caption": "Figure 2: (left) Scaled Dot-Product Attention. (right) Multi-Head Attention consists of several attention layers running in parallel.",
+        "parent_figure": "Figure 2",
+        "panel": "right",
+        "panel_caption": "Multi-Head Attention consists of several attention layers running in parallel.",
+        "record_type": "figure",
+        "record_id": "attention_fig_003"
+      },
+      "rrf_score": 0.015873015873015872,
+      "retrieval_ranks": [
+        3
+      ]
+    },
+    {
+      "rank": 5,
+      "point_id": "69a18f7b-ee56-50cd-ae5a-4f60049c9559",
+      "record_type": "figure",
+      "record_id": "attention_fig_002",
+      "page": 4,
+      "score": 0.4669212,
+      "searchable_text": null,
+      "metadata": {
+        "figure_id": "attention_fig_002",
+        "document_id": "attention",
+        "file_name": "attention.pdf",
+        "page_number": 4,
+        "page_numbers": [
+          4
+        ],
+        "bounding_boxes": [
+          {
+            "page_number": 4,
+            "left": 174.1492462158203,
+            "top": 698.2570724487305,
+            "right": 239.5030517578125,
+            "bottom": 572.6049194335938,
+            "coordinate_origin": "CoordOrigin.BOTTOMLEFT"
+          }
+        ],
+        "caption": "Figure 2: (left) Scaled Dot-Product Attention. (right) Multi-Head Attention consists of several attention layers running in parallel.",
+        "image_path": "src\\pdf\\figures\\cropped\\attention_fig_002.png",
+        "image_width": 131,
+        "image_height": 252,
+        "item_type": "PictureItem",
+        "shared_caption": "Figure 2: (left) Scaled Dot-Product Attention. (right) Multi-Head Attention consists of several attention layers running in parallel.",
+        "parent_figure": "Figure 2",
+        "panel": "left",
+        "panel_caption": "Scaled Dot-Product Attention.",
+        "record_type": "figure",
+        "record_id": "attention_fig_002"
+      },
+      "rrf_score": 0.015625,
+      "retrieval_ranks": [
+        4
+      ]
+    }
+  ],
+  "counts": {
+    "text": 10,
+    "figures_and_tables": 5
+  }
+}

@@ -12,6 +12,8 @@ from rag.Figure_Table_Retrieval.query_figures_tables.hybrid_retrieval import (
     hybrid_retrieve,
 )
 
+from rag.map_retrieval_results import map_orchestrator_results
+
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 OUTPUT_DIR = PROJECT_ROOT / "data" / "retrieval_runs"
@@ -123,20 +125,7 @@ if __name__ == "__main__":
     if result.get("saved_to"):
         print(f"Saved results to: {result['saved_to']}")
 
-    print("\n=== Text Results ===")
-    for item in result["text_results"]:
-        print(
-            f"Rank: {item.get('rank')} | "
-            f"Page(s): {item.get('page_numbers')} | "
-            f"RRF score: {item.get('rrf_score')}"
-        )
-
-    print("\n=== Figure/Table Results ===")
-    for item in result["figure_table_results"]:
-        print(
-            f"Rank: {item.get('rank')} | "
-            f"Type: {item.get('record_type')} | "
-            f"ID: {item.get('record_id')} | "
-            f"Page: {item.get('page')} | "
-            f"RRF score: {item.get('rrf_score')}"
-        )
+    mapped = map_orchestrator_results(result)
+    
+    print("Mapped text chunks:", len(mapped["text_chunks"]))
+    print("Mapped figure/table chunks:", len(mapped["figure_table_chunks"]))
