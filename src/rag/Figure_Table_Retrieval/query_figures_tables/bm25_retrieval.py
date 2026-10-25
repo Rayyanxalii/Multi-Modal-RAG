@@ -206,7 +206,6 @@ def bm25_retrieve(
             "page": document.get("page_number"),
             "score": score,
             "searchable_text": document["searchable_text"],
-            "metadata": document,
         })
 
         if len(results) >= top_k:

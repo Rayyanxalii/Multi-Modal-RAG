@@ -243,3 +243,70 @@ def map_orchestrator_results(
         "text_chunks": text_chunks,
         "figure_table_chunks": figure_table_chunks,
     }
+
+
+def format_llm_context(
+    mapped_results: dict[str, list[dict]],
+) -> list[dict[str, Any]]:
+    """
+    Format hydrated retrieval results into a clean, minimal context list
+    for the LLM prompt. Strips bounding boxes, layout geometries, and internal
+    metadata, passing only text/markdown content and citation IDs.
+    """
+    clean_items = []
+
+    for text_chunk in mapped_results.get("text_chunks", []):
+        pages = text_chunk.get("page_numbers") or []
+        if not pages and text_chunk.get("page_number"):
+            pages = [text_chunk["page_number"]]
+
+        clean_items.append({
+            "type": "text",
+            "id": text_chunk.get("chunk_id", "Unknown"),
+            "pages": pages,
+            "headings": text_chunk.get("headings", []),
+            "content": text_chunk.get("contextualized_text") or text_chunk.get("text", ""),
+        })
+
+    for item in mapped_results.get("figure_table_chunks", []):
+        record_type = item.get("record_type") or ("table" if "table_id" in item else "figure")
+        record_id = item.get("table_id") if record_type == "table" else item.get("figure_id")
+        page = item.get("page_number")
+
+        entry = {
+            "type": record_type,
+            "id": record_id or item.get("record_id", "Unknown"),
+            "pages": [page] if page is not None else [],
+            "caption": item.get("caption") or item.get("panel_caption", ""),
+        }
+
+        if record_type == "table":
+            entry["content"] = item.get("table_markdown", "")
+        else:
+            entry["content"] = item.get("caption", "")
+            if item.get("image_path"):
+                entry["image_path"] = item.get("image_path")
+
+        clean_items.append(entry)
+
+    return clean_items
+
+
+def build_grounded_context_str(
+    llm_context_items: list[dict[str, Any]],
+) -> str:
+    """Format clean LLM context items into grounded text blocks for prompt insertion."""
+    blocks = []
+    for idx, item in enumerate(llm_context_items, start=1):
+        page_str = ", ".join(str(p) for p in item.get("pages", [])) or "Unknown"
+        item_type = item.get("type", "source").capitalize()
+        item_id = item.get("id", "Unknown")
+        content = item.get("content", "").strip()
+
+        block = (
+            f"[Source {idx}] ({item_type} ID: {item_id}, Page: {page_str})\n"
+            f"{content}"
+        )
+        blocks.append(block)
+
+    return "\n\n".join(blocks)

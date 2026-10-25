@@ -1,0 +1,264 @@
+{
+  "question": "what is attention?",
+  "created_at": "2026-10-25T20:48:17.794711+00:00",
+  "retrieval_config": {
+    "text_top_k": 10,
+    "figure_table_top_k": 5,
+    "figure_table_candidate_k": 10,
+    "record_type": null
+  },
+  "counts": {
+    "text": 10,
+    "figures_and_tables": 5
+  },
+  "text_results": [
+    {
+      "rank": 1,
+      "chunk_id": "attention_0011",
+      "document_id": "attention",
+      "page_numbers": [
+        3
+      ],
+      "rrf_score": 0.047907090265630725,
+      "retrieved_by": [
+        "dense",
+        "heading_bm25",
+        "colpali"
+      ],
+      "source_ranks": {
+        "dense": 1,
+        "heading_bm25": 2,
+        "colpali": 5
+      },
+      "dense_score": 0.7306773,
+      "heading_score": 1.5157119428393269,
+      "colpali_score": 12.0703125
+    },
+    {
+      "rank": 2,
+      "chunk_id": "attention_0012",
+      "document_id": "attention",
+      "page_numbers": [
+        4
+      ],
+      "rrf_score": 0.03200204813108039,
+      "retrieved_by": [
+        "dense",
+        "heading_bm25"
+      ],
+      "source_ranks": {
+        "dense": 2,
+        "heading_bm25": 3
+      },
+      "dense_score": 0.66510105,
+      "heading_score": 1.3363606277820048
+    },
+    {
+      "rank": 3,
+      "chunk_id": "attention_0066",
+      "document_id": "attention",
+      "page_numbers": [
+        14,
+        15
+      ],
+      "rrf_score": 0.03177805800756621,
+      "retrieved_by": [
+        "dense",
+        "colpali"
+      ],
+      "source_ranks": {
+        "dense": 5,
+        "colpali": 1
+      },
+      "dense_score": 0.6243142,
+      "colpali_score": 12.26953125
+    },
+    {
+      "rank": 4,
+      "chunk_id": "attention_0001",
+      "document_id": "attention",
+      "page_numbers": [
+        1
+      ],
+      "rrf_score": 0.03131881575727918,
+      "retrieved_by": [
+        "heading_bm25",
+        "colpali"
+      ],
+      "source_ranks": {
+        "heading_bm25": 1,
+        "colpali": 7
+      },
+      "heading_score": 4.4417914609929605,
+      "colpali_score": 12.03125
+    },
+    {
+      "rank": 5,
+      "chunk_id": "attention_0024",
+      "document_id": "attention",
+      "page_numbers": [
+        6
+      ],
+      "rrf_score": 0.029910714285714284,
+      "retrieved_by": [
+        "dense",
+        "heading_bm25"
+      ],
+      "source_ranks": {
+        "dense": 10,
+        "heading_bm25": 4
+      },
+      "dense_score": 0.57830036,
+      "heading_score": 1.3363606277820048
+    },
+    {
+      "rank": 6,
+      "chunk_id": "attention_0027",
+      "document_id": "attention",
+      "page_numbers": [
+        7
+      ],
+      "rrf_score": 0.029850746268656716,
+      "retrieved_by": [
+        "dense",
+        "heading_bm25"
+      ],
+      "source_ranks": {
+        "dense": 7,
+        "heading_bm25": 7
+      },
+      "dense_score": 0.5995266,
+      "heading_score": 1.3363606277820048
+    },
+    {
+      "rank": 7,
+      "chunk_id": "attention_0065",
+      "document_id": "attention",
+      "page_numbers": [
+        12,
+        13
+      ],
+      "rrf_score": 0.029437229437229435,
+      "retrieved_by": [
+        "dense",
+        "colpali"
+      ],
+      "source_ranks": {
+        "dense": 6,
+        "colpali": 10
+      },
+      "dense_score": 0.6187278,
+      "colpali_score": 11.9453125
+    },
+    {
+      "rank": 8,
+      "chunk_id": "attention_0013",
+      "document_id": "attention",
+      "page_numbers": [
+        4
+      ],
+      "rrf_score": 0.02877846790890269,
+      "retrieved_by": [
+        "dense",
+        "heading_bm25"
+      ],
+      "source_ranks": {
+        "dense": 9,
+        "heading_bm25": 10
+      },
+      "dense_score": 0.5805641,
+      "heading_score": 0.986255432176263
+    },
+    {
+      "rank": 9,
+      "chunk_id": "attention_0008",
+      "document_id": "attention",
+      "page_numbers": [
+        2,
+        3
+      ],
+      "rrf_score": 0.016129032258064516,
+      "retrieved_by": [
+        "colpali"
+      ],
+      "source_ranks": {
+        "colpali": 2
+      },
+      "colpali_score": 12.0703125
+    },
+    {
+      "rank": 10,
+      "chunk_id": "attention_0018",
+      "document_id": "attention",
+      "page_numbers": [
+        5
+      ],
+      "rrf_score": 0.015873015873015872,
+      "retrieved_by": [
+        "dense"
+      ],
+      "source_ranks": {
+        "dense": 3
+      },
+      "dense_score": 0.64116263
+    }
+  ],
+  "figure_table_results": [
+    {
+      "rank": 1,
+      "record_type": "table",
+      "record_id": "attention_table_001",
+      "page": 6,
+      "rrf_score": 0.031544957774465976,
+      "retrieval_ranks": [
+        6,
+        1
+      ],
+      "score": 0.41538435
+    },
+    {
+      "rank": 2,
+      "record_type": "figure",
+      "record_id": "attention_fig_004",
+      "page": 13,
+      "rrf_score": 0.01639344262295082,
+      "retrieval_ranks": [
+        1
+      ],
+      "score": 0.63729185
+    },
+    {
+      "rank": 3,
+      "record_type": "figure",
+      "record_id": "attention_fig_005",
+      "page": 14,
+      "rrf_score": 0.016129032258064516,
+      "retrieval_ranks": [
+        2
+      ],
+      "score": 0.62554777
+    },
+    {
+      "rank": 4,
+      "record_type": "figure",
+      "record_id": "attention_fig_002",
+      "page": 4,
+      "rrf_score": 0.015873015873015872,
+      "retrieval_ranks": [
+        3
+      ],
+      "score": 0.61530364
+    },
+    {
+      "rank": 5,
+      "record_type": "figure",
+      "record_id": "attention_fig_007",
+      "page": 15,
+      "rrf_score": 0.015625,
+      "retrieval_ranks": [
+        4
+      ],
+      "score": 0.61150724
+    }
+  ]
+}

@@ -84,7 +84,7 @@ def dense_retrieve(
         record_type: Optional filter: "figure" or "table".
 
     Returns:
-        Ranked records containing their metadata and similarity scores.
+        Ranked records containing their identifiers and similarity scores.
     """
 
     if not query or not query.strip():
@@ -137,13 +137,11 @@ def dense_retrieve(
 
         results.append({
             "rank": rank,
-            "point_id": str(point.id),
             "record_type": payload.get("record_type"),
             "record_id": payload.get("record_id"),
             "page": payload.get("page_number"),
             "score": float(point.score),
             "searchable_text": payload.get("searchable_text"),
-            "metadata": payload,
         })
 
     return results

@@ -82,8 +82,12 @@ def search_colpali_chunks(
         page_result = page_rankings[best_page]
 
         ranked_chunks[chunk_id] = {
-            **chunk,
+            "chunk_id": chunk_id,
+            "document_id": chunk.get("document_id"),
             "page_numbers": chunk.get("page_numbers", []),
+            "headings": chunk.get("headings", []),
+            "text": chunk.get("text", ""),
+            "contextualized_text": chunk.get("contextualized_text", ""),
             "colpali_page_numbers": best_page,
             "colpali_rank": page_result["rank"],
             "colpali_score": page_result["score"],
@@ -98,5 +102,3 @@ def search_colpali_chunks(
             -item["colpali_score"],
         ),
     )[:top_k]
-
-

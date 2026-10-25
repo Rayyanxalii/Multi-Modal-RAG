@@ -209,7 +209,7 @@ def search_headings(
             "page_numbers": chunk.get("page_numbers", []),
             "headings": chunk.get("headings", []),
             "text": chunk.get("text", ""),
-            "cpntextualized_text": chunk.get("contextualized_text", ""),
+            "contextualized_text": chunk.get("contextualized_text", ""),
         })
 
         if len(results) >= top_k:
