@@ -39,7 +39,11 @@ def decide_ingestion(state: RAGState) -> Literal["render_pages", "route_query"]:
 
 def branch_retrieval(state: RAGState) -> list[str]:
     """Conditional edge: route to Dense, BM25, and/or ColPali based on classified intent."""
-    route = state.get("route", "both")
+    route = (state.get("route") or "both").lower()
+    if route == "dense":
+        return ["dense_retriever"]
+    if route == "bm25":
+        return ["bm25_retriever"]
     if route == "text":
         return ["dense_retriever", "bm25_retriever"]
     if route == "visual":

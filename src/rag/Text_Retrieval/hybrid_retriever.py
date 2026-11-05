@@ -21,6 +21,9 @@ def reciprocal_rank_fusion(
     if top_k < 1:
         raise ValueError("top_k must be at least 1.")
 
+    dense_results = dense_results or []
+    heading_results = heading_results or []
+
     fused: dict[str, dict] = {}
 
     ranked_lists = {

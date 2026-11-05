@@ -395,6 +395,15 @@ This document captures every major architectural, technical, algorithmic, and en
      - **Ingestion Path**: If any artifact is missing or a new PDF is provided, the graph automatically triggers `render_pages_node` $\rightarrow$ `parse_document_node` $\rightarrow$ `extract_and_crop_node` $\rightarrow$ `index_vectors_node` before continuing to query execution.
   3. **Visual Representation**: The compiled graph (`graph.png`) now displays all 15 nodes, conditional branches, parallel retrieval tracks, and self-correction loops.
 
+### Decision 12.7: Graceful Degradation & Single-Retriever RRF Tolerance
+- **Context & Problem**: When executing Reciprocal Rank Fusion (RRF), if a user queries with a dense-only or BM25-only route, or if one retrieval engine returns 0 results or encounters a network/indexing timeout, standard RRF implementations can raise `TypeError` or drop all results.
+- **Decision**: Harden both `reciprocal_rank_fusion` and `text_fusion_node`:
+  - `dense_results = dense_results or []` and `heading_results = heading_results or []` ensure `None` or missing state keys never raise exceptions.
+  - If only dense results exist, RRF ranks and returns the dense candidates with calculated reciprocal rank scores (`1 / (k + rank)`).
+  - If only BM25 results exist, RRF ranks and returns the BM25 candidates accordingly.
+  - If both return empty lists, `text_fusion_node` gracefully yields `{"text_results": []}` without crashing.
+  - Exception fallback: In the unexpected event of a fusion calculation error, the node falls back directly to `dense_matches or bm25_matches or []`.
+
 
 
 

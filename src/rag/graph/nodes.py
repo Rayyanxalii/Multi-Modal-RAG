@@ -226,8 +226,8 @@ def bm25_retriever_node(state: RAGState) -> dict[str, Any]:
 
 def text_fusion_node(state: RAGState) -> dict[str, Any]:
     """Fuse dense vector search and BM25 keywords via Reciprocal Rank Fusion (RRF)."""
-    dense_matches = state.get("dense_matches", [])
-    bm25_matches = state.get("bm25_matches", [])
+    dense_matches = state.get("dense_matches") or []
+    bm25_matches = state.get("bm25_matches") or []
 
     if not dense_matches and not bm25_matches:
         return {"text_results": []}
@@ -236,7 +236,7 @@ def text_fusion_node(state: RAGState) -> dict[str, Any]:
         fused = reciprocal_rank_fusion(dense_matches, bm25_matches, top_k=5)
     except Exception as exc:
         print(f"[Warning] Text fusion error: {exc}")
-        fused = dense_matches or bm25_matches
+        fused = dense_matches or bm25_matches or []
 
     return {"text_results": fused}
 

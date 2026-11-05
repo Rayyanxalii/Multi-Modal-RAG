@@ -65,6 +65,9 @@ graph TD;
    - Automatically maps top-ranked pages to cropped figures and structured Markdown tables.
 5. **Single Qdrant Collection**:
    - Only one Qdrant collection (`research_papers` / `text_chunks`) is needed, simplifying deployment and vector storage.
+6. **Resilient Hybrid Fusion (RRF Fault Tolerance)**:
+   - Reciprocal Rank Fusion (`reciprocal_rank_fusion` & `text_fusion_node`) seamlessly handles single-retriever execution (dense-only or BM25-only).
+   - If either dense vector search or BM25 keyword matching returns 0 results or encounters an error, RRF automatically ranks and outputs the available results without pipeline failure.
 
 ---
 
