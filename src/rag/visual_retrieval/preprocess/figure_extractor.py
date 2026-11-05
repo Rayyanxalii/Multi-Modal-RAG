@@ -64,6 +64,7 @@ def get_caption(item, document) -> str | None:
 
 def extract_figures(
     document,
+    doc_name: str = "document",
     output_dir: Path = FIGURES_DIR,
     figures_path: Path = FIGURES_PATH,
 ) -> list[dict]:
@@ -78,7 +79,7 @@ def extract_figures(
 
         metadata = get_item_metadata(item)
         figure_index = len(figures) + 1
-        figure_id = f"attention_fig_{figure_index:03d}"
+        figure_id = f"{doc_name}_fig_{figure_index:03d}"
 
         image_path = None
         image_width = None
@@ -101,8 +102,8 @@ def extract_figures(
 
         figure_data = {
             "figure_id": figure_id,
-            "document_id": "attention",
-            "file_name": "attention.pdf",
+            "document_id": doc_name,
+            "file_name": f"{doc_name}.pdf",
             **metadata,
             "caption": get_caption(item, document),
             "image_path": image_path,
@@ -128,6 +129,7 @@ def extract_figures(
 
 def extract_tables(
     document,
+    doc_name: str = "document",
     tables_path: Path = TABLES_PATH,
 ) -> list[dict]:
     """Extract table elements as structured Markdown and metadata."""
@@ -141,7 +143,7 @@ def extract_tables(
 
         metadata = get_item_metadata(item)
         table_index = len(tables) + 1
-        table_id = f"attention_table_{table_index:03d}"
+        table_id = f"{doc_name}_table_{table_index:03d}"
 
         try:
             table_markdown = item.export_to_markdown(doc=document)
@@ -151,8 +153,8 @@ def extract_tables(
 
         table_data = {
             "table_id": table_id,
-            "document_id": "attention",
-            "file_name": "attention.pdf",
+            "document_id": doc_name,
+            "file_name": f"{doc_name}.pdf",
             **metadata,
             "caption": get_caption(item, document),
             "table_markdown": table_markdown,

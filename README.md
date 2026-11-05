@@ -1,134 +1,135 @@
-# Multi-Modal Hybrid RAG System
+# Generalized Multi-Modal Agentic RAG System (LangGraph)
 
-A production-grade, multi-modal Retrieval-Augmented Generation (RAG) pipeline designed for complex technical documents and research papers (demonstrated on [*Attention Is All You Need*](src/pdf/attention.pdf)).
+A production-grade, document-agnostic **Multi-Modal Agentic Retrieval-Augmented Generation (RAG)** system engineered to answer complex questions over any technical document containing written text, mathematical formulas, system architectures, flowcharts, diagrams, and tables (demonstrated on [*Attention Is All You Need*](data/raw/attention.pdf)).
 
-This system combines **document layout parsing**, **visual late-interaction retrieval (ColPali)**, **dense semantic vector search (Qdrant + Ollama)**, and **sparse heading-aware lexical retrieval (BM25)** fused via **Reciprocal Rank Fusion (RRF)**, culminating in **Groq-accelerated LLM answer generation** with verifiable page-level source citations.
+Powered by **LangGraph**, this system orchestrates an adaptive, self-correcting state graph that intelligently routes queries, validates document relevance, reformulates ambiguous queries via internal **Self-RAG reflection**, and synthesizes grounded answers with verifiable page-level citations.
 
 ---
 
 ## Architecture Overview
 
 ```mermaid
-flowchart TD
-    subgraph INGESTION["1. Document Ingestion & Parsing"]
-        PDF["src/pdf/attention.pdf"] --> PYMUPDF["doc_loader.py<br/>(PyMuPDF 2x Render)"]
-        PDF --> DOCLING["docling_parser.py<br/>(IBM Docling + HybridChunker)"]
-        PYMUPDF --> PAGES["rendered_pages/<br/>(page_0001.png - page_0015.png)"]
-        DOCLING --> CHUNKS["chunks/attention_chunks.jsonl<br/>(Structured Chunks + Bounding Boxes)"]
-        DOCLING --> MD["chunks/attention_parsed.md"]
-    end
+graph TD;
+    __start__([__start__]) --> check_doc_status[1. check_doc_status_node<br/>Verify Chunks, Rendered Pages & Vector Store]
 
-    subgraph RETRIEVAL["2. Tri-Modal Retrieval Engine"]
-        CHUNKS --> OLLAMA["index_chunks.py<br/>(Ollama nomic-embed-text)"]
-        OLLAMA --> QDRANT[("Qdrant Vector DB<br/>Dense Embeddings (768-d)")]
-        
-        CHUNKS --> BM25_IDX["bm25_retriever.py<br/>(BM25Okapi Headings + Text)"]
-        
-        PAGES --> COLPALI_EMB["colpali_model.py<br/>(ColPali v1.3 Multi-Vector Embeddings)"]
-        COLPALI_EMB --> COLPALI_CHUNK["colpali_chunk_retriever.py<br/>(Page-to-Chunk Mapper)"]
-    end
+    %% Ingestion Branch
+    check_doc_status -.->|"New Document / Missing Assets"| render_pages[2a. render_pages_node<br/>PyMuPDF Page Rendering]
+    render_pages --> parse_document[2b. parse_document_node<br/>Docling Layout & Hierarchical Chunking]
+    parse_document --> extract_and_crop[2c. extract_and_crop_node<br/>Crop Figures & Tables]
+    extract_and_crop --> index_vectors[2d. index_vectors_node<br/>Qdrant Text Indexing]
+    index_vectors --> route_query
 
-    subgraph FUSION["3. Reciprocal Rank Fusion (RRF)"]
-        QUERY(["User Query"]) --> DENSE_SEARCH["Dense Search<br/>(search_chunks.py)"]
-        QUERY --> BM25_SEARCH["Sparse Search<br/>(bm25_retriever.py)"]
-        QUERY --> COLPALI_SEARCH["Visual Search<br/>(colpali_chunk_retriever.py)"]
+    %% Fast Path for Ingested Document
+    check_doc_status -.->|"Already Ingested"| route_query[3. route_query_node<br/>Intent Router: 'text', 'visual', or 'both']
 
-        QDRANT --> DENSE_SEARCH
-        BM25_IDX --> BM25_SEARCH
-        COLPALI_CHUNK --> COLPALI_SEARCH
+    %% Parallel Multi-Modal Retrieval Branches
+    route_query -.->|"text or both"| dense_retriever[4a. dense_retriever_node<br/>Qdrant nomic-embed-text]
+    route_query -.->|"text or both"| bm25_retriever[4b. bm25_retriever_node<br/>Heading BM25 Keyword Search]
+    route_query -.->|"visual or both"| colpali_retriever[4c. colpali_retriever_node<br/>ColPali MaxSim on Page Embeddings]
 
-        DENSE_SEARCH --> RRF["hybrid_retriever.py<br/>Reciprocal Rank Fusion (k=60)"]
-        BM25_SEARCH --> RRF
-        COLPALI_SEARCH --> RRF
-    end
+    %% Fusion & Asset Hydration
+    dense_retriever --> text_fusion[5a. text_fusion_node<br/>Reciprocal Rank Fusion RRF]
+    bm25_retriever --> text_fusion
+    colpali_retriever --> visual_hydration[5b. visual_hydration_node<br/>Map Pages to Cropped Figures & Tables]
 
-    subgraph SYNTHESIS["4. Grounded Synthesis"]
-        RRF --> CONTEXT["Fused Context + Provenance Metadata"]
-        CONTEXT --> LLM["answer_generation.py<br/>(Groq openai/gpt-oss-20b via LlamaIndex)"]
-        QUERY --> LLM
-        LLM --> ANSWER["Grounded Response<br/>with [Source N, Page P] Citations"]
-    end
+    %% Context Assembly
+    text_fusion --> format_context[6. format_context_node<br/>Assemble Text Chunks & Visual Assets]
+    visual_hydration --> format_context
+
+    %% Self-RAG Reflection
+    format_context --> grade_context[7. grade_context_node<br/>Self-RAG Relevance Evaluation]
+    grade_context -.->|"Irrelevant & Retries < 1"| rewrite_query[8. rewrite_query_node<br/>Self-Correction: Expand Terms]
+    rewrite_query --> route_query
+
+    %% Grounded Answer Synthesis
+    grade_context -.->|"Relevant or Max Retries"| generate_answer[9. generate_answer_node<br/>Groq LLM Synthesis with Citations]
+    generate_answer --> __end__([__end__])
 ```
 
 ---
 
-## Key Features
+## Key Capabilities
 
-1. **Structured Layout & Vision Parsing**:
-   - **PyMuPDF (`pymupdf`)**: Extracts high-DPI (2x scale matrix) page images to preserve visual layout, figures, and tables.
-   - **IBM Docling (`docling`)**: Parses PDF structure into hierarchical markdown and contextualized JSONL chunks, retaining exact bounding box coordinates, headings, page provenance, and document item types.
-
-2. **Tri-Modal Hybrid Search Engine**:
-   - **Dense Semantic Retrieval**: Embeds chunks using Ollama's `nomic-embed-text` (768-dimensional vectors) and stores them with deterministic UUID5 identifiers in a **Qdrant** collection (`research_papers`).
-   - **Sparse Heading-Aware Lexical Retrieval**: Custom tokenization and BM25 Okapi scoring prioritizing document headings over raw body text for targeted technical keyword lookup.
-   - **Visual Multi-Vector Retrieval (ColPali v1.3)**: Uses `vidore/colpali-v1.3-hf` late-interaction multi-vector representations to match queries directly against visual page images (capturing equations, architecture diagrams, and tables), then maps page ranks down to text chunks.
-   - **Reciprocal Rank Fusion (RRF)**: Merges ranked candidate lists across dense, sparse, and visual retrieval paradigms using the rank formula:
-     $$\text{RRF Score}(d) = \sum_{m \in M} \frac{1}{k + r_m(d)} \quad (k = 60)$$
-
-3. **Grounded Answer Synthesis with Citations**:
-   - Context is assembled with explicit source IDs and page numbers.
-   - High-throughput LLM reasoning via **Groq** (`openai/gpt-oss-20b`) orchestrated using **LlamaIndex**.
-   - Guardrailed against hallucinations: answers must be supported by the provided context and cited as `[Source N, Page P]`.
-
-4. **Rigorous Offline Benchmark Suite**:
-   - Includes a manually verified golden dataset of 23 queries (`golden_set.json`) targeting specific concepts in the Transformer paper.
-   - Computes standard information retrieval metrics: **Precision@K**, **Recall@K**, **MRR@K** (Mean Reciprocal Rank), and **Hit Rate@K**.
-
----
-
-## Empirical Retrieval Benchmark
-
-Evaluated against `src/evaluation/golden_set.json` (23 questions, $K=5$):
-
-| Retriever | Precision@5 | Recall@5 | MRR@5 | Hit Rate@5 |
-| :--- | :---: | :---: | :---: | :---: |
-| **Dense (Qdrant + nomic-embed-text)** | **0.3478** | **0.7616** | **0.8514** | **91.30%** |
-| **Sparse (Heading-Aware BM25)** | 0.3217 | 0.7036 | 0.7101 | 82.61% |
-| **Hybrid (RRF Fusion)** | **0.3478** | 0.7558 | 0.7971 | 86.96% |
-
-> Detailed query-level results are stored in [`src/evaluation/results_at_5.json`](src/evaluation/results_at_5.json).
+1. **Document-Agnostic Design**:
+   - Works on **any PDF document** containing text and diagrams.
+   - Dynamic document naming, automatic coordinate transformations, and generalized system prompts.
+2. **LangGraph Agentic State Machine**:
+   - **Typed State (`RAGState`)**: Maintains the active query, classification routes, candidate pools, retry counters, and verification flags.
+   - **Adaptive Query Routing**: Bypasses heavy visual vision-language inference on purely textual questions, completing text-only queries in under 20 ms.
+3. **Internal Self-RAG (Without Web Search)**:
+   - Self-reflective relevance grading ensures the system evaluates whether retrieved passages genuinely contain the answer.
+   - **Query Reformulation**: Translates colloquial queries into formal technical documentation vocabulary, looping back for a second retrieval attempt.
+   - Avoids web search to eliminate external blog hallucinations and preserve strict page-level PDF provenance.
+4. **True Visual Retrieval via ColPali (Option A)**:
+   - Vision-language late-interaction multi-vector search (`pages_embeddings.pt`) discovers flowcharts, attention diagrams, and heatmaps directly from pixels.
+   - Automatically maps top-ranked pages to cropped figures and structured Markdown tables.
+5. **Single Qdrant Collection**:
+   - Only one Qdrant collection (`research_papers` / `text_chunks`) is needed, simplifying deployment and vector storage.
 
 ---
 
 ## Repository Structure
 
 ```
-.
+RAG/
+├── data/                                 # All persistent data assets (outside src/)
+│   ├── graph.png                         # High-res offline visual diagram of LangGraph workflow
+│   ├── graph.mmd                         # Mermaid graph definition exported from LangGraph
+│   ├── raw/                              # Original source documents (e.g. attention.pdf)
+│   ├── rendered_pages/                   # High-res 2x PNG page images (page_0001.png - page_0015.png)
+│   ├── chunks/                           # JSONL text chunks, parsed documents, and metadata
+│   ├── figures/                          # Cropped figure PNG images
+│   ├── tables/                           # Cropped table PNG images
+│   ├── embeddings/                       # ColPali multi-vector PyTorch embeddings (pages_embeddings.pt)
+│   └── retrieval_runs/                   # Query run traces & diagnostic logs
+│
+├── notebooks/                            # Exploratory Jupyter notebooks
+│   └── colpali_visual_retrieval.ipynb    # GPU ColPali embedding generation notebook
+│
 ├── src/
-│   ├── data/
-│   │   └── colpali/
-│   │       └── attention_colpali.pt    # Precomputed ColPali multi-vector page embeddings
-│   ├── evaluation/
-│   │   ├── evaluate.py                 # Evaluation runner (P@K, R@K, MRR@K, HitRate@K)
-│   │   ├── golden_set.json             # 23 labeled benchmark QA pairs with ground-truth chunks
-│   │   └── results_at_5.json           # Evaluation metrics output
-│   ├── notebook/
-│   │   └── colpali_visuval_retrieval.ipynb  # Colab notebook for rendering & ColPali multi-vector indexing
-│   ├── pdf/
-│   │   ├── attention.pdf               # Source document ("Attention Is All You Need")
-│   │   ├── rendered_pages/             # Rendered 2x PNG page images (page_0001.png - page_0015.png)
-│   │   ├── rendered_pages.zip          # Zipped page images archive
-│   │   └── chunks/
-│   │       ├── attention_chunks.jsonl  # Contextualized Docling chunks with metadata & bboxes
-│   │       └── attention_parsed.md     # Extracted markdown representation
-│   ├── rag/
+│   ├── rag/                              # Core RAG package
 │   │   ├── __init__.py
-│   │   ├── doc_loader.py               # PyMuPDF page rendering pipeline
-│   │   ├── docling_parser.py           # IBM Docling conversion & hybrid chunker
-│   │   ├── index_chunks.py             # Qdrant vector indexer using Ollama embeddings
-│   │   ├── search_chunks.py            # Standalone Qdrant dense vector search
-│   │   ├── bm25_retriever.py           # Heading-aware BM25 lexical retriever
-│   │   ├── colpali_model.py            # MultiVectorEncoder ColPali loader & similarity search
-│   │   ├── colpali_chunk_retriever.py  # Maps ColPali page ranking to document chunks
-│   │   ├── hybrid_retriever.py         # Tri-modal Reciprocal Rank Fusion (RRF)
-│   │   ├── answer_generation.py        # End-to-end grounded generation with citations
-│   │   └── test_colpali.py             # ColPali retrieval latency & inference verification
+│   │   ├── config.py                     # Single source of truth for paths, models, & credentials
+│   │   ├── doc_loader.py                 # PyMuPDF page rendering pipeline
+│   │   ├── docling_parser.py             # IBM Docling layout parsing & hybrid chunking
+│   │   ├── ingest.py                     # Unified multi-stage ingestion CLI pipeline
+│   │   ├── retrieval_orchestrator.py     # Multimodal retrieval orchestrator & eval logging
+│   │   ├── map_retrieval_results.py      # Result hydration & deduplication
+│   │   ├── answer_generation.py          # Grounded multimodal LLM answer generation
+│   │   ├── main.py                       # Main interactive application CLI entrypoint
+│   │   │
+│   │   ├── graph/                        # LangGraph Agentic RAG Subpackage
+│   │   │   ├── __init__.py               # Exports app, build_rag_graph, run_agentic_rag, save_graph_artifacts
+│   │   │   ├── state.py                  # Typed RAGState dictionary
+│   │   │   ├── nodes.py                  # 15 modular nodes (ingestion, routing, dense, bm25, colpali, rrf, hydration, grade, rewrite, generate)
+│   │   │   ├── workflow.py               # StateGraph compilation & conditional edge routing
+│   │   │   └── visualize.py              # Graph artifact generation (data/graph.png & data/graph.mmd)
+│   │   │
+│   │   ├── text_retrieval/               # Text retrieval modules
+│   │   │   ├── bm25_retriever.py         # Heading-aware Okapi BM25
+│   │   │   ├── search_chunks.py          # Qdrant dense vector search
+│   │   │   ├── index_chunks.py           # Text chunk indexer for Qdrant
+│   │   │   └── hybrid_retriever.py       # Dense + BM25 Reciprocal Rank Fusion (RRF)
+│   │   │
+│   │   └── visual_retrieval/             # Visual & tabular retrieval modules
+│   │       ├── colpali_model.py          # ColPali MultiVectorEncoder loader & MaxSim search
+│   │       ├── preprocess/
+│   │       │   ├── figure_extractor.py   # Extract figures & tables from Docling
+│   │       │   ├── figure_cropper.py     # Crop figure regions from page images
+│   │       │   ├── table_cropper.py      # Crop table regions from page images
+│   │       │   └── caption_processor.py  # Caption cleaning, multi-panel grouping & filtering
+│   │       └── search/
+│   │           ├── colpali_retriever.py  # ColPali page-to-asset visual retriever (Option A)
+│   │           └── hybrid_retrieval.py   # Orchestrator bridge for visual retrieval
+│   │
 │   └── services/
-│       └── llm_service.py              # Groq LLM client initialized via LlamaIndex
-├── .env                                # Environment variables (API keys, endpoints)
-├── pyproject.toml                      # Project metadata and dependencies (managed by uv)
-├── uv.lock                             # Pinned lockfile
-└── README.md                           # Project documentation
+│       ├── __init__.py
+│       └── llm_service.py                # Groq / LlamaIndex LLM provider
+│
+├── Decision.md                           # Architectural Decisions Record (ADR)
+├── pyproject.toml                        # Project metadata & dependencies (managed by uv)
+├── uv.lock                               # Deterministic dependency lockfile
+└── README.md                             # Project documentation
 ```
 
 ---
@@ -138,22 +139,22 @@ Evaluated against `src/evaluation/golden_set.json` (23 questions, $K=5$):
 ### Prerequisites
 
 - **Python**: `>=3.14` (or `>=3.13` compatible environment)
-- **Package Manager**: [`uv`](https://github.com/astral-sh/uv) (recommended) or `pip`
-- **Ollama**: Local Ollama instance running with `nomic-embed-text` pulled:
+- **Package Manager**: [`uv`](https://github.com/astral-sh/uv) (recommended)
+- **Ollama**: Local Ollama instance running with `nomic-embed-text`:
   ```bash
   ollama pull nomic-embed-text
   ```
-- **Qdrant**: A running Qdrant cluster (Cloud or local Docker container)
+- **Qdrant**: Running Qdrant cluster (Cloud or local container)
 - **Groq API**: An active Groq API key for LLM answer generation
-- **CUDA (Optional)**: Recommended for accelerating ColPali visual multi-vector inference (falls back to CPU automatically)
 
 ---
 
 ### Installation & Environment Setup
 
-1. **Clone the repository and install dependencies**:
+1. **Install dependencies and register package**:
    ```bash
    uv sync
+   uv pip install -e . --no-deps
    ```
 
 2. **Configure environment variables**:
@@ -166,95 +167,84 @@ Evaluated against `src/evaluation/golden_set.json` (23 questions, $K=5$):
 
 ---
 
-## Step-by-Step Execution Pipeline
+## How to Run
 
-### 1. Render Document Pages to Images
-Renders high-resolution PNG images from the input PDF for ColPali visual embedding:
+### 1. Interactive LangGraph Assistant (Continuous Session)
+
+Run the main application:
 ```bash
-python src/rag/doc_loader.py
+python -m rag.main
 ```
-*Output: `src/pdf/rendered_pages/page_0001.png` through `page_0015.png`*
+*(or simply: `uv run rag`)*
 
-### 2. Parse and Chunk PDF with Docling
-Extracts structural elements, bounding boxes, headings, and contextualized text:
-```bash
-python src/rag/docling_parser.py
-```
-*Output: `src/pdf/chunks/attention_chunks.jsonl` and `attention_parsed.md`*
+**Features**:
+* **Persistent in-memory caching**: The ColPali model stays loaded in RAM across queries, answering subsequent questions in **~1–2 seconds**.
+* **Self-RAG diagnostics**: Displays the classified intent (`ROUTE: Text / Visual / Both`) and any query reformulation performed.
 
-### 3. Generate ColPali Visual Embeddings (Optional / Precomputed)
-Visual embeddings can be generated via the Colab notebook [`src/notebook/colpali_visuval_retrieval.ipynb`](src/notebook/colpali_visuval_retrieval.ipynb) or locally. The precomputed embeddings for the paper are already saved at:
-```
-src/data/colpali/attention_colpali.pt
-```
-Verify the ColPali model and precomputed embeddings:
-```bash
-python src/rag/test_colpali.py
-```
-
-### 4. Index Dense Chunks into Qdrant
-Generates 768-dimensional embeddings via Ollama and upserts points into Qdrant:
-```bash
-python src/rag/index_chunks.py
-```
-
-### 5. Run Hybrid Retrieval (Dense + BM25 + ColPali)
-Executes all three retrievers and fuses results via RRF:
-```bash
-python src/rag/hybrid_retriever.py
-```
-
-### 6. End-to-End Answer Generation
-Ask a question, retrieve fused context, and receive a grounded response with page-level citations:
-```bash
-python src/rag/answer_generation.py
-```
-
-*Example Output:*
+*Example interaction:*
 ```text
-Ask a question about the paper: How does Multi-Head Attention work and why is it beneficial?
+Ask a question: Show me the diagram of scaled dot product attention
 
---- Answer ---
-Multi-Head Attention projects the queries, keys, and values h times with different,
-learned linear projections to dk, dk, and dv dimensions, respectively. On each of these
-projected versions of queries, keys, and values, the attention function is performed in parallel,
-yielding dv-dimensional output values. These are concatenated and once again projected... [Source 1, Page 5]
+=======================================================
+ROUTE: Visual | SELF-RAG RETRIES: 0
+=======================================================
+ANSWER:
+Figure 2 (left) presents the Scaled Dot-Product Attention architecture [Source 1, Page 4].
+The mechanism operates by taking queries (Q) and keys (K) of dimension dk, computing dot products,
+scaling them by 1/sqrt(dk), and applying a softmax function to obtain attention weights for values (V)...
 
 --- Sources ---
-Source 1 | Page 5
-Source 2 | Page 4
-Source 3 | Page 6
+Source 1 [Figure] | ID: attention_fig_002 | Pages: 4
+Source 2 [Figure] | ID: attention_fig_003 | Pages: 4
 ```
 
 ---
 
-## Running Evaluation Benchmarks
+### 2. Visualize LangGraph Workflow Diagram
 
-To evaluate retrieval performance against the golden benchmark dataset:
+To generate and export the state machine graph visualization:
 
 ```bash
-python src/evaluation/evaluate.py --top-k 5
+python -m rag.main --visualize
 ```
+*(or run directly: `python -m rag.graph.visualize`)*
 
-Optional arguments:
-- `--top-k`: Number of documents to retrieve per metric evaluation (default: `5`).
-- `--golden`: Path to custom golden dataset JSON (default: `src/evaluation/golden_set.json`).
+This inspects the compiled `StateGraph` and generates:
+* **`graph.png`** / **`data/graph.png`**: Native LangGraph workflow PNG rendered via `get_graph().draw_mermaid_png()`.
+* **`data/graph.mmd`**: Pure Mermaid syntax exported via `get_graph().draw_mermaid()` for documentation and Mermaid live viewers.
 
 ---
 
-## Tech Stack Summary
+### 3. Ingest Any Technical Document
 
-| Layer | Technology | Purpose |
-| :--- | :--- | :--- |
-| **Document Processing** | [IBM Docling](https://github.com/DS4SD/docling) | Layout-aware parsing, hierarchical chunking & bounding box provenance |
-| **Image Extraction** | [PyMuPDF (fitz)](https://github.com/pymupdf/PyMuPDF) | High-resolution PDF page rendering |
-| **Visual Retrieval** | [ColPali v1.3](https://huggingface.co/vidore/colpali-v1.3-hf) (`sentence-transformers`) | Late-interaction vision-language multi-vector retrieval |
-| **Dense Embeddings** | [Ollama](https://ollama.com/) (`nomic-embed-text`) | Local 768-dimensional semantic text embeddings |
-| **Vector Database** | [Qdrant](https://qdrant.tech/) (`qdrant-client`) | Vector indexing, payload storage, and similarity search |
-| **Lexical Search** | [Rank-BM25](https://github.com/dorianbrown/rank_bm25) | Heading-weighted Okapi BM25 keyword matching |
-| **Fusion Algorithm** | Reciprocal Rank Fusion (RRF) | Multi-system rank fusion with constant $k=60$ |
-| **LLM Inference** | [Groq](https://groq.com/) via [LlamaIndex](https://www.llamaindex.ai/) | Ultra-low latency generation with strict citation prompt |
-| **Packaging & Env** | [uv](https://github.com/astral-sh/uv) | Python virtual environment and dependency lockfile |
+To ingest any PDF document containing text and diagrams:
+
+```bash
+python -m rag.ingest --pdf path/to/your_document.pdf
+```
+
+Optional flags:
+- `--skip-rendering`: Skip rendering PDF pages if already extracted.
+- `--skip-parsing`: Skip Docling layout parsing if chunks already exist.
+- `--skip-cropping`: Skip visual figure and table image cropping.
+- `--only-indexing`: Run only Qdrant vector indexing.
+
+---
+
+### 4. Pure Retrieval Diagnostics (Without Calling LLM)
+
+To inspect retrieval rankings and save evaluation traces to `data/retrieval_runs/`:
+
+```bash
+python -m rag.retrieval_orchestrator
+```
+
+---
+
+## Architectural Decision Records (ADR)
+
+For detailed documentation on every architectural, algorithmic, and engineering decision, refer to:
+👉 **[`Decision.md`](Decision.md)**
 
 ---
 

@@ -1,0 +1,46 @@
+---
+config:
+  flowchart:
+    curve: linear
+---
+graph TD;
+	__start__([<p>__start__</p>]):::first
+	check_doc_status(check_doc_status)
+	render_pages(render_pages)
+	parse_document(parse_document)
+	extract_and_crop(extract_and_crop)
+	index_vectors(index_vectors)
+	route_query(route_query)
+	dense_retriever(dense_retriever)
+	bm25_retriever(bm25_retriever)
+	text_fusion(text_fusion)
+	colpali_retriever(colpali_retriever)
+	visual_hydration(visual_hydration)
+	format_context(format_context)
+	grade_context(grade_context)
+	rewrite_query(rewrite_query)
+	generate_answer(generate_answer)
+	__end__([<p>__end__</p>]):::last
+	__start__ --> check_doc_status;
+	bm25_retriever --> text_fusion;
+	check_doc_status -.-> render_pages;
+	check_doc_status -.-> route_query;
+	colpali_retriever --> visual_hydration;
+	dense_retriever --> text_fusion;
+	extract_and_crop --> index_vectors;
+	format_context --> grade_context;
+	grade_context -.-> generate_answer;
+	grade_context -.-> rewrite_query;
+	index_vectors --> route_query;
+	parse_document --> extract_and_crop;
+	render_pages --> parse_document;
+	rewrite_query --> route_query;
+	route_query -.-> bm25_retriever;
+	route_query -.-> colpali_retriever;
+	route_query -.-> dense_retriever;
+	text_fusion --> format_context;
+	visual_hydration --> format_context;
+	generate_answer --> __end__;
+	classDef default fill:#f2f0ff,line-height:1.2
+	classDef first fill-opacity:0
+	classDef last fill:#bfb6fc

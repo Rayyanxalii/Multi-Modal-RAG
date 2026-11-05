@@ -17,6 +17,7 @@ This document captures every major architectural, technical, algorithmic, and en
 9. [Summary Table of Architectural Decisions](#9-summary-table-of-architectural-decisions)
 10. [ColPali Re-alignment & Visual Architecture Refactoring (Option A)](#10-colpali-re-alignment--visual-architecture-refactoring-option-a)
 11. [Project Reorganization & Unified Ingestion Pipeline](#11-project-reorganization--unified-ingestion-pipeline)
+12. [Generalization to Arbitrary Documents & LangGraph Agentic RAG](#12-generalization-to-arbitrary-documents--langgraph-agentic-rag)
 
 ---
 
@@ -340,5 +341,61 @@ This document captures every major architectural, technical, algorithmic, and en
   - Removed all dead and commented-out code blocks (e.g. `format_llm_context`, `build_grounded_context_str`, `normalize_scores`, `search_heading_aware`).
   - Removed the empty `src/evaluation/` directory.
   - Standardized all directories and files into standard Python snake_case (`text_retrieval`, `visual_retrieval/preprocess`, `visual_retrieval/search`, `retrieval_orchestrator.py`).
+
+---
+
+## 12. Generalization to Arbitrary Documents & LangGraph Agentic RAG
+
+### Decision 12.1: Document-Agnostic Generalization
+- **Context & Problem**: The prototype initially hardcoded assumptions tailored solely to *Attention Is All You Need* (hardcoded `"attention"` prefixes in chunk IDs, figure IDs, table IDs, and paper-specific system prompts).
+- **Decision**: Generalize the system to handle any arbitrary technical document containing text, formulas, diagrams, system architectures, charts, and tables:
+  - Document IDs and filenames are dynamically derived from input paths (`pdf_path.stem`).
+  - Generalized system prompts for grounded synthesis, query optimization, and document grading.
+  - Dynamic path resolution via `get_document_paths()` in `src/rag/config.py`.
+
+### Decision 12.2: LangGraph StateGraph Architecture
+- **Context & Problem**: A purely static linear pipeline lacks adaptive capabilities: it executes every retriever regardless of query intent, cannot recover from vocabulary mismatches, and cannot self-correct.
+- **Decision**: Implement a stateful agentic workflow using **LangGraph** (`src/rag/graph/`):
+  - Typed `RAGState` maintaining query, route, text/visual candidates, grounded context, retry counter, and verification flags.
+  - Compiled `StateGraph` with conditional edges enabling adaptive branching and corrective loops.
+
+### Decision 12.3: Query Routing (Selective Multi-Modal Retrieval)
+- **Context & Problem**: ColPali multi-vector Late-Interaction on CPU takes ~1–2 seconds per query. Running it for pure conceptual text questions (*"What is the motivation for self-attention?"*) is computationally wasteful.
+- **Decision**: Implement `route_query_node` to classify query intent:
+  - `"text"`: Routes exclusively to Dense + BM25 (<20 ms).
+  - `"visual"`: Routes exclusively to ColPali page-to-asset mapping.
+  - `"both"`: Executes parallel multimodal retrieval for comprehensive queries.
+
+### Decision 12.4: Self-RAG Internal Correction Without Web Search
+- **Context & Problem**: Standard CRAG literature falls back to external web search (Google / Tavily) when internal documents are graded irrelevant. In technical research papers or proprietary enterprise PDFs, web search causes hallucinations, breaks page-level citation provenance, and risks data leakage.
+- **Decision**: Implement an **Internal Self-RAG** reflection loop:
+  - `grade_context_node` verifies whether retrieved context contains relevant information.
+  - If graded irrelevant and `retry_count < 1`, `rewrite_query_node` uses the LLM to reformulate conversational language into formal technical documentation vocabulary, looping back to retrieval.
+  - Strict retry guardrail (`retry_count < 1`) prevents infinite loops while guaranteeing predictable response times.
+
+### Decision 12.5: Graph Visualization Artifacts
+- **Context & Problem**: Inspecting and debugging complex cyclic state graphs requires visual confirmation of nodes, conditional edges, and fallback paths.
+- **Decision**: Implement [`src/rag/graph/visualize.py`](src/rag/graph/visualize.py) using LangGraph's native `draw_mermaid_png()`:
+  - `graph.png` / `data/graph.png`: Native Mermaid PNG rendered via `graph_view.get_graph().draw_mermaid_png()`.
+  - `data/graph.mmd`: Raw Mermaid syntax exported directly from LangGraph's compiled graph via `draw_mermaid()`.
+  - CLI integration: Accessible via `python -m rag.main --visualize` or `python -m rag.graph.visualize`.
+
+### Decision 12.6: Unified Ingestion Verification & Granular Multi-Modal State Graph
+- **Context & Problem**: Previously, retrieval was bundled inside a single monolithic `retrieve_node`, and document ingestion was completely decoupled from the runtime state graph. This hid the inner mechanics of dense vector search, BM25 keyword matching, Reciprocal Rank Fusion (RRF), ColPali late-interaction, and visual asset hydration from visual graph inspections. Furthermore, querying a new document required manual out-of-band ingestion commands.
+- **Decision**:
+  1. **Granular Retrieval Nodes**: Decomposed retrieval into explicit, modular LangGraph nodes:
+     - `dense_retriever_node`: Qdrant dense vector search using `nomic-embed-text`.
+     - `bm25_retriever_node`: Okapi BM25 keyword matching over document chunk headings (with in-memory index caching).
+     - `text_fusion_node`: Reciprocal Rank Fusion (RRF, $k=60$) combining dense and sparse rankings.
+     - `colpali_retriever_node`: Vision-language late-interaction MaxSim search over high-res page embeddings.
+     - `visual_hydration_node`: Automatic hydration mapping top-scoring pages to cropped figure PNGs and structured Markdown tables.
+  2. **Automated Document Ingestion Verification**: Integrated document pre-flight checking and ingestion directly into the StateGraph:
+     - `check_doc_status_node`: Performs a non-blocking (<2 ms) verification of rendered pages, JSONL chunks, cropped visuals, and Qdrant points.
+     - **Fast Path**: If the document is already ingested, the graph immediately transitions to `route_query_node`, preserving sub-second response times.
+     - **Ingestion Path**: If any artifact is missing or a new PDF is provided, the graph automatically triggers `render_pages_node` $\rightarrow$ `parse_document_node` $\rightarrow$ `extract_and_crop_node` $\rightarrow$ `index_vectors_node` before continuing to query execution.
+  3. **Visual Representation**: The compiled graph (`graph.png`) now displays all 15 nodes, conditional branches, parallel retrieval tracks, and self-correction loops.
+
+
+
 
 

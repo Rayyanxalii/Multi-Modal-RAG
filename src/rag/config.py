@@ -1,5 +1,6 @@
 import os
 from pathlib import Path
+from typing import Any
 from dotenv import load_dotenv
 
 # Base paths
@@ -54,3 +55,29 @@ def get_qdrant_credentials() -> tuple[str, str]:
             f"QDRANT_URL or QDRANT_API_KEY is missing in {ENV_PATH}"
         )
     return url, api_key
+
+
+def get_document_paths(pdf_path: Path | str | None = None) -> dict[str, Any]:
+    """Return canonical data paths for any given document."""
+    if pdf_path is None:
+        p = DEFAULT_PDF_PATH
+    else:
+        p = Path(pdf_path)
+
+    doc_id = p.stem
+    return {
+        "pdf_path": p,
+        "doc_id": doc_id,
+        "doc_name": doc_id,
+        "chunks_dir": CHUNKS_DIR,
+        "rendered_pages_dir": RENDERED_PAGES_DIR,
+        "figures_dir": FIGURES_DIR,
+        "tables_dir": TABLES_DIR,
+        "chunks_path": CHUNKS_DIR / f"{doc_id}_chunks.jsonl",
+        "document_json": CHUNKS_DIR / f"{doc_id}_document.json",
+        "document_json_path": CHUNKS_DIR / f"{doc_id}_document.json",
+        "parsed_md": CHUNKS_DIR / f"{doc_id}_parsed.md",
+        "figures_jsonl": CHUNKS_DIR / f"{doc_id}_figures.jsonl",
+        "figures_cleaned": CHUNKS_DIR / f"{doc_id}_figures_cleaned.jsonl",
+        "tables_jsonl": CHUNKS_DIR / f"{doc_id}_tables.jsonl",
+    }

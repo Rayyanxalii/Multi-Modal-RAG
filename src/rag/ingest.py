@@ -16,7 +16,6 @@ Usage:
 """
 
 import argparse
-import sys
 from pathlib import Path
 
 from docling_core.types.doc import DoclingDocument
@@ -84,8 +83,8 @@ def run_pipeline(
             )
         else:
             doc = DoclingDocument.load_from_json(filename=DOCUMENT_JSON_PATH)
-            extract_figures(doc, figures_path=FIGURES_JSONL)
-            extract_tables(doc, tables_path=TABLES_JSONL)
+            extract_figures(doc, doc_name=pdf_path.stem, figures_path=FIGURES_JSONL)
+            extract_tables(doc, doc_name=pdf_path.stem, tables_path=TABLES_JSONL)
 
         print("\n[Stage 4/5] Cropping figures, tables, and processing captions...")
         crop_figures(
@@ -125,6 +124,8 @@ def run_pipeline(
     print("\n" + "=" * 60)
     print("Ingestion pipeline completed successfully!")
     print("=" * 60)
+
+
 
 
 def main():
