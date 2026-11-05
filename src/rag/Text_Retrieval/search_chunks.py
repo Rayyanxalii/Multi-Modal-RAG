@@ -1,32 +1,17 @@
-
-import os
 from pathlib import Path
-
 import ollama
-from dotenv import load_dotenv
 from qdrant_client import QdrantClient
 
-PROJECT_ROOT = Path(__file__).resolve().parents[3]
-
-load_dotenv(PROJECT_ROOT / ".env")
-
-COLLECTION_NAME = "research_papers"
-EMBEDDING_MODEL = "nomic-embed-text"
+from rag.config import (
+    get_qdrant_credentials,
+    TEXT_COLLECTION_NAME as COLLECTION_NAME,
+    EMBEDDING_MODEL,
+)
 
 
 def get_client() -> QdrantClient:
-    url = os.getenv("QDRANT_URL")
-    api_key = os.getenv("QDRANT_API_KEY")
-
-    if not url or not api_key:
-        raise ValueError(
-            "Set QDRANT_URL and QDRANT_API_KEY in .env"
-        )
-
+    url, api_key = get_qdrant_credentials()
     return QdrantClient(url=url, api_key=api_key)
-
-
-
 
 
 def search_chunks(question: str, top_k: int = 5) -> list[dict]:
@@ -72,10 +57,6 @@ def search_chunks(question: str, top_k: int = 5) -> list[dict]:
         })
 
     return results
-
-
-
-
 
 
 def main():

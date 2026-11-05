@@ -1,0 +1,76 @@
+from rag.config import RRF_K
+
+
+def reciprocal_rank_fusion(
+    rankings: list[list[dict]],
+    top_k: int = 5,
+    rrf_k: int = RRF_K,
+) -> list[dict]:
+    """
+    Combine ranked result lists using Reciprocal Rank Fusion.
+
+    Each result must contain:
+        - rank
+        - record_type
+        - record_id
+
+    RRF score = sum(1 / (rrf_k + rank))
+    """
+
+    if top_k < 1:
+        raise ValueError("top_k must be at least 1.")
+
+    if rrf_k < 1:
+        raise ValueError("rrf_k must be at least 1.")
+
+    fused = {}
+
+    for ranking in rankings:
+        seen_in_ranking = set()
+
+        for result in ranking:
+            record_type = result.get("record_type")
+            record_id = result.get("record_id")
+
+            if record_type is None or record_id is None:
+                raise ValueError(
+                    "Every result must contain record_type and record_id."
+                )
+
+            # The same figure ID and table ID may not represent
+            # the same underlying record, so include the type.
+            key = (record_type, str(record_id))
+
+            # Avoid counting duplicate results from one retriever twice.
+            if key in seen_in_ranking:
+                continue
+
+            seen_in_ranking.add(key)
+
+            if key not in fused:
+                fused[key] = {
+                    **result,
+                    "rrf_score": 0.0,
+                    "retrieval_ranks": [],
+                }
+
+            rank = result.get("rank")
+
+            if not isinstance(rank, int) or rank < 1:
+                raise ValueError(
+                    f"Invalid rank for {key}: {rank!r}"
+                )
+
+            fused[key]["rrf_score"] += 1.0 / (rrf_k + rank)
+            fused[key]["retrieval_ranks"].append(rank)
+
+    results = sorted(
+        fused.values(),
+        key=lambda item: item["rrf_score"],
+        reverse=True,
+    )
+
+    for rank, result in enumerate(results, start=1):
+        result["rank"] = rank
+
+    return results[:top_k]

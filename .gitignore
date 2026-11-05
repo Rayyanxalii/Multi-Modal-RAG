@@ -1,3 +1,11 @@
 /.venv
 .env
-
+.Decision.md
+__pycache__/
+*.py[cod]
+*$py.class
+data/rendered_pages/
+data/figures/
+data/tables/
+data/embeddings/
+data/retrieval_runs/

@@ -1,17 +1,18 @@
-from rag.Text_Retrieval.search_chunks import search_chunks
-from rag.Text_Retrieval.bm25_retriever import (
+from rag.config import RRF_K
+from rag.text_retrieval.search_chunks import search_chunks
+from rag.text_retrieval.bm25_retriever import (
     load_chunks,
     build_field_indexes,
     search_headings,
 )
-from rag.Text_Retrieval.colpali_chunk_retriever import search_colpali_chunks
+from rag.text_retrieval.colpali_chunk_retriever import search_colpali_chunks
 
 
 def reciprocal_rank_fusion(
     dense_results: list[dict],
     heading_results: list[dict],
     colpali_results: list[dict],
-    k: int = 60,
+    k: int = RRF_K,
     top_k: int = 10,
 ) -> list[dict]:
     """Fuse dense, heading BM25, and ColPali chunk rankings."""
@@ -67,21 +68,14 @@ def reciprocal_rank_fusion(
 
             # Preserve useful metadata from each retriever.
             for key, value in result.items():
-
                 if key == "page_numbers":
                     existing_pages = item.get("page_numbers") or []
-
                     if not existing_pages and value:
                         item["page_numbers"] = list(value)
-
                 elif key == "retrieved_by":
-                    # Use the canonical source names above.
                     continue
-
                 elif key in {"rrf_score", "source_ranks"}:
-                    # These are calculated by RRF.
                     continue
-
                 elif key not in item or item[key] is None:
                     item[key] = value
 
@@ -93,8 +87,6 @@ def reciprocal_rank_fusion(
     )
 
     return fused_results[:top_k]
-
-
 
 
 def retrieve_and_fuse(
@@ -128,7 +120,7 @@ def retrieve_and_fuse(
         dense_results=dense_results,
         heading_results=heading_results,
         colpali_results=colpali_results,
-        k=60,
+        k=RRF_K,
         top_k=top_k,
     )
 
@@ -149,7 +141,6 @@ def main():
         top_k=10,
     )
 
-
     print("\nQUESTION")
     print(question)
 
@@ -163,10 +154,6 @@ def main():
         print(f"Pages: {result.get('page_numbers', [])}")
         print(f"Headings: {result.get('headings', [])}")
         print(f"Text:\n{result.get('text', '')[:500]}")
-
-    # Next stage:
-    # Send `question` and `context` to your answer-generation LLM.
-    # Require source-page citations and prohibit unsupported claims.
 
     return question, fused_results
 

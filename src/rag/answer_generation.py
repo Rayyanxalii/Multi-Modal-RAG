@@ -1,11 +1,20 @@
-
-from rag.Text_Retrieval.hybrid_retriever import main
+from rag.text_retrieval.hybrid_retriever import main, retrieve_and_fuse
 from services.llm_service import llm
 
 
-def generate_answer() -> dict:
+def generate_answer(question: str | None = None) -> dict:
     # 1. Retrieve the question, fused chunks, and context.
-    question, fused_results = main()
+    if question is None:
+        res = main()
+        if not res:
+            return {
+                "question": "",
+                "answer": "No question provided.",
+                "sources": [],
+            }
+        question, fused_results = res
+    else:
+        question, fused_results = retrieve_and_fuse(question, top_k=10)
 
     if not fused_results:
         return {

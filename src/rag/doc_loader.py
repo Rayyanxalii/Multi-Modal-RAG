@@ -1,28 +1,25 @@
 from pathlib import Path
-
 import pymupdf
 
-# Paths
-SRC_DIR = Path(__file__).resolve().parent.parent
-PDF_PATH = SRC_DIR / "pdf" / "attention.pdf"
-IMAGE_DIR = SRC_DIR / "pdf" / "rendered_pages"
+from rag.config import DEFAULT_PDF_PATH, RENDERED_PAGES_DIR
 
 
-def render_pdf_images(pdf_path: Path) -> list[Path]:
+def render_pdf_images(
+    pdf_path: Path = DEFAULT_PDF_PATH,
+    output_dir: Path = RENDERED_PAGES_DIR,
+) -> list[Path]:
     if not pdf_path.exists():
         raise FileNotFoundError(
             f"PDF not found: {pdf_path.resolve()}"
         )
 
-    IMAGE_DIR.mkdir(parents=True, exist_ok=True)
-
+    output_dir.mkdir(parents=True, exist_ok=True)
     image_paths = []
 
     with pymupdf.open(pdf_path) as pdf:
         for index, page in enumerate(pdf):
             page_number = index + 1
-
-            image_path = IMAGE_DIR / f"page_{page_number:04d}.png"
+            image_path = output_dir / f"page_{page_number:04d}.png"
 
             pixmap = page.get_pixmap(
                 matrix=pymupdf.Matrix(2, 2),
@@ -34,12 +31,10 @@ def render_pdf_images(pdf_path: Path) -> list[Path]:
     return image_paths
 
 
-
 def main():
-    image_paths = render_pdf_images(PDF_PATH)
-
+    image_paths = render_pdf_images()
     print(f"Rendered {len(image_paths)} pages.")
-    print(f"Images saved to: {IMAGE_DIR}")
+    print(f"Images saved to: {RENDERED_PAGES_DIR}")
 
 
 if __name__ == "__main__":

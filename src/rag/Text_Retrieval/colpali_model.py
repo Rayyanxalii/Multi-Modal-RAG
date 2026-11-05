@@ -3,8 +3,7 @@ from functools import lru_cache
 import torch
 from sentence_transformers import MultiVectorEncoder
 
-PROJECT_ROOT = Path(__file__).resolve().parents[3]
-EMBEDDINGS_PATH = PROJECT_ROOT / "src" / "data" / "colpali" / "attention_colpali.pt"
+from rag.config import COLPALI_EMBEDDINGS_PATH as EMBEDDINGS_PATH
 
 
 class ColPaliRetriever:
@@ -12,7 +11,7 @@ class ColPaliRetriever:
 
     def __init__(
         self,
-        embeddings_path: str | Path,
+        embeddings_path: str | Path = EMBEDDINGS_PATH,
         model_name: str = "vidore/colpali-v1.3-hf",
     ):
         self.embeddings_path = Path(embeddings_path)
@@ -48,25 +47,27 @@ class ColPaliRetriever:
 
         print(f"ColPali model loaded on: {self.device}")
         print(f"Pages indexed: {len(self.page_names)}")
-        
 
+    def search(
+        self,
+        query: str,
+        top_k: int = 5,
+    ) -> list[dict]:
+        """Search precomputed page embeddings for the query."""
 
-
-    def search(self, query: str, top_k: int = 5) -> list[dict]:
-        """Return the top-k matching pages and their ColPali scores."""
-
-        if not query or not query.strip():
+        if not query.strip():
             raise ValueError("Query cannot be empty.")
 
-        if not 1 <= top_k <= len(self.page_names):
-            raise ValueError(
-                f"top_k must be between 1 and {len(self.page_names)}."
-            )
+        if top_k < 1:
+            raise ValueError("top_k must be at least 1.")
 
-        # Encode the query using ColPali.
-        with torch.inference_mode():
-            query_embeddings = self.model.encode_query([query])
+        # Encode the query into a multi-vector embedding.
+        query_embeddings = self.model.encode(
+            [query],
+            device=self.device,
+        )
 
+        with torch.no_grad():
             # Compare the query against the saved page embeddings.
             scores = self.model.similarity(
                 query_embeddings,
@@ -76,15 +77,14 @@ class ColPaliRetriever:
         ranked_indices = scores.argsort(descending=True)[:top_k].tolist()
 
         return [
-    {
-        "rank": rank,
-        "page": self.page_names[index],
-        "score": float(scores[index].item()),
-        "chunk_id": f"page_{self.page_names[index]}",
-    }
-    for rank, index in enumerate(ranked_indices, start=1)
-]
-
+            {
+                "rank": rank,
+                "page": self.page_names[index],
+                "score": float(scores[index].item()),
+                "chunk_id": f"page_{self.page_names[index]}",
+            }
+            for rank, index in enumerate(ranked_indices, start=1)
+        ]
 
 
 @lru_cache(maxsize=1)

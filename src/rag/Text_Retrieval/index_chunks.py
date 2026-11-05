@@ -1,29 +1,19 @@
 import json
-import os
 import uuid
 from pathlib import Path
 
 import ollama
-from dotenv import load_dotenv
 from qdrant_client import QdrantClient, models
 
-
-# Paths
-PROJECT_ROOT = Path(__file__).resolve().parents[3]
-CHUNKS_PATH = (
-    PROJECT_ROOT / "src" / "pdf" / "chunks"
-    / "attention_chunks.jsonl"
+from rag.config import (
+    TEXT_CHUNKS_PATH as CHUNKS_PATH,
+    TEXT_COLLECTION_NAME as COLLECTION_NAME,
+    EMBEDDING_MODEL,
+    VECTOR_SIZE,
+    get_qdrant_credentials,
 )
 
-# Configuration
-COLLECTION_NAME = "research_papers"
-EMBEDDING_MODEL = "nomic-embed-text"
-VECTOR_SIZE = 768
 BATCH_SIZE = 16
-
-load_dotenv(PROJECT_ROOT / ".env")
-
-
 
 
 def load_chunks() -> list[dict]:
@@ -45,20 +35,9 @@ def load_chunks() -> list[dict]:
     return chunks
 
 
-
-
 def get_client() -> QdrantClient:
-    url = os.getenv("QDRANT_URL")
-    api_key = os.getenv("QDRANT_API_KEY")
-
-    if not url or not api_key:
-        raise ValueError(
-            "Set QDRANT_URL and QDRANT_API_KEY in .env"
-        )
-
+    url, api_key = get_qdrant_credentials()
     return QdrantClient(url=url, api_key=api_key)
-
-
 
 
 def ensure_collection(client: QdrantClient) -> None:
@@ -75,8 +54,6 @@ def ensure_collection(client: QdrantClient) -> None:
         info = client.get_collection(COLLECTION_NAME)
         print(f"Using existing collection: {COLLECTION_NAME}")
 
-        # Prevent accidentally indexing into a collection
-        # configured for a different embedding dimension.
         vector_config = info.config.params.vectors
         if (
             not isinstance(vector_config, dict)
@@ -88,19 +65,17 @@ def ensure_collection(client: QdrantClient) -> None:
             )
 
 
-
-
 def index_chunks() -> None:
     chunks = load_chunks()
     client = get_client()
 
     ensure_collection(client)
-    
+
     indexed_count = client.count(
         collection_name=COLLECTION_NAME,
         exact=True,
     ).count
-    
+
     print(f"Chunks in JSONL: {len(chunks)}")
     print(f"Points currently in Qdrant: {indexed_count}")
 
@@ -112,7 +87,6 @@ def index_chunks() -> None:
             for chunk in batch
         ]
 
-        # Generate all embeddings in this batch with Ollama.
         response = ollama.embed(
             model=EMBEDDING_MODEL,
             input=texts,
@@ -133,8 +107,6 @@ def index_chunks() -> None:
                     f"{chunk['chunk_id']}: {len(embedding)}"
                 )
 
-            # Qdrant accepts UUIDs or unsigned integer IDs.
-            # UUID5 provides a stable ID for each document chunk.
             point_id = str(
                 uuid.uuid5(
                     uuid.NAMESPACE_URL,
@@ -142,16 +114,12 @@ def index_chunks() -> None:
                 )
             )
 
-            # Preserve metadata as the Qdrant payload.
             payload = {
                 key: value
                 for key, value in chunk.items()
                 if key not in {"contextualized_text"}
             }
-
-            payload["contextualized_text"] = (
-                chunk["contextualized_text"]
-            )
+            payload["contextualized_text"] = chunk["contextualized_text"]
 
             points.append(
                 models.PointStruct(
@@ -175,8 +143,6 @@ def index_chunks() -> None:
     info = client.get_collection(COLLECTION_NAME)
     print(f"\nIndexing complete.")
     print(f"Points in collection: {info.points_count}")
-
-
 
 
 if __name__ == "__main__":

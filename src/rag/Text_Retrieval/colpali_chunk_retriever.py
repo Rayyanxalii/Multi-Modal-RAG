@@ -1,11 +1,9 @@
-
 from pathlib import Path
 
-from rag.Text_Retrieval.bm25_retriever import load_chunks
-from rag.Text_Retrieval.colpali_model import get_colpali_retriever
+from rag.text_retrieval.bm25_retriever import load_chunks
+from rag.text_retrieval.colpali_model import get_colpali_retriever
 
 
-# maps pages to chunks and return them
 def search_colpali_chunks(
     query: str,
     top_pages: int = 5,
