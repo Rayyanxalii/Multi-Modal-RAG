@@ -24,7 +24,11 @@ FIGURES_JSONL = CHUNKS_DIR / "attention_figures.jsonl"
 FIGURES_CLEANED_JSONL = CHUNKS_DIR / "attention_figures_cleaned.jsonl"
 FIGURE_REVIEW_JSONL = CHUNKS_DIR / "attention_figure_review.jsonl"
 TABLES_JSONL = CHUNKS_DIR / "attention_tables.jsonl"
-COLPALI_EMBEDDINGS_PATH = EMBEDDINGS_DIR / "attention_colpali.pt"
+COLPALI_EMBEDDINGS_PATH = (
+    EMBEDDINGS_DIR / "pages_embeddings.pt"
+    if (EMBEDDINGS_DIR / "pages_embeddings.pt").exists()
+    else EMBEDDINGS_DIR / "attention_colpali.pt"
+)
 
 # Vector database & retrieval constants
 TEXT_COLLECTION_NAME = "research_papers"

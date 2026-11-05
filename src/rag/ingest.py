@@ -110,19 +110,16 @@ def run_pipeline(
 
     # Stage 5: Vector Indexing in Qdrant
     if not skip_indexing:
-        print("\n[Stage 5/5] Indexing text chunks and visual assets in Qdrant...")
+        print("\n[Stage 5/5] Indexing text chunks in Qdrant...")
         try:
             from rag.text_retrieval.index_chunks import index_chunks
-            from rag.visual_retrieval.search.index import index_figures_tables
 
             print("\n--- Indexing Text Chunks ---")
             index_chunks()
-
-            print("\n--- Indexing Figures & Tables ---")
-            index_figures_tables()
         except Exception as exc:
-            print(f"Indexing encountered an error or Qdrant is unreachable: {exc}")
+            print(f"Text indexing encountered an error or Qdrant is unreachable: {exc}")
     else:
+        print("\n[Stage 5/5] Skipping Qdrant vector indexing.")
         print("\n[Stage 5/5] Skipping Qdrant vector indexing.")
 
     print("\n" + "=" * 60)

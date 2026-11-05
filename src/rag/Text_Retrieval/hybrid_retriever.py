@@ -5,17 +5,15 @@ from rag.text_retrieval.bm25_retriever import (
     build_field_indexes,
     search_headings,
 )
-from rag.text_retrieval.colpali_chunk_retriever import search_colpali_chunks
 
 
 def reciprocal_rank_fusion(
     dense_results: list[dict],
     heading_results: list[dict],
-    colpali_results: list[dict],
     k: int = RRF_K,
     top_k: int = 10,
 ) -> list[dict]:
-    """Fuse dense, heading BM25, and ColPali chunk rankings."""
+    """Fuse dense vector search and heading BM25 chunk rankings."""
 
     if k < 1:
         raise ValueError("k must be at least 1.")
@@ -28,7 +26,6 @@ def reciprocal_rank_fusion(
     ranked_lists = {
         "dense": dense_results,
         "heading_bm25": heading_results,
-        "colpali": colpali_results,
     }
 
     for source, results in ranked_lists.items():
@@ -93,33 +90,26 @@ def retrieve_and_fuse(
     question: str,
     top_k: int = 10,
 ) -> tuple[str, list[dict]]:
-    """Run all retrievers and fuse their rankings."""
+    """Run dense + BM25 text retrievers and fuse their rankings."""
 
     chunks = load_chunks()
     _, heading_bm25 = build_field_indexes(chunks)
 
     dense_results = search_chunks(
         question,
-        top_k=10,
+        top_k=top_k,
     )
 
     heading_results = search_headings(
         query=question,
         chunks=chunks,
         heading_bm25=heading_bm25,
-        top_k=10,
-    )
-
-    colpali_results = search_colpali_chunks(
-        query=question,
-        top_pages=5,
-        top_k=10,
+        top_k=top_k,
     )
 
     fused_results = reciprocal_rank_fusion(
         dense_results=dense_results,
         heading_results=heading_results,
-        colpali_results=colpali_results,
         k=RRF_K,
         top_k=top_k,
     )
@@ -144,7 +134,7 @@ def main():
     print("\nQUESTION")
     print(question)
 
-    print("\nRRF FUSED RESULTS")
+    print("\nRRF FUSED RESULTS (Dense + BM25)")
 
     for rank, result in enumerate(fused_results, start=1):
         print(f"\n{rank}. {result['chunk_id']}")

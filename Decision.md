@@ -15,6 +15,8 @@ This document captures every major architectural, technical, algorithmic, and en
 7. [Grounded Answer Generation & Citation Synthesis](#7-grounded-answer-generation--citation-synthesis)
 8. [Empirical Evaluation & Benchmark Design](#8-empirical-evaluation--benchmark-design)
 9. [Summary Table of Architectural Decisions](#9-summary-table-of-architectural-decisions)
+10. [ColPali Re-alignment & Visual Architecture Refactoring (Option A)](#10-colpali-re-alignment--visual-architecture-refactoring-option-a)
+11. [Project Reorganization & Unified Ingestion Pipeline](#11-project-reorganization--unified-ingestion-pipeline)
 
 ---
 
@@ -271,3 +273,72 @@ This document captures every major architectural, technical, algorithmic, and en
 | **LLM Inference** | Groq (`openai/gpt-oss-20b`) | Local 7B model / OpenAI standard | Ultra-low latency generation with strong technical reasoning. |
 | **Citations** | Explicit `[Source N, Page P]` citations | Uncited answers / URL links | Verifiable provenance linking directly to PDF page numbers. |
 | **Evaluation** | Human-curated 23-query Golden Set | LLM-generated synthetic queries | Realistic technical questions testing formulas, motivations, and architecture. |
+| **ColPali Deployment** | ColPali strictly in Visual Retrieval (Option A) | ColPali in Text Retrieval / Caption Dense & BM25 | Native visual search for diagrams & tables; eliminates chunk granularity mismatch & redundant latency. |
+
+---
+
+## 10. ColPali Re-alignment & Visual Architecture Refactoring (Option A)
+
+### Decision 10.1: Removing ColPali from Text Retrieval
+- **Context & Problem**: Initially, ColPali was invoked inside `text_retrieval/hybrid_retriever.py` to retrieve full pages, which were then mapped to all text chunks located on those pages. This created three engineering issues:
+  1. **Granularity Mismatch**: Giving every paragraph chunk on Page 3 the exact same visual score polluted sentence-level chunk ranking.
+  2. **Latency Bottleneck**: Multi-vector Late Interaction (MaxSim) on CPU took ~1–2 seconds per text query, slowing down otherwise ultra-fast (<20 ms) Qdrant/BM25 text searches.
+  3. **Redundancy**: Text chunks already have dedicated dense semantic vectors and BM25 lexical indexes that outperform whole-page vision models on prose text.
+- **Decision**: Streamline `text_retrieval` to **pure Hybrid Sparse + Dense (Dense vector search + BM25 heading search fused via RRF)**. ColPali was completely removed from the text retrieval path.
+
+### Decision 10.2: Dedicated Visual Retrieval via ColPali Page-to-Asset Mapping (Option A)
+- **Context & Problem**: Previously, `visual_retrieval` attempted to search figures and tables using text embeddings and BM25 on captions. This was fundamentally flawed: figures with terse or uninformative captions (e.g., *"Figure 1: The Transformer - model architecture"*) were invisible to text searches querying internal diagram components (*"Feed Forward"*, *"Positional Encoding"*, *"LayerNorm"*).
+- **Decision (Option A)**:
+  1. Use **ColPali** as the sole visual retriever for figures and tables.
+  2. ColPali runs query-to-page multi-vector MaxSim against precomputed rendered page embeddings (`data/embeddings/pages_embeddings.pt`).
+  3. The top-ranked pages are mapped directly to the extracted figures (`attention_figures_cleaned.jsonl`) and tables (`attention_tables.jsonl`) residing on those pages.
+  4. For tables, both the visual cropped image and the full structured `table_markdown` are returned to downstream LLM/VLM generation.
+- **Outcome & Benefits**:
+  - Eliminated the `figures_tables` Qdrant collection, removing duplicate indexing and embedding maintenance.
+  - Figures and complex diagrams are now retrieved using actual visual image features rather than text captions alone.
+  - Verified empirical test: A query for *"The Transformer model architecture"* ranks Figure 1 at **Rank 1 with a ColPali score of 15.2930**.
+
+### Decision 10.3: Elimination of Secondary Qdrant Collection (Single-Collection Qdrant)
+- **Context & Problem**: Previously, two Qdrant collections were maintained: `research_papers` (text chunks) and `research_figures_tables` (caption text & table markdown embeddings).
+- **Decision**: Completely decommission the `research_figures_tables` Qdrant collection.
+- **Rationale**: Visual retrieval is now handled exclusively by ColPali's multi-vector late-interaction over rendered page images, rendering text-based vector search over visual captions redundant. Qdrant is dedicated solely to storing and searching `text_chunks`.
+
+---
+
+## 11. Project Reorganization & Unified Ingestion Pipeline
+
+### Decision 11.1: Separation of Data Assets and Codebase (`data/` & `notebooks/`)
+- **Context & Problem**: Raw PDFs, rendered page images, cropped figures, cropped tables, and PyTorch embedding files were previously scattered inside `src/` (`src/pdf/`, `src/data/`, `src/notebook/`). This violated standard Python packaging practices and polluted source control.
+- **Decision**: Restructure the project root into clean directories:
+  - `data/raw/`: Original documents (e.g., `attention.pdf`).
+  - `data/rendered_pages/`: High-resolution PNG page images.
+  - `data/chunks/`: JSONL chunks, parsed Docling documents, and cleaned figure/table metadata.
+  - `data/figures/`: Cropped figure PNG images.
+  - `data/tables/`: Cropped table PNG images.
+  - `data/embeddings/`: ColPali PyTorch multi-vector embeddings (`pages_embeddings.pt`).
+  - `data/retrieval_runs/`: Trace logs and evaluation run outputs.
+  - `notebooks/`: Exploratory Jupyter notebooks (`colpali_visual_retrieval.ipynb`).
+  - `src/rag/`: Pure Python source code.
+
+### Decision 11.2: Centralized Configuration (`src/rag/config.py`)
+- **Context & Problem**: File paths, collection names, model identifiers, and hyperparameters were hardcoded across multiple files with conflicting relative path assumptions.
+- **Decision**: Create `src/rag/config.py` as the single source of truth for all paths (`PROJECT_ROOT`, `DATA_DIR`), collection names (`TEXT_COLLECTION_NAME`), embedding models, and Qdrant environment credential loaders.
+
+### Decision 11.3: Unified Ingestion Pipeline (`src/rag/ingest.py`)
+- **Context & Problem**: Preparing a new document previously required manually executing 7 to 8 separate scripts across different subdirectories in strict sequential order. Running them out of order resulted in `FileNotFoundError`.
+- **Decision**: Implement a unified command-line orchestrator in `src/rag/ingest.py`:
+  - **Stage 1**: Page rendering via PyMuPDF (`data/rendered_pages/`).
+  - **Stage 2**: Document hierarchy layout parsing & contextual chunking via Docling (`data/chunks/`).
+  - **Stage 3**: Figure & table bounding box metadata extraction via Docling.
+  - **Stage 4**: Visual element cropping & caption normalization (`data/figures/`, `data/tables/`).
+  - **Stage 5**: Text chunk vector indexing into Qdrant (`research_papers`).
+- **Outcome**: A single CLI command (`python -m rag.ingest --pdf <path>`) runs the entire multi-stage pipeline with modular skip flags (`--skip-rendering`, `--skip-parsing`, `--skip-cropping`, `--only-indexing`).
+
+### Decision 11.4: Purging Dead Code & Module Naming Standardization
+- **Context & Problem**: Legacy commented-out functions, dead scoring functions in BM25, and mixed-case directory names (`Text_Retrieval`, `Figure_Table_Retrieval`, `pre_process`, `query_figures_tables`, `images_to_figures.py`) reduced maintainability.
+- **Decision**:
+  - Removed all dead and commented-out code blocks (e.g. `format_llm_context`, `build_grounded_context_str`, `normalize_scores`, `search_heading_aware`).
+  - Removed the empty `src/evaluation/` directory.
+  - Standardized all directories and files into standard Python snake_case (`text_retrieval`, `visual_retrieval/preprocess`, `visual_retrieval/search`, `retrieval_orchestrator.py`).
+
+

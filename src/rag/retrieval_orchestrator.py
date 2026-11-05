@@ -10,8 +10,8 @@ from rag.map_retrieval_results import map_orchestrator_results
 
 
 def format_eval_run(output: dict[str, Any]) -> dict[str, Any]:
-    """
-    Format a lightweight run record suitable for evaluation and experiment tracking.
+    """Format a lightweight run record suitable for evaluation and experiment tracking.
+
     Strips heavy static text and layout geometries that can always be hydrated
     on demand using chunk_id / record_id.
     """
@@ -26,7 +26,7 @@ def format_eval_run(output: dict[str, Any]) -> dict[str, Any]:
             "retrieved_by": item.get("retrieved_by", []),
             "source_ranks": item.get("source_ranks", {}),
         }
-        for score_key in ("dense_score", "heading_score", "colpali_score"):
+        for score_key in ("dense_score", "heading_score"):
             if item.get(score_key) is not None:
                 clean_item[score_key] = item[score_key]
         lean_text_results.append(clean_item)
@@ -38,11 +38,9 @@ def format_eval_run(output: dict[str, Any]) -> dict[str, Any]:
             "record_type": item.get("record_type"),
             "record_id": item.get("record_id"),
             "page": item.get("page"),
-            "rrf_score": item.get("rrf_score"),
-            "retrieval_ranks": item.get("retrieval_ranks", []),
+            "colpali_rank": item.get("colpali_rank"),
+            "colpali_score": item.get("colpali_score"),
         }
-        if item.get("score") is not None:
-            clean_item["score"] = item["score"]
         lean_fig_tab_results.append(clean_item)
 
     return {
@@ -64,13 +62,13 @@ def run_hybrid_retrieval(
     save_results: bool = True,
     lean_save: bool = True,
 ) -> dict[str, Any]:
-    """
-    Run text and figure/table hybrid retrieval independently.
+    """Run text and visual retrieval independently.
 
-    Returns one structured object containing both result lists.
-    Optionally persists the retrieval output as JSON (lean by default for evaluation).
-    """
+    - Branch 1 (Text): Dense vector search + heading BM25 with RRF.
+    - Branch 2 (Visual): ColPali page-to-asset mapping (Option A).
 
+    Returns a structured dictionary containing both text and visual results.
+    """
     if not question or not question.strip():
         raise ValueError("Question cannot be empty.")
 
@@ -90,13 +88,13 @@ def run_hybrid_retrieval(
 
     question = question.strip()
 
-    # Branch 1: text dense + heading BM25 + ColPali + text RRF.
+    # Branch 1: text dense + heading BM25 fused with RRF
     _, text_results = retrieve_text_hybrid(
         question,
         top_k=text_top_k,
     )
 
-    # Branch 2: figure/table dense + BM25 + figure/table RRF.
+    # Branch 2: visual ColPali retrieval for figures and tables
     figure_table_results = hybrid_retrieve(
         query=question,
         top_k=figure_table_top_k,
@@ -104,7 +102,7 @@ def run_hybrid_retrieval(
         record_type=record_type,
     )
 
-    # Keep the branches separate for downstream VLM/LLM processing.
+    # Keep branches separate for downstream VLM/LLM generation
     output: dict[str, Any] = {
         "question": question,
         "created_at": datetime.now(timezone.utc).isoformat(),

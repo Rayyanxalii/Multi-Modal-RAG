@@ -1,6 +1,12 @@
+import os
 from pathlib import Path
 from functools import lru_cache
 import torch
+
+# Use cached models without making blocking network calls
+os.environ.setdefault("HF_HUB_OFFLINE", "1")
+os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
+
 from sentence_transformers import MultiVectorEncoder
 
 from rag.config import COLPALI_EMBEDDINGS_PATH as EMBEDDINGS_PATH
@@ -81,7 +87,6 @@ class ColPaliRetriever:
                 "rank": rank,
                 "page": self.page_names[index],
                 "score": float(scores[index].item()),
-                "chunk_id": f"page_{self.page_names[index]}",
             }
             for rank, index in enumerate(ranked_indices, start=1)
         ]
