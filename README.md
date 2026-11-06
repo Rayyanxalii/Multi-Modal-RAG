@@ -79,7 +79,46 @@ graph TD;
 
 ```
 RAG/
-├── data/                                 # All persistent data assets (outside src/)
+├── backend/                              # Backend application service
+│   └── src/
+│       ├── rag/                          # Core RAG package
+│       │   ├── __init__.py
+│       │   ├── config.py                 # Single source of truth for paths, models, & credentials
+│       │   ├── doc_loader.py             # PyMuPDF page rendering pipeline
+│       │   ├── docling_parser.py         # IBM Docling layout parsing & hybrid chunking
+│       │   ├── ingest.py                 # Unified multi-stage ingestion CLI pipeline
+│       │   ├── main.py                   # Main application CLI entrypoint
+│       │   │
+│       │   ├── graph/                    # LangGraph Agentic RAG Subpackage
+│       │   │   ├── __init__.py           # Exports app, build_rag_graph, run_agentic_rag, save_graph_artifacts
+│       │   │   ├── state.py              # Typed RAGState dictionary
+│       │   │   ├── nodes.py              # Modular nodes (ingestion, routing, dense, bm25, colpali, rrf, hydration, CRAG, generate)
+│       │   │   ├── workflow.py           # StateGraph compilation & conditional edge routing
+│       │   │   └── visualize.py          # Graph artifact generation (data/graph.png & data/graph.mmd)
+│       │   │
+│       │   ├── text_retrieval/           # Text retrieval modules
+│       │   │   ├── bm25_retriever.py     # Heading-aware Okapi BM25
+│       │   │   ├── search_chunks.py      # Qdrant dense vector search
+│       │   │   ├── index_chunks.py       # Text chunk indexer for Qdrant
+│       │   │   └── hybrid_retriever.py   # Dense + BM25 Reciprocal Rank Fusion (RRF)
+│       │   │
+│       │   └── visual_retrieval/         # Visual & tabular retrieval modules
+│       │       ├── colpali_model.py      # ColPali MultiVectorEncoder loader & MaxSim search
+│       │       ├── preprocess/
+│       │       │   ├── figure_extractor.py   # Extract figures & tables from Docling
+│       │       │   ├── figure_cropper.py     # Crop figure regions from page images
+│       │       │   ├── table_cropper.py      # Crop table regions from page images
+│       │       │   └── caption_processor.py  # Caption cleaning, multi-panel grouping & filtering
+│       │       └── search/
+│       │           └── colpali_retriever.py  # ColPali visual retriever & asset hydration
+│       │
+│       └── services/
+│           ├── __init__.py
+│           └── llm_service.py            # Groq LLM & VLM providers (Qwen 3.8 27B / GPT-OSS-20B)
+│
+├── frontend/                             # Frontend application directory (ready for UI implementation)
+│
+├── data/                                 # All persistent data assets
 │   ├── graph.png                         # High-res offline visual diagram of LangGraph workflow
 │   ├── graph.mmd                         # Mermaid graph definition exported from LangGraph
 │   ├── raw/                              # Original source documents (e.g. attention.pdf)
@@ -93,46 +132,10 @@ RAG/
 ├── notebooks/                            # Exploratory Jupyter notebooks
 │   └── colpali_visual_retrieval.ipynb    # GPU ColPali embedding generation notebook
 │
-├── src/
-│   ├── rag/                              # Core RAG package
-│   │   ├── __init__.py
-│   │   ├── config.py                     # Single source of truth for paths, models, & credentials
-│   │   ├── doc_loader.py                 # PyMuPDF page rendering pipeline
-│   │   ├── docling_parser.py             # IBM Docling layout parsing & hybrid chunking
-│   │   ├── ingest.py                     # Unified multi-stage ingestion CLI pipeline
-│   │   ├── main.py                       # Main interactive application CLI entrypoint
-│   │   │
-│   │   ├── graph/                        # LangGraph Agentic RAG Subpackage
-│   │   │   ├── __init__.py               # Exports app, build_rag_graph, run_agentic_rag, save_graph_artifacts
-│   │   │   ├── state.py                  # Typed RAGState dictionary
-│   │   │   ├── nodes.py                  # 15 modular nodes (ingestion, routing, dense, bm25, colpali, rrf, hydration, grade, rewrite, generate)
-│   │   │   ├── workflow.py               # StateGraph compilation & conditional edge routing
-│   │   │   └── visualize.py              # Graph artifact generation (data/graph.png & data/graph.mmd)
-│   │   │
-│   │   ├── text_retrieval/               # Text retrieval modules
-│   │   │   ├── bm25_retriever.py         # Heading-aware Okapi BM25
-│   │   │   ├── search_chunks.py          # Qdrant dense vector search
-│   │   │   ├── index_chunks.py           # Text chunk indexer for Qdrant
-│   │   │   └── hybrid_retriever.py       # Dense + BM25 Reciprocal Rank Fusion (RRF)
-│   │   │
-│   │   └── visual_retrieval/             # Visual & tabular retrieval modules
-│   │       ├── colpali_model.py          # ColPali MultiVectorEncoder loader & MaxSim search
-│   │       ├── preprocess/
-│   │       │   ├── figure_extractor.py   # Extract figures & tables from Docling
-│   │       │   ├── figure_cropper.py     # Crop figure regions from page images
-│   │       │   ├── table_cropper.py      # Crop table regions from page images
-│   │       │   └── caption_processor.py  # Caption cleaning, multi-panel grouping & filtering
-│   │       └── search/
-│   │           └── colpali_retriever.py  # ColPali visual retriever & asset hydration
-│   │
-│   └── services/
-│       ├── __init__.py
-│       └── llm_service.py                # Groq / LlamaIndex LLM provider
-│
 ├── Decision.md                           # Architectural Decisions Record (ADR)
-├── pyproject.toml                        # Project metadata & dependencies (managed by uv)
+├── pyproject.toml                        # Central project metadata & dependencies (managed by uv)
 ├── uv.lock                               # Deterministic dependency lockfile
-└── README.md                             # Project documentation
+└── README.md                             # Central project documentation
 ```
 
 ---
