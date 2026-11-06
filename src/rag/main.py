@@ -21,6 +21,8 @@ def run_single(question: str) -> None:
 
     print("\n" + "=" * 55)
     print(f"ROUTE: {route} | SELF-RAG RETRIES: {retries}")
+    if result.get("routing_reasoning"):
+        print(f"REASONING: {result['routing_reasoning']}")
     if result.get("rewritten_query"):
         print(f"REFORMULATED QUERY: {result['rewritten_query']}")
     print("=" * 55)

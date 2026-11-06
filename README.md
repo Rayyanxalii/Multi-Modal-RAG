@@ -55,7 +55,7 @@ graph TD;
    - Dynamic document naming, automatic coordinate transformations, and generalized system prompts.
 2. **LangGraph Agentic State Machine**:
    - **Typed State (`RAGState`)**: Maintains the active query, classification routes, candidate pools, retry counters, and verification flags.
-   - **Adaptive Query Routing**: Bypasses heavy visual vision-language inference on purely textual questions, completing text-only queries in under 20 ms.
+   - **LLM-Based Structured Intent Routing**: Employs an LLM with structured Pydantic schema (`QueryIntent`) to infer semantic intent (text, visual, or hybrid) along with transparent reasoning, bypassing heavy vision models on conceptual text questions without relying on brittle keyword heuristics.
 3. **Internal Self-RAG (Without Web Search)**:
    - Self-reflective relevance grading ensures the system evaluates whether retrieved passages genuinely contain the answer.
    - **Query Reformulation**: Translates colloquial queries into formal technical documentation vocabulary, looping back for a second retrieval attempt.

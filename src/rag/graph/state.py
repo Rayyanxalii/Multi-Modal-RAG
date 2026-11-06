@@ -18,6 +18,7 @@ class RAGState(TypedDict, total=False):
     question: str                              # Current active query (can be rewritten)
     original_query: str                        # Original user input
     route: str                                 # Intent classification: "text", "visual", or "both"
+    routing_reasoning: str                     # LLM explanation of the chosen route
 
     # Granular Intermediate Retrieval Artifacts
     dense_matches: list[dict[str, Any]]        # Raw Qdrant vector matches

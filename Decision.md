@@ -404,6 +404,15 @@ This document captures every major architectural, technical, algorithmic, and en
   - If both return empty lists, `text_fusion_node` gracefully yields `{"text_results": []}` without crashing.
   - Exception fallback: In the unexpected event of a fusion calculation error, the node falls back directly to `dense_matches or bm25_matches or []`.
 
+### Decision 12.8: LLM-Based Structured Intent Routing
+- **Context & Problem**: Static keyword matching in query routing is brittle: it fails on implicit visual intent (e.g., *"What does the encoder look like?"* contains no visual keyword like "figure" or "diagram"), misclassifies nuanced conceptual questions, and struggles with broad hybrid queries.
+- **Decision**: Upgrade `route_query_node` to use an LLM-based structured classifier:
+  - Defined `QueryIntent` using Pydantic schema: `route` (`"text" | "visual" | "both"`), `confidence` (`float`), and `reasoning` (`str`).
+  - The LLM assesses semantic intent, metaphors, and implicit references to select the optimal retrieval branch.
+  - **Explainability & Transparency**: The routing decision and `routing_reasoning` are recorded in `RAGState` and displayed in CLI run headers.
+  - **Complete Elimination of Keyword Matching**: Removed all brittle static keyword lists (`VISUAL_KEYWORDS`, `TEXT_KEYWORDS`). Routing is 100% LLM-driven via semantic intent. In the rare event of an API communication error, the router defaults safely to comprehensive `"both"` retrieval.
+
+
 
 
 

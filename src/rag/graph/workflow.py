@@ -184,6 +184,7 @@ def run_agentic_rag(
         "question": final_state.get("original_question", question),
         "rewritten_query": final_state.get("rewritten_query"),
         "route": final_state.get("route", "both"),
+        "routing_reasoning": final_state.get("routing_reasoning", ""),
         "answer": final_state.get("answer", ""),
         "sources": final_state.get("sources", []),
         "retry_count": final_state.get("retry_count", 0),

@@ -22,10 +22,12 @@ Implements all stages of the system as first-class LangGraph nodes:
    - generate_answer_node
 """
 
+import json
 import os
 import re
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
+from pydantic import BaseModel, Field
 
 from rag.config import (
     DEFAULT_PDF_PATH,
@@ -164,37 +166,67 @@ def index_vectors_node(state: RAGState) -> dict[str, Any]:
 
 
 # =============================================================================
-# 2. Intent Routing Node
+# 2. Intent Routing Node (LLM-Based Structured Classification)
 # =============================================================================
 
-VISUAL_KEYWORDS = {
-    "diagram", "figure", "fig", "architecture", "chart", "table", "plot",
-    "visualization", "heatmap", "workflow", "schema", "layout", "visual",
-    "curves", "graph", "picture", "draw", "show", "illustrate"
-}
+class QueryIntent(BaseModel):
+    """Structured classification of user query intent."""
+    route: Literal["text", "visual", "both"] = Field(
+        description="The primary retrieval route: 'text' for prose/explanations/formulas, 'visual' for diagrams/figures/tables/charts, or 'both' for hybrid/comprehensive questions."
+    )
+    confidence: float = Field(
+        default=1.0,
+        description="Confidence score between 0.0 and 1.0"
+    )
+    reasoning: str = Field(
+        description="Brief one-sentence explanation of why this route was selected."
+    )
 
-TEXT_KEYWORDS = {
-    "define", "explain", "why", "background", "motivation", "summary",
-    "summarize", "prose", "text", "introduction", "conclusion", "abstract"
-}
+
 
 
 def route_query_node(state: RAGState) -> dict[str, Any]:
-    """Classify user query intent into 'text', 'visual', or 'both'."""
-    question = state["question"].lower()
-    tokens = set(re.findall(r"\b\w+\b", question))
+    """Classify user query intent into 'text', 'visual', or 'both' using LLM structured output.
 
-    has_visual = bool(tokens & VISUAL_KEYWORDS)
-    has_text = bool(tokens & TEXT_KEYWORDS)
+    Analyzes semantic nuance, metaphors, and implicit references to determine whether
+    retrieval should target textual prose, visual diagrams/tables, or hybrid multimodal.
+    """
+    question = state["question"].strip()
 
-    if has_visual and not has_text:
-        route = "visual"
-    elif has_text and not has_visual:
-        route = "text"
-    else:
-        route = "both"
+    routing_prompt = f"""You are an expert query router in an advanced multimodal RAG system.
+Analyze the user's question and determine the optimal retrieval route:
+- "visual": The user explicitly or implicitly asks about a figure, diagram, system architecture, flowchart, schema, plot, image, chart, or data table (e.g. "show the architecture", "how does the diagram represent...", "what are the BLEU scores?").
+- "text": The user asks for definitions, conceptual explanations, mathematical motivations, background prose, or summaries without needing visual inspection (e.g. "define self-attention", "why use dot-product scaling?").
+- "both": The question is broad, complex, asks for a comprehensive explanation, or benefits from both textual explanations and visual diagrams/tables (e.g. "how does multi-head attention work and what does its structure look like?").
 
-    return {"route": route}
+Respond strictly in valid JSON matching this schema:
+{{
+  "route": "text" | "visual" | "both",
+  "confidence": 1.0,
+  "reasoning": "brief one-sentence explanation"
+}}
+
+User Question: {question}
+
+Output JSON only:"""
+
+    try:
+        response = llm.complete(routing_prompt).text.strip()
+        match = re.search(r"\{.*\}", response, re.DOTALL)
+        if match:
+            data = json.loads(match.group(0))
+            intent = QueryIntent.model_validate(data)
+            return {
+                "route": intent.route,
+                "routing_reasoning": intent.reasoning,
+            }
+        raise ValueError(f"No JSON object found in LLM response: {response}")
+    except Exception as exc:
+        print(f"[Warning] LLM intent routing encountered an error: {exc}. Defaulting route to 'both'.")
+        return {
+            "route": "both",
+            "routing_reasoning": f"Default fallback to comprehensive multimodal retrieval: {exc}",
+        }
 
 
 # =============================================================================
@@ -217,7 +249,7 @@ def bm25_retriever_node(state: RAGState) -> dict[str, Any]:
     query = state["question"].strip()
     try:
         chunks, heading_bm25 = _get_bm25_index()
-        results = search_headings(query, heading_bm25, chunks, top_k=5)
+        results = search_headings(query=query, chunks=chunks, heading_bm25=heading_bm25, top_k=5)
     except Exception as exc:
         print(f"[Warning] BM25 retriever error: {exc}")
         results = []
@@ -253,6 +285,7 @@ def colpali_retriever_node(state: RAGState) -> dict[str, Any]:
         page_results = []
 
     return {"colpali_top_pages": page_results}
+
 
 
 def visual_hydration_node(state: RAGState) -> dict[str, Any]:
@@ -419,6 +452,8 @@ Your verdict (YES/NO):"""
     return {"is_relevant": is_relevant}
 
 
+
+
 def rewrite_query_node(state: RAGState) -> dict[str, Any]:
     """Self-RAG Reflection: Reformulate question into formal technical vocabulary."""
     original_query = state.get("original_question") or state["question"]
@@ -449,6 +484,7 @@ Rewritten Query:"""
         "rewritten_query": rewritten,
         "retry_count": current_retry + 1,
     }
+
 
 
 def generate_answer_node(state: RAGState) -> dict[str, Any]:
