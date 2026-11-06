@@ -4,6 +4,10 @@
 __pycache__/
 *.py[cod]
 *$py.class
+*.egg-info/
+*.egg
+build/
+dist/
 data/rendered_pages/
 data/figures/
 data/tables/
