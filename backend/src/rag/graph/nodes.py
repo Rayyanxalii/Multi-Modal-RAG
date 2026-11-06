@@ -33,6 +33,8 @@ from llama_index.core.llms import ChatMessage, ImageBlock, MessageRole, TextBloc
 from rag.config import (
     DEFAULT_PDF_PATH,
     FIGURES_CLEANED_JSONL,
+    FIGURES_DIR,
+    TABLES_DIR,
     TABLES_JSONL,
     TEXT_COLLECTION_NAME,
     get_document_paths,
@@ -490,7 +492,7 @@ Rewritten Query:"""
 
 
 def _resolve_image_path(raw_path: str, record_type: str = "figure") -> Path | None:
-    """Resolve an asset image path, checking raw path and fallback data directories."""
+    """Resolve an asset image path, checking raw path and canonical data directories."""
     if not raw_path:
         return None
     p = Path(raw_path)
@@ -498,14 +500,14 @@ def _resolve_image_path(raw_path: str, record_type: str = "figure") -> Path | No
         return p
     filename = p.name
     if record_type == "figure":
-        candidate = Path("data/figures") / filename
+        candidate = FIGURES_DIR / filename
         if candidate.exists() and candidate.is_file():
             return candidate
     elif record_type == "table":
-        candidate = Path("data/tables") / filename
+        candidate = TABLES_DIR / filename
         if candidate.exists() and candidate.is_file():
             return candidate
-    for folder in [Path("data/figures"), Path("data/tables")]:
+    for folder in [FIGURES_DIR, TABLES_DIR]:
         candidate = folder / filename
         if candidate.exists() and candidate.is_file():
             return candidate

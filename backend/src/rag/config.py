@@ -4,7 +4,7 @@ from typing import Any
 from dotenv import load_dotenv
 
 # Base paths
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
 DATA_DIR = PROJECT_ROOT / "data"
 
 # Subdirectories for data assets
