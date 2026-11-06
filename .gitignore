@@ -13,3 +13,5 @@ data/figures/
 data/tables/
 data/embeddings/
 data/retrieval_runs/
+deploy/
+*.pt
