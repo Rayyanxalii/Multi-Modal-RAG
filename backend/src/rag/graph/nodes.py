@@ -522,20 +522,28 @@ def generate_answer_node(state: RAGState) -> dict[str, Any]:
     question = state.get("original_question") or state["question"]
     text_results = state.get("text_results", [])
     fig_tab_results = state.get("figure_table_results", [])
+    is_relevant = state.get("is_relevant", True)
 
     if not text_results and not fig_tab_results:
         return {
-            "answer": "I could not find sufficient information in the document to answer your question.",
+            "answer": "I don't have information about that.",
+        }
+
+    if not is_relevant:
+        return {
+            "answer": "I don't have information about that.",
         }
 
     system_prompt = (
-        "You are an expert AI assistant answering questions based on the provided technical document context (text chunks, figures, and tables).\n"
+        "You are an expert AI assistant answering questions based on the provided technical document.\n"
         "Guidelines:\n"
-        "1. Answer ONLY using the facts, figures, tables, and explanations present in the context.\n"
-        "2. Do NOT extrapolate, speculate, or introduce external knowledge.\n"
-        "3. Every factual claim, architecture detail, or numeric result MUST cite its source using: [Source N, Page P].\n"
-        "4. When referencing a figure or table, mention its name (e.g. Figure 1, Table 2) and citation [Source N, Page P].\n"
-        "5. If the context does not contain enough information, state clearly that the document does not contain the answer."
+        "1. Never say 'From the context/document I received', 'Based on the provided context', or similar introductory meta-phrases.\n"
+        "2. Start your response using: 'According to the document, ...' or directly address the question using facts from the document.\n"
+        "3. Answer ONLY using the facts, figures, tables, and explanations present in the context.\n"
+        "4. Do NOT extrapolate, speculate, or introduce external knowledge.\n"
+        "5. Every factual claim, architecture detail, or numeric result MUST cite its source using: [Source N, Page P].\n"
+        "6. When referencing a figure or table, mention its name (e.g. Figure 1, Table 2) and citation [Source N, Page P].\n"
+        "7. If the document does not contain enough information to answer the question, respond ONLY with: 'I don't have information about that.' without further explanation."
     )
 
     user_blocks: list[Any] = []
@@ -588,7 +596,7 @@ def generate_answer_node(state: RAGState) -> dict[str, Any]:
 
     # 3. Question Prompt
     user_blocks.append(
-        TextBlock(text=f"Question: {question}\n\nGrounded Answer with [Source N, Page P] citations:")
+        TextBlock(text=f"Question: {question}\n\nAnswer (starting with 'According to the document, ...' or state 'I don't have information about that.'):")
     )
 
     messages = [
