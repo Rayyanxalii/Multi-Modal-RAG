@@ -60,7 +60,7 @@ def decide_after_grading(state: RAGState) -> Literal["generate_answer", "rewrite
     if is_relevant or retry_count >= 1:
         return "generate_answer"
 
-    # Self-RAG corrective loop: reformulate query and retry retrieval
+    # CRAG corrective loop: reformulate query and retry retrieval
     return "rewrite_query"
 
 
@@ -85,7 +85,7 @@ def build_rag_graph() -> StateGraph:
     workflow.add_node("colpali_retriever", colpali_retriever_node)
     workflow.add_node("visual_hydration", visual_hydration_node)
 
-    # 4. Context Formatting & Self-RAG Nodes
+    # 4. Context Formatting & CRAG Nodes
     workflow.add_node("format_context", format_context_node)
     workflow.add_node("grade_context", grade_context_node)
     workflow.add_node("rewrite_query", rewrite_query_node)
@@ -130,7 +130,7 @@ def build_rag_graph() -> StateGraph:
     workflow.add_edge("colpali_retriever", "visual_hydration")
     workflow.add_edge("visual_hydration", "format_context")
 
-    # Self-RAG Reflection Path
+    # CRAG Corrective Loop Path
     workflow.add_edge("format_context", "grade_context")
     workflow.add_conditional_edges(
         "grade_context",

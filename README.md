@@ -2,7 +2,7 @@
 
 A production-grade, document-agnostic **Multi-Modal Agentic Retrieval-Augmented Generation (RAG)** system engineered to answer complex questions over any technical document containing written text, mathematical formulas, system architectures, flowcharts, diagrams, and tables (demonstrated on [*Attention Is All You Need*](data/raw/attention.pdf)).
 
-Powered by **LangGraph**, this system orchestrates an adaptive, self-correcting state graph that intelligently routes queries, validates document relevance, reformulates ambiguous queries via internal **Self-RAG reflection**, and synthesizes grounded answers with verifiable page-level citations.
+Powered by **LangGraph**, this system orchestrates an adaptive, self-correcting state graph that intelligently routes queries, evaluates document relevance via **Corrective RAG (CRAG)**, reformulates queries when context is insufficient, and synthesizes grounded answers with verifiable page-level citations.
 
 ---
 
@@ -36,9 +36,9 @@ graph TD;
     text_fusion --> format_context[6. format_context_node<br/>Assemble Text Chunks & Visual Assets]
     visual_hydration --> format_context
 
-    %% Self-RAG Reflection
-    format_context --> grade_context[7. grade_context_node<br/>Self-RAG Relevance Evaluation]
-    grade_context -.->|"Irrelevant & Retries < 1"| rewrite_query[8. rewrite_query_node<br/>Self-Correction: Expand Terms]
+    %% CRAG Corrective Loop
+    format_context --> grade_context[7. grade_context_node<br/>CRAG Relevance Evaluation]
+    grade_context -.->|"Irrelevant & Retries < 1"| rewrite_query[8. rewrite_query_node<br/>CRAG Corrective Query Rewriting]
     rewrite_query --> route_query
 
     %% Grounded Answer Synthesis
@@ -56,10 +56,10 @@ graph TD;
 2. **LangGraph Agentic State Machine**:
    - **Typed State (`RAGState`)**: Maintains the active query, classification routes, candidate pools, retry counters, and verification flags.
    - **LLM-Based Structured Intent Routing**: Employs an LLM with structured Pydantic schema (`QueryIntent`) to infer semantic intent (text, visual, or hybrid) along with transparent reasoning, bypassing heavy vision models on conceptual text questions without relying on brittle keyword heuristics.
-3. **Internal Self-RAG (Without Web Search)**:
-   - Self-reflective relevance grading ensures the system evaluates whether retrieved passages genuinely contain the answer.
-   - **Query Reformulation**: Translates colloquial queries into formal technical documentation vocabulary, looping back for a second retrieval attempt.
-   - Avoids web search to eliminate external blog hallucinations and preserve strict page-level PDF provenance.
+3. **Corrective RAG (CRAG) Without Web Search**:
+   - **Evaluator / Grader Node**: Assesses whether retrieved multimodal passages genuinely contain information relevant to answering the query.
+   - **Corrective Query Transformation**: If context is insufficient or irrelevant, CRAG triggers query reformulation into formal technical terms and retries retrieval.
+   - **Zero Web Hallucination**: Remains strictly bounded to the local document corpus to eliminate external noise and preserve verified page-level provenance.
 4. **True Visual Retrieval via ColPali (Option A)**:
    - Vision-language late-interaction multi-vector search (`pages_embeddings.pt`) discovers flowcharts, attention diagrams, and heatmaps directly from pixels.
    - Automatically maps top-ranked pages to cropped figures and structured Markdown tables.
@@ -182,14 +182,14 @@ python -m rag.main
 
 **Features**:
 * **Persistent in-memory caching**: The ColPali model stays loaded in RAM across queries, answering subsequent questions in **~1–2 seconds**.
-* **Self-RAG diagnostics**: Displays the classified intent (`ROUTE: Text / Visual / Both`) and any query reformulation performed.
+* **CRAG diagnostics**: Displays the classified intent (`ROUTE: Text / Visual / Both`) and any corrective query reformulation performed.
 
 *Example interaction:*
 ```text
 Ask a question: Show me the diagram of scaled dot product attention
 
 =======================================================
-ROUTE: Visual | SELF-RAG RETRIES: 0
+ROUTE: Visual | CRAG RETRIES: 0
 =======================================================
 ANSWER:
 Figure 2 (left) presents the Scaled Dot-Product Attention architecture [Source 1, Page 4].

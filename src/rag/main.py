@@ -20,7 +20,7 @@ def run_single(question: str) -> None:
     retries = result.get("retry_count", 0)
 
     print("\n" + "=" * 55)
-    print(f"ROUTE: {route} | SELF-RAG RETRIES: {retries}")
+    print(f"ROUTE: {route} | CRAG RETRIES: {retries}")
     if result.get("routing_reasoning"):
         print(f"REASONING: {result['routing_reasoning']}")
     if result.get("rewritten_query"):

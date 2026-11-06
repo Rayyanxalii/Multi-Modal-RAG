@@ -366,9 +366,9 @@ This document captures every major architectural, technical, algorithmic, and en
   - `"visual"`: Routes exclusively to ColPali page-to-asset mapping.
   - `"both"`: Executes parallel multimodal retrieval for comprehensive queries.
 
-### Decision 12.4: Self-RAG Internal Correction Without Web Search
+### Decision 12.4: Corrective RAG (CRAG) Without Web Search
 - **Context & Problem**: Standard CRAG literature falls back to external web search (Google / Tavily) when internal documents are graded irrelevant. In technical research papers or proprietary enterprise PDFs, web search causes hallucinations, breaks page-level citation provenance, and risks data leakage.
-- **Decision**: Implement an **Internal Self-RAG** reflection loop:
+- **Decision**: Implement an internal **Corrective RAG (CRAG)** loop:
   - `grade_context_node` verifies whether retrieved context contains relevant information.
   - If graded irrelevant and `retry_count < 1`, `rewrite_query_node` uses the LLM to reformulate conversational language into formal technical documentation vocabulary, looping back to retrieval.
   - Strict retry guardrail (`retry_count < 1`) prevents infinite loops while guaranteeing predictable response times.

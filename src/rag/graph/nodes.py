@@ -15,7 +15,7 @@ Implements all stages of the system as first-class LangGraph nodes:
    - text_fusion_node (Reciprocal Rank Fusion - RRF)
    - colpali_retriever_node (ColPali MaxSim on Page Embeddings)
    - visual_hydration_node (Map Top Pages to Cropped Figures & Tables)
-4. Context Formatting & Self-RAG Reflection:
+4. Context Formatting & CRAG Correction:
    - format_context_node
    - grade_context_node
    - rewrite_query_node
@@ -360,7 +360,7 @@ def visual_hydration_node(state: RAGState) -> dict[str, Any]:
 
 
 # =============================================================================
-# 4. Context Formatting & Self-RAG Nodes
+# 4. Context Formatting & CRAG Nodes
 # =============================================================================
 
 def format_context_node(state: RAGState) -> dict[str, Any]:
@@ -457,7 +457,7 @@ Your verdict (YES/NO):"""
 
 
 def rewrite_query_node(state: RAGState) -> dict[str, Any]:
-    """Self-RAG Reflection: Reformulate question into formal technical vocabulary."""
+    """Corrective RAG (CRAG): Reformulate question into formal technical vocabulary."""
     original_query = state.get("original_question") or state["question"]
     current_retry = state.get("retry_count", 0)
 
@@ -476,7 +476,7 @@ Rewritten Query:"""
 
     try:
         rewritten = llm.complete(rewrite_prompt).text.strip().strip('"').strip("'")
-        print(f"\n[Self-RAG] Query reformulated: '{original_query}' -> '{rewritten}'")
+        print(f"\n[CRAG] Query reformulated: '{original_query}' -> '{rewritten}'")
     except Exception as exc:
         print(f"[Warning] Query rewriting failed ({exc}). Retaining original query.")
         rewritten = original_query
