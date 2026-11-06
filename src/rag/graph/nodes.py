@@ -29,6 +29,7 @@ from pathlib import Path
 from typing import Any, Literal
 from pydantic import BaseModel, Field
 
+from llama_index.core.llms import ChatMessage, ImageBlock, MessageRole, TextBlock
 from rag.config import (
     DEFAULT_PDF_PATH,
     FIGURES_CLEANED_JSONL,
@@ -46,7 +47,7 @@ from rag.text_retrieval.hybrid_retriever import reciprocal_rank_fusion
 from rag.text_retrieval.search_chunks import search_chunks
 from rag.visual_retrieval.colpali_model import get_colpali_retriever
 from rag.visual_retrieval.search.colpali_retriever import extract_page_number, load_jsonl
-from services.llm_service import llm
+from services.llm_service import llm, llm_vision
 
 
 # Module-level BM25 cache for high-speed repeated queries
@@ -423,6 +424,7 @@ def format_context_node(state: RAGState) -> dict[str, Any]:
     }
 
 
+
 def grade_context_node(state: RAGState) -> dict[str, Any]:
     """Grade whether the retrieved multimodal context is relevant to the question."""
     question = state["question"]
@@ -487,36 +489,113 @@ Rewritten Query:"""
 
 
 
-def generate_answer_node(state: RAGState) -> dict[str, Any]:
-    """Synthesize a grounded answer using Groq LLM with strict [Source N, Page P] citations."""
-    question = state.get("original_question") or state["question"]
-    context_str = state.get("context_str", "")
+def _resolve_image_path(raw_path: str, record_type: str = "figure") -> Path | None:
+    """Resolve an asset image path, checking raw path and fallback data directories."""
+    if not raw_path:
+        return None
+    p = Path(raw_path)
+    if p.exists() and p.is_file():
+        return p
+    filename = p.name
+    if record_type == "figure":
+        candidate = Path("data/figures") / filename
+        if candidate.exists() and candidate.is_file():
+            return candidate
+    elif record_type == "table":
+        candidate = Path("data/tables") / filename
+        if candidate.exists() and candidate.is_file():
+            return candidate
+    for folder in [Path("data/figures"), Path("data/tables")]:
+        candidate = folder / filename
+        if candidate.exists() and candidate.is_file():
+            return candidate
+    return None
 
-    if not context_str.strip():
+
+
+
+
+def generate_answer_node(state: RAGState) -> dict[str, Any]:
+    """Synthesize a grounded answer using the multimodal vision LLM (llm_vision) passing text, figures, and tables together."""
+    question = state.get("original_question") or state["question"]
+    text_results = state.get("text_results", [])
+    fig_tab_results = state.get("figure_table_results", [])
+
+    if not text_results and not fig_tab_results:
         return {
             "answer": "I could not find sufficient information in the document to answer your question.",
         }
 
     system_prompt = (
-        "You are an expert AI assistant answering questions based on the provided technical document context.\n"
+        "You are an expert AI assistant answering questions based on the provided technical document context (text chunks, figures, and tables).\n"
         "Guidelines:\n"
-        "1. Answer ONLY using the facts, figures, tables, and explanations present in the context below.\n"
+        "1. Answer ONLY using the facts, figures, tables, and explanations present in the context.\n"
         "2. Do NOT extrapolate, speculate, or introduce external knowledge.\n"
         "3. Every factual claim, architecture detail, or numeric result MUST cite its source using: [Source N, Page P].\n"
         "4. When referencing a figure or table, mention its name (e.g. Figure 1, Table 2) and citation [Source N, Page P].\n"
         "5. If the context does not contain enough information, state clearly that the document does not contain the answer."
     )
 
-    user_prompt = f"""Context:
-{context_str}
+    user_blocks: list[Any] = []
+    source_idx = 1
+    max_images = 2
+    attached_images = 0
 
-Question: {question}
+    # 1. Text Chunks (top 4 to stay within rate-limit token budgets)
+    selected_text_results = text_results[:4]
+    if selected_text_results:
+        text_parts = ["Retrieved Text Chunks:"]
+        for item in selected_text_results:
+            chunk_id = item.get("chunk_id", "Unknown")
+            pages = item.get("page_numbers") or []
+            page_str = ", ".join(str(p) for p in pages) if pages else "Unknown"
+            raw_text = item.get("text") or item.get("contextualized_text") or ""
+            text = str(raw_text).strip()
+            text_parts.append(
+                f"[Source {source_idx} | Text Chunk {chunk_id} | Page(s): {page_str}]\n{text}"
+            )
+            source_idx += 1
+        user_blocks.append(TextBlock(text="\n\n".join(text_parts)))
 
-Grounded Answer with [Source N, Page P] citations:"""
+    # 2. Visual Assets (Figures and Tables with cropped images)
+    if fig_tab_results:
+        for item in fig_tab_results:
+            rec_type = item.get("record_type", "visual")
+            rec_id = item.get("record_id", item.get("figure_id", item.get("table_id", "Unknown")))
+            page = item.get("page", "Unknown")
+            caption = str(item.get("caption") or item.get("panel_caption") or "").strip()
+            raw_img_path = item.get("image_path", "")
+            resolved_img = _resolve_image_path(raw_img_path, rec_type)
+
+            if rec_type == "table":
+                table_md = str(item.get("table_markdown", "")).strip()
+                block_content = f"[Source {source_idx} | Table {rec_id} | Page: {page}]\nCaption: {caption}"
+                if table_md:
+                    block_content += f"\nData:\n{table_md}"
+                user_blocks.append(TextBlock(text=block_content))
+                if resolved_img and attached_images < max_images:
+                    user_blocks.append(ImageBlock(path=resolved_img))
+                    attached_images += 1
+            else:
+                block_content = f"[Source {source_idx} | Figure {rec_id} | Page: {page}]\nCaption: {caption}"
+                user_blocks.append(TextBlock(text=block_content))
+                if resolved_img and attached_images < max_images:
+                    user_blocks.append(ImageBlock(path=resolved_img))
+                    attached_images += 1
+            source_idx += 1
+
+    # 3. Question Prompt
+    user_blocks.append(
+        TextBlock(text=f"Question: {question}\n\nGrounded Answer with [Source N, Page P] citations:")
+    )
+
+    messages = [
+        ChatMessage(role=MessageRole.SYSTEM, content=system_prompt),
+        ChatMessage(role=MessageRole.USER, blocks=user_blocks),
+    ]
 
     try:
-        prompt_full = f"{system_prompt}\n\n{user_prompt}"
-        response = llm.complete(prompt_full).text.strip()
+        response = llm_vision.chat(messages).message.content.strip()
     except Exception as exc:
         response = f"An error occurred while generating the answer: {exc}"
 

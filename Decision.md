@@ -417,3 +417,27 @@ This document captures every major architectural, technical, algorithmic, and en
 
 
 
+### Decision 12.9: Deprecation & Purge of Pre-LangGraph Legacy Modules
+- **Context & Problem**: Early prototypes relied on a static, linear pipeline (`answer_generation.py` -> `retrieval_orchestrator.py` -> `map_retrieval_results.py` and `hybrid_retrieval.py`). After migrating to the LangGraph 15-node StateGraph, these files became dead code, creating confusion and polluting repository structure.
+- **Decision**:
+  - Moved `hybrid_retrieve()` into `src/rag/visual_retrieval/search/colpali_retriever.py` to preserve backwards compatibility.
+  - Permanently deleted the 4 dead modules:
+    1. `src/rag/answer_generation.py` (superseded by `generate_answer_node`)
+    2. `src/rag/retrieval_orchestrator.py` (superseded by LangGraph retrieval nodes)
+    3. `src/rag/map_retrieval_results.py` (superseded by native node hydration)
+    4. `src/rag/visual_retrieval/search/hybrid_retrieval.py` (redundant pass-through wrapper)
+  - Eliminates ~556 lines of dead code.
+
+### Decision 12.10: Dedicated Multimodal Vision Model (`llm_vision`) for Answer Generation
+- **Context & Problem**: In earlier iterations, answer generation used a purely textual LLM (`openai/gpt-oss-20b`), feeding figure captions and markdown tables as text. While table markdown captured numbers, diagrams, flowcharts, architectures, and visual graphics could not be inspected directly by the model. Furthermore, passing multiple high-resolution images together can quickly exceed API input token quotas (e.g. Groq on-demand 7,000 ITPM limit).
+- **Decision**:
+  1. **Separation of LLM Roles**:
+     - Fast Text LLM (`llm`, `openai/gpt-oss-20b`): Handles intent routing (`route_query_node`), query rewriting (`rewrite_query_node`), and context relevance grading (`grade_context_node`).
+     - Multimodal Vision LLM (`llm_vision`, `qwen/qwen3.8-27b`): Dedicated exclusively to answer generation in `generate_answer_node`.
+  2. **Direct Unified Multimodal Message Construction**:
+     - `generate_answer_node` bundles retrieved text chunks, structured table markdown, figure captions, and actual cropped PNG images (`ImageBlock`) into a single multimodal `ChatMessage(role=MessageRole.USER, blocks=...)` along with system instructions.
+     - Zero unnecessary intermediate processing: images and text are dispatched directly to the vision model.
+  3. **Robust Asset Resolution & Token Budget Control**:
+     - Implemented `_resolve_image_path` to map legacy chunk paths to canonical visual asset locations (`data/figures/` and `data/tables/`).
+     - Caps attached visual image blocks to the top 2 highest-scoring assets (`max_images = 2`) and text chunks to the top 4 candidates. Subsequent visual assets retain their full captions and markdown table grids in text, ensuring rich context while remaining well under the 7,000 ITPM limit.
+     - Retains rigorous provenance and citation constraints (`[Source N, Page P]`).

@@ -150,6 +150,25 @@ def retrieve_visual_assets(
     return matched_assets[:top_k]
 
 
+def hybrid_retrieve(
+    query: str,
+    top_k: int = 5,
+    candidate_k: int = 10,
+    record_type: str | None = None,
+) -> list[dict[str, Any]]:
+    """Retrieve figures and tables using ColPali visual retrieval.
+
+    Maintains backwards compatibility while delegating directly to
+    ColPali visual page-to-asset mapping.
+    """
+    return retrieve_visual_assets(
+        query=query,
+        top_pages=candidate_k,
+        top_k=top_k,
+        record_type=record_type,
+    )
+
+
 
 
 if __name__ == "__main__":

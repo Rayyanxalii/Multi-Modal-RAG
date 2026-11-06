@@ -42,7 +42,7 @@ graph TD;
     rewrite_query --> route_query
 
     %% Grounded Answer Synthesis
-    grade_context -.->|"Relevant or Max Retries"| generate_answer[9. generate_answer_node<br/>Groq LLM Synthesis with Citations]
+    grade_context -.->|"Relevant or Max Retries"| generate_answer[9. generate_answer_node<br/>Multimodal Vision Synthesis with Citations]
     generate_answer --> __end__([__end__])
 ```
 
@@ -68,6 +68,10 @@ graph TD;
 6. **Resilient Hybrid Fusion (RRF Fault Tolerance)**:
    - Reciprocal Rank Fusion (`reciprocal_rank_fusion` & `text_fusion_node`) seamlessly handles single-retriever execution (dense-only or BM25-only).
    - If either dense vector search or BM25 keyword matching returns 0 results or encounters an error, RRF automatically ranks and outputs the available results without pipeline failure.
+7. **Direct Multimodal Vision Generation (`llm_vision`)**:
+   - Answer generation is powered by a dedicated vision-language model (`qwen/qwen3.8-27b`).
+   - Retrieves text chunks, structured markdown tables, captions, and passes the actual cropped PNG image files directly into the vision model together in a single multimodal message block.
+   - Text LLM (`openai/gpt-oss-20b`) is reserved for low-latency routing, reflection, and grading, keeping the pipeline performant and resilient.
 
 ---
 
@@ -96,9 +100,6 @@ RAG/
 │   │   ├── doc_loader.py                 # PyMuPDF page rendering pipeline
 │   │   ├── docling_parser.py             # IBM Docling layout parsing & hybrid chunking
 │   │   ├── ingest.py                     # Unified multi-stage ingestion CLI pipeline
-│   │   ├── retrieval_orchestrator.py     # Multimodal retrieval orchestrator & eval logging
-│   │   ├── map_retrieval_results.py      # Result hydration & deduplication
-│   │   ├── answer_generation.py          # Grounded multimodal LLM answer generation
 │   │   ├── main.py                       # Main interactive application CLI entrypoint
 │   │   │
 │   │   ├── graph/                        # LangGraph Agentic RAG Subpackage
@@ -122,8 +123,7 @@ RAG/
 │   │       │   ├── table_cropper.py      # Crop table regions from page images
 │   │       │   └── caption_processor.py  # Caption cleaning, multi-panel grouping & filtering
 │   │       └── search/
-│   │           ├── colpali_retriever.py  # ColPali page-to-asset visual retriever (Option A)
-│   │           └── hybrid_retrieval.py   # Orchestrator bridge for visual retrieval
+│   │           └── colpali_retriever.py  # ColPali visual retriever & asset hydration
 │   │
 │   └── services/
 │       ├── __init__.py
@@ -236,11 +236,16 @@ Optional flags:
 
 ### 4. Pure Retrieval Diagnostics (Without Calling LLM)
 
-To inspect retrieval rankings and save evaluation traces to `data/retrieval_runs/`:
+To inspect retrieval rankings directly:
 
-```bash
-python -m rag.retrieval_orchestrator
-```
+* **ColPali Visual Search**:
+  ```bash
+  python -m rag.visual_retrieval.search.colpali_retriever
+  ```
+* **Dense + BM25 Hybrid Fusion (RRF)**:
+  ```bash
+  python -m rag.text_retrieval.hybrid_retriever
+  ```
 
 ---
 

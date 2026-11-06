@@ -23,9 +23,9 @@ class RAGState(TypedDict, total=False):
     # Granular Intermediate Retrieval Artifacts
     dense_matches: list[dict[str, Any]]        # Raw Qdrant vector matches
     bm25_matches: list[dict[str, Any]]         # Raw BM25 keyword matches
-    text_results: list[dict[str, Any]]         # Fused text chunks from text_fusion (RRF)
-    colpali_top_pages: list[dict[str, Any]]    # Top-ranked pages from ColPali MaxSim
-    figure_table_results: list[dict[str, Any]] # Hydrated figures & tables mapped to top pages
+    text_results: list[dict[str, Any]]          # Fused text chunks from text_fusion (RRF)
+    colpali_top_pages: list[dict[str, Any]]     # Top-ranked pages from ColPali MaxSim
+    figure_table_results: list[dict[str, Any]]   # Hydrated figures & tables mapped to top pages
 
     # Formatted Grounding & Self-RAG Reflection
     context_str: str                           # Formatted grounded context for generation
