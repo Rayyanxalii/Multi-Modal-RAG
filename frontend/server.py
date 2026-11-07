@@ -11,7 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from rag.config import DATA_DIR, RAW_DATA_DIR, DEFAULT_PDF_PATH, get_document_paths
-from rag.graph import run_agentic_rag
+from rag.graph import app as rag_app, run_agentic_rag
 from rag.document_manager import list_all_documents, delete_document
 
 app = FastAPI(title="Multimodal Agentic RAG - Sketch Interface")
@@ -129,14 +129,42 @@ def get_document_pages(doc_id: str) -> dict[str, Any]:
     }
 
 
+@app.get("/api/documents/{doc_id}/history")
+def get_document_history(doc_id: str) -> dict[str, Any]:
+    """Retrieve full conversation history stored in the LangGraph checkpointer for this document."""
+    clean_id = (doc_id or "attention").strip().lower()
+    thread_id = f"doc_{clean_id}"
+    config = {"configurable": {"thread_id": thread_id}}
+
+    try:
+        checkpoint_state = rag_app.get_state(config)
+        messages = (
+            checkpoint_state.values.get("chat_history", [])
+            if checkpoint_state and checkpoint_state.values
+            else []
+        )
+    except Exception as exc:
+        print(f"[Warning] Failed to read checkpointer history for {thread_id}: {exc}")
+        messages = []
+
+    return {
+        "status": "success",
+        "doc_id": clean_id,
+        "thread_id": thread_id,
+        "total_messages": len(messages),
+        "messages": messages,
+    }
+
+
 @app.post("/api/chat")
 def submit_question(payload: ChatRequest) -> dict[str, Any]:
-    """Execute question answering via the Multimodal LangGraph agent."""
+    """Execute question answering via the Multimodal LangGraph agent with conversational memory."""
     question = (payload.question or "").strip()
     if not question:
         raise HTTPException(status_code=400, detail="Question cannot be empty.")
 
     doc_id = (payload.doc_id or "attention").strip().lower()
+    thread_id = payload.thread_id or f"doc_{doc_id}"
     pdf_path = RAW_DATA_DIR / f"{doc_id}.pdf"
     if not pdf_path.exists():
         if doc_id == "attention":
@@ -147,7 +175,7 @@ def submit_question(payload: ChatRequest) -> dict[str, Any]:
             pdf_path = matches[0] if matches else DEFAULT_PDF_PATH
 
     try:
-        result = run_agentic_rag(question=question, pdf_path=pdf_path)
+        result = run_agentic_rag(question=question, pdf_path=pdf_path, thread_id=thread_id)
 
         # Normalize image paths in sources for frontend rendering
         sources = result.get("sources", [])
@@ -161,6 +189,7 @@ def submit_question(payload: ChatRequest) -> dict[str, Any]:
         return {
             "status": "success",
             "doc_id": doc_id,
+            "thread_id": thread_id,
             "question": result.get("question", question),
             "rewritten_query": result.get("rewritten_query"),
             "route": result.get("route", "both"),

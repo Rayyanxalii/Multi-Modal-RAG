@@ -1,6 +1,6 @@
 /**
- * Multimodal Agentic RAG — Working Sheet Frontend
- * Handles document switching, taped visual reference mounts, streaming Q&A, and uploads.
+ * Document Research Assistant
+ * Handles document switching, side-by-side inspection, streaming Q&A, and uploads.
  */
 
 let currentDocId = "attention";
@@ -38,7 +38,7 @@ async function loadDocuments() {
 
     docList.innerHTML = "";
     if (!docs || docs.length === 0) {
-      docList.innerHTML = `<li style="font-size: 19px; color: var(--dp-color-ink-muted);">No documents yet.</li>`;
+      docList.innerHTML = `<li style="font-size: 13px; color: var(--dp-color-ink-muted); padding: 8px 4px;">No documents yet.</li>`;
       return;
     }
 
@@ -51,14 +51,14 @@ async function loadDocuments() {
       li.innerHTML = `
         <div class="doc-info" onclick="switchDocument('${doc.doc_id}')">
           <div class="doc-name">${escapeHtml(doc.title || doc.doc_id)}</div>
-          <div class="doc-meta">${doc.pages || 0} pages • ${doc.figures || 0} figs • ${doc.tables || 0} tbls</div>
+          <div class="doc-meta">${doc.pages || 0} pages</div>
         </div>
         ${doc.doc_id !== "attention" ? `
-          <button class="btn-delete-scrap" title="Delete document & chat" onclick="handleDeleteDoc(event, '${doc.doc_id}')" aria-label="Delete ${doc.doc_id}">
+          <button class="btn-delete-scrap" title="Delete document" onclick="handleDeleteDoc(event, '${doc.doc_id}')" aria-label="Delete ${doc.doc_id}">
             ✕
           </button>
         ` : `
-          <span style="font-size: 16px; color: var(--dp-color-annotation); opacity: 0.7;">Default</span>
+          <span style="font-size: 12px; color: var(--dp-color-accent-ink); opacity: 0.85; font-weight: 500;">Default</span>
         `}
       `;
       docList.appendChild(li);
@@ -70,7 +70,7 @@ async function loadDocuments() {
   }
 }
 
-function switchDocument(docId) {
+async function switchDocument(docId) {
   if (docId === currentDocId) return;
 
   // Save current chat stream HTML into cache
@@ -84,21 +84,29 @@ function switchDocument(docId) {
   if (chatHistories[docId]) {
     chatStream.innerHTML = chatHistories[docId];
   } else {
-    chatStream.innerHTML = `
-      <article class="message-entry assistant">
-        <div class="assistant-working-sheet">
-          <div class="assistant-header-meta">
-            <span class="route-pill">ARCHIVE SESSION</span>
-            <span class="reasoning-text">Active document set to "${escapeHtml(docId)}"</span>
-          </div>
-          <div class="answer-body">
-            Switched session context to: <strong>${escapeHtml(docId)}</strong>.
-            <br>
-            All subsequent multimodal queries will isolate retrieval strictly to this paper's text passages, diagrams, and tables.
-          </div>
-        </div>
-      </article>
-    `;
+    // Check if the checkpointer has stored history on the backend
+    try {
+      const res = await fetch(`/api/documents/${docId}/history`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.messages && data.messages.length > 0) {
+          chatStream.innerHTML = "";
+          data.messages.forEach((msg) => {
+            if (msg.role === "user") {
+              appendUserMessage(msg.content);
+            } else if (msg.role === "assistant") {
+              appendAssistantMessage({ answer: msg.content, sources: msg.sources || [] });
+            }
+          });
+        } else {
+          renderInitialGreeting(docId);
+        }
+      } else {
+        renderInitialGreeting(docId);
+      }
+    } catch (err) {
+      renderInitialGreeting(docId);
+    }
   }
 
   // Refresh active styles in list
@@ -118,14 +126,29 @@ function switchDocument(docId) {
   }
 }
 
+function renderInitialGreeting(docId) {
+  const chatStream = document.getElementById("chatStream");
+  chatStream.innerHTML = `
+    <article class="message-entry assistant">
+      <div class="assistant-working-sheet professional-card">
+        <div class="answer-body">
+          Active document: <strong>${escapeHtml(docId)}.pdf</strong>.
+          <br><br>
+          Ask any question regarding this document's text, figures, or tables. Click <strong>"Open Document Beside Chat"</strong> to inspect document pages side-by-side.
+        </div>
+      </div>
+    </article>
+  `;
+}
+
 function updateActiveBadge() {
   const badge = document.getElementById("activeDocBadge");
-  if (badge) badge.textContent = `DOC: ${currentDocId.toUpperCase()}`;
+  if (badge) badge.textContent = `${currentDocId}.pdf`;
 }
 
 async function handleDeleteDoc(event, docId) {
   event.stopPropagation();
-  const confirmed = confirm(`Are you sure you want to delete "${docId}"?\nThis will permanently purge all local figures, chunks, Qdrant vectors, and cloud embeddings.`);
+  const confirmed = confirm(`Are you sure you want to delete "${docId}"?`);
   if (!confirmed) return;
 
   try {
@@ -138,7 +161,7 @@ async function handleDeleteDoc(event, docId) {
       }
       await loadDocuments();
     } else {
-      alert(`Deletion note: ${data.message || "Failed"}`);
+      alert(`Deletion notice: ${data.message || "Failed"}`);
     }
   } catch (err) {
     alert(`Error deleting document: ${err}`);
@@ -171,6 +194,7 @@ function initChatForm() {
         body: JSON.stringify({
           question: query,
           doc_id: currentDocId,
+          thread_id: `doc_${currentDocId}`,
         }),
       });
 
@@ -198,7 +222,6 @@ function appendUserMessage(text) {
   entry.className = "message-entry user";
   entry.innerHTML = `
     <div class="user-thought-scrap">
-      <div class="user-tag">INQUIRY / RESEARCHER</div>
       <div>${escapeHtml(text)}</div>
     </div>
   `;
@@ -211,13 +234,9 @@ function appendThinkingIndicator() {
   const entry = document.createElement("article");
   entry.className = "message-entry assistant";
   entry.innerHTML = `
-    <div class="assistant-working-sheet" style="opacity: 0.85;">
-      <div class="assistant-header-meta">
-        <span class="route-pill">PROCESSING</span>
-        <span class="reasoning-text">Analyzing query intent and executing multi-vector retrieval</span>
-      </div>
-      <div class="answer-body" style="color: var(--dp-color-secondary); font-style: italic;">
-        Consulting text chunks, layout bounding boxes, and visual late-interaction vectors...
+    <div class="assistant-working-sheet professional-card" style="opacity: 0.95;">
+      <div class="answer-body" style="color: var(--dp-color-ink-muted); font-style: italic;">
+        Searching document...
       </div>
     </div>
   `;
@@ -231,10 +250,10 @@ function appendAssistantMessage(data) {
   const entry = document.createElement("article");
   entry.className = "message-entry assistant";
 
-  // Format citations [Source N, Page P] into interactive buttons that jump beside chat
+  // Format citations [Source N, Page P] into clean page reference buttons
   let formattedAnswer = escapeHtml(data.answer || "");
   formattedAnswer = formattedAnswer.replace(/\[Source\s+(\d+),\s*Page\s+(\d+)\]/gi, (match, srcNum, pageNum) => {
-    return `<button type="button" class="citation-highlight-btn" onclick="openAndJumpToPage(${pageNum})" title="Inspect Page ${pageNum} in document view"><span>${match}</span><span style="font-size:11px;">→</span></button>`;
+    return `<button type="button" class="citation-highlight-btn" onclick="openAndJumpToPage(${pageNum})" title="View Page ${pageNum} beside chat"><span class="citation-dot" style="display:inline-block; width:6px; height:6px; border-radius:50%; background:var(--dp-color-accent); margin-right:4px;" aria-hidden="true"></span><span>Page ${pageNum}</span><span class="btn-arrow" style="font-size:13px; margin-left:3px;" aria-hidden="true">→</span></button>`;
   });
 
   // Extract visual sources with images or table markdown
@@ -247,8 +266,7 @@ function appendAssistantMessage(data) {
     visualDeckHtml = `
       <div class="visual-references-deck">
         <div class="deck-label">
-          <span>Figure &amp; Table Evidence</span>
-          <span style="font-family: var(--dp-typography-mono); font-size: 13px; color: var(--dp-color-secondary);">(${visualSources.length} items retrieved)</span>
+          <span>Figures &amp; Tables</span>
         </div>
         <div class="taped-references-grid">
           ${visualSources.map((src) => renderTapedMount(src)).join("")}
@@ -257,15 +275,8 @@ function appendAssistantMessage(data) {
     `;
   }
 
-  const routeName = (data.route || "both").toUpperCase();
-  const reasoning = data.routing_reasoning || "Multimodal context synthesis";
-
   entry.innerHTML = `
-    <div class="assistant-working-sheet">
-      <div class="assistant-header-meta">
-        <span class="route-pill">ROUTE: ${routeName}</span>
-        <span class="reasoning-text">${escapeHtml(reasoning)}</span>
-      </div>
+    <div class="assistant-working-sheet professional-card">
       <div class="answer-body">
         ${formattedAnswer}
       </div>
@@ -276,16 +287,15 @@ function appendAssistantMessage(data) {
   stream.appendChild(entry);
   stream.scrollTop = stream.scrollHeight;
 
-  // Update status badge
   const routeBadge = document.getElementById("routeBadge");
-  if (routeBadge) routeBadge.textContent = `ROUTE: ${routeName}`;
+  if (routeBadge) routeBadge.textContent = (data.route || "both").toUpperCase();
 }
 
 function renderTapedMount(src) {
   const isTable = (src.type || "").toLowerCase() === "table" || !!src.table_markdown;
   const pages = (src.pages || []).join(", ") || "?";
-  const badgeText = isTable ? `TABLE [PAGE ${pages}]` : `FIGURE [PAGE ${pages}]`;
-  const caption = src.caption || src.panel_caption || "Visual asset extracted from document";
+  const badgeText = isTable ? `Table (Page ${pages})` : `Figure (Page ${pages})`;
+  const caption = src.caption || src.panel_caption || "";
   const targetPage = (src.pages && src.pages.length > 0 && parseInt(src.pages[0], 10)) || 1;
 
   let bodyHtml = "";
@@ -299,8 +309,7 @@ function renderTapedMount(src) {
     <div class="taped-mount clickable-mount" onclick="openAndJumpToPage(${targetPage})" title="Click to view Page ${targetPage} beside chat">
       <div class="mount-badge">${escapeHtml(badgeText)}</div>
       ${bodyHtml}
-      <div class="mount-caption">${escapeHtml(caption)}</div>
-      <div class="mount-inspect-hint"><span>INSPECT PAGE ${targetPage} IN DOCUMENT →</span></div>
+      ${caption ? `<div class="mount-caption">${escapeHtml(caption)}</div>` : ""}
     </div>
   `;
 }
@@ -310,11 +319,8 @@ function appendErrorMessage(errText) {
   const entry = document.createElement("article");
   entry.className = "message-entry assistant";
   entry.innerHTML = `
-    <div class="assistant-working-sheet" style="border-top-color: var(--dp-color-ink);">
-      <div class="assistant-header-meta">
-        <span class="route-pill" style="background: var(--dp-color-ink); color: #fff;">SYSTEM NOTICE</span>
-      </div>
-      <div class="answer-body" style="color: var(--dp-color-secondary);">
+    <div class="assistant-working-sheet professional-card" style="border-left: 3px solid var(--dp-color-accent-ink);">
+      <div class="answer-body" style="color: var(--dp-color-accent-ink);">
         ${escapeHtml(errText)}
       </div>
     </div>
@@ -380,7 +386,7 @@ function initUploadModal() {
         switchDocument(result.doc_id);
       }
     } catch (err) {
-      alert(`Error during ingestion: ${err.message || err}`);
+      alert(`Error during upload: ${err.message || err}`);
     } finally {
       progress.style.display = "none";
       btnSubmitUpload.disabled = false;
@@ -481,13 +487,13 @@ async function toggleDocViewer(forceState) {
   if (isDocViewerOpen) {
     column.style.display = "flex";
     btn.classList.add("active");
-    btnText.textContent = "Close Document View";
+    if (btnText) btnText.textContent = "Close Document Viewer";
     container.classList.add("split-mode");
     await loadDocumentPages(currentDocId);
   } else {
     column.style.display = "none";
     btn.classList.remove("active");
-    btnText.textContent = "Open Document Beside Chat";
+    if (btnText) btnText.textContent = "Open Document Beside Chat";
     container.classList.remove("split-mode");
   }
 }
@@ -606,8 +612,8 @@ function renderThumbnails() {
     const chip = document.createElement("button");
     chip.type = "button";
     chip.className = `thumb-chip ${i === currentPage ? "active" : ""}`;
-    chip.textContent = `p. ${i}`;
-    chip.title = `Jump to Page ${i}`;
+    chip.textContent = `P.${i}`;
+    chip.title = `Page ${i}`;
     chip.addEventListener("click", () => goToPage(i));
     strip.appendChild(chip);
   }

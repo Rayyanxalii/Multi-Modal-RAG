@@ -55,16 +55,14 @@ def crop_tables(
                 updated_tables.append(table)
                 continue
 
-            page_image_path = (
-                rendered_pages_dir
-                / f"page_{page_number:04d}.png"
-            )
+            candidate_paths = [
+                rendered_pages_dir / f"page_{page_number:04d}.png",
+                rendered_pages_dir / f"page_{page_number}.png",
+            ]
+            page_image_path = next((p for p in candidate_paths if p.exists()), None)
 
-            if not page_image_path.exists():
-                print(
-                    f"Skipping {table_id}: "
-                    f"{page_image_path.name} not found."
-                )
+            if not page_image_path:
+                print(f"Skipping {table_id}: page {page_number} image not found.")
                 updated_tables.append(table)
                 continue
 

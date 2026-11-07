@@ -94,7 +94,18 @@ def parse_pdf_to_chunks(
 
     # 1. Convert the PDF into a structured document.
     print(f"Parsing PDF: {pdf_path.name}")
-    converter = DocumentConverter()
+    try:
+        from docling.document_converter import PdfFormatOption
+        from docling.datamodel.pipeline_options import PdfPipelineOptions
+        pipeline_options = PdfPipelineOptions()
+        pipeline_options.do_ocr = False  # Skip redundant local RapidOCR on digital PDFs
+        pipeline_options.do_table_structure = True
+        converter = DocumentConverter(
+            format_options={"pdf": PdfFormatOption(pipeline_options=pipeline_options)}
+        )
+    except Exception:
+        converter = DocumentConverter()
+
     result = converter.convert(str(pdf_path))
     document = result.document
 

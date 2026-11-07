@@ -214,13 +214,56 @@ class QueryIntent(BaseModel):
 
 
 
+def contextualize_query(question: str, history: list[dict[str, Any]] | None) -> str:
+    """Reformulate a follow-up query using conversation history into a standalone search query."""
+    if not history:
+        return question
+
+    recent = history[-4:]
+    formatted_history = []
+    for turn in recent:
+        role = "User" if turn.get("role") == "user" else "Assistant"
+        content = str(turn.get("content", "")).strip()
+        if len(content) > 300:
+            content = content[:300] + "..."
+        if content:
+            formatted_history.append(f"{role}: {content}")
+
+    if not formatted_history:
+        return question
+
+    history_str = "\n".join(formatted_history)
+
+    prompt = f"""Given the following conversation history and a follow-up question, rephrase the follow-up question into a clear, standalone search query that contains all necessary entities, subject names, and context from previous turns.
+If the question is already complete, self-contained, or does not refer to previous messages, return the question unchanged. Do not answer the question; output ONLY the reformulated standalone question text.
+
+Conversation History:
+{history_str}
+
+Follow-up Question: {question}
+
+Standalone Question:"""
+
+    try:
+        reformulated = llm.complete(prompt).text.strip()
+        reformulated = reformulated.strip('"').strip("'").strip()
+        if reformulated and len(reformulated) >= 3:
+            return reformulated
+    except Exception as exc:
+        print(f"[Warning] Contextual query reformulation fallback: {exc}")
+    return question
+
+
 def route_query_node(state: RAGState) -> dict[str, Any]:
     """Classify user query intent into 'text', 'visual', or 'both' using LLM structured output.
 
-    Analyzes semantic nuance, metaphors, and implicit references to determine whether
-    retrieval should target textual prose, visual diagrams/tables, or hybrid multimodal.
+    If conversation history is present, first contextualizes follow-up questions to resolve coreferences.
     """
-    question = state["question"].strip()
+    original_q = state.get("original_question") or state["question"].strip()
+    history = state.get("chat_history", [])
+
+    # Resolve follow-up references using short-term conversational memory
+    active_question = contextualize_query(original_q, history)
 
     routing_prompt = f"""You are an expert query router in an advanced multimodal RAG system.
 Analyze the user's question and determine the optimal retrieval route:
@@ -235,7 +278,7 @@ Respond strictly in valid JSON matching this schema:
   "reasoning": "brief one-sentence explanation"
 }}
 
-User Question: {question}
+User Question: {active_question}
 
 Output JSON only:"""
 
@@ -246,6 +289,8 @@ Output JSON only:"""
             data = json.loads(match.group(0))
             intent = QueryIntent.model_validate(data)
             return {
+                "question": active_question,
+                "original_question": original_q,
                 "route": intent.route,
                 "routing_reasoning": intent.reasoning,
             }
@@ -253,6 +298,8 @@ Output JSON only:"""
     except Exception as exc:
         print(f"[Warning] LLM intent routing encountered an error: {exc}. Defaulting route to 'both'.")
         return {
+            "question": active_question,
+            "original_question": original_q,
             "route": "both",
             "routing_reasoning": f"Default fallback to comprehensive multimodal retrieval: {exc}",
         }
@@ -554,20 +601,31 @@ def _resolve_image_path(raw_path: str, record_type: str = "figure") -> Path | No
 
 
 def generate_answer_node(state: RAGState) -> dict[str, Any]:
-    """Synthesize a grounded answer using the multimodal vision LLM (llm_vision) passing text, figures, and tables together."""
+    """Synthesize a grounded answer using the multimodal vision LLM (llm_vision) passing text, figures, tables, and conversation history."""
     question = state.get("original_question") or state["question"]
     text_results = state.get("text_results", [])
     fig_tab_results = state.get("figure_table_results", [])
     is_relevant = state.get("is_relevant", True)
+    chat_history = state.get("chat_history") or []
 
     if not text_results and not fig_tab_results:
+        ans = "I don't have information about that."
         return {
-            "answer": "I don't have information about that.",
+            "answer": ans,
+            "chat_history": [
+                {"role": "user", "content": question},
+                {"role": "assistant", "content": ans},
+            ],
         }
 
     if not is_relevant:
+        ans = "I don't have information about that."
         return {
-            "answer": "I don't have information about that.",
+            "answer": ans,
+            "chat_history": [
+                {"role": "user", "content": question},
+                {"role": "assistant", "content": ans},
+            ],
         }
 
     system_prompt = (
@@ -637,12 +695,29 @@ def generate_answer_node(state: RAGState) -> dict[str, Any]:
 
     messages = [
         ChatMessage(role=MessageRole.SYSTEM, content=system_prompt),
-        ChatMessage(role=MessageRole.USER, blocks=user_blocks),
     ]
+
+    # Prepend up to last 4 conversation messages (2 dialogue turns) as short-term memory context
+    if chat_history:
+        for msg in chat_history[-4:]:
+            role = MessageRole.USER if msg.get("role") == "user" else MessageRole.ASSISTANT
+            content = str(msg.get("content", "")).strip()
+            if content:
+                messages.append(ChatMessage(role=role, content=content))
+
+    messages.append(ChatMessage(role=MessageRole.USER, blocks=user_blocks))
 
     try:
         response = llm_vision.chat(messages).message.content.strip()
     except Exception as exc:
         response = f"An error occurred while generating the answer: {exc}"
 
-    return {"answer": response}
+    new_turn = [
+        {"role": "user", "content": question},
+        {"role": "assistant", "content": response},
+    ]
+
+    return {
+        "answer": response,
+        "chat_history": new_turn,
+    }

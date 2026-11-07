@@ -7,6 +7,7 @@ query reformulation, and grounded answer synthesis.
 
 from pathlib import Path
 from typing import Any, Literal
+from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import StateGraph, START, END
 
 from rag.config import DEFAULT_PDF_PATH
@@ -153,15 +154,19 @@ def build_rag_graph() -> StateGraph:
     return workflow
 
 
-# Compile the graph into a runnable application
-app = build_rag_graph().compile()
+# Checkpointer for session & multi-turn conversational memory
+checkpointer = MemorySaver()
+
+# Compile the graph into a runnable application with checkpointer persistence
+app = build_rag_graph().compile(checkpointer=checkpointer)
 
 
 def run_agentic_rag(
     question: str,
     pdf_path: str | Path | None = None,
+    thread_id: str | None = None,
 ) -> dict[str, Any]:
-    """Execute the full agentic multimodal RAG graph for a user question."""
+    """Execute the full agentic multimodal RAG graph for a user question with conversational memory."""
     question = question.strip()
     if not question:
         return {
@@ -173,6 +178,10 @@ def run_agentic_rag(
         }
 
     target_pdf = str(pdf_path) if pdf_path else str(DEFAULT_PDF_PATH)
+    clean_doc = Path(target_pdf).stem.lower()
+    active_thread = thread_id or f"doc_{clean_doc}"
+
+    config = {"configurable": {"thread_id": active_thread}}
 
     initial_state: RAGState = {
         "question": question,
@@ -181,7 +190,7 @@ def run_agentic_rag(
         "retry_count": 0,
     }
 
-    final_state = app.invoke(initial_state)
+    final_state = app.invoke(initial_state, config=config)
 
     return {
         "question": final_state.get("original_question", question),
@@ -193,4 +202,6 @@ def run_agentic_rag(
         "retry_count": final_state.get("retry_count", 0),
         "is_relevant": final_state.get("is_relevant", True),
         "is_ingested": final_state.get("is_ingested", True),
+        "thread_id": active_thread,
+        "history_length": len(final_state.get("chat_history", [])),
     }

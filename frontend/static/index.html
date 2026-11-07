@@ -3,73 +3,60 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Multimodal Agentic RAG — Research Workspace</title>
+  <title>Document Research Assistant</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400..700;1,400..700&family=IBM+Plex+Mono:ital,wght@0,400;0,500;0,600;1,400&family=Source+Serif+4:ital,opsz,wght@0,8..60,400..700;1,8..60,400..600&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400..700;1,400..700&family=Instrument+Sans:ital,wght@0,400..700;1,400..700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
 
-  <div class="working-sheet-container">
+  <!-- Master Professional Canvas -->
+  <div class="working-sheet-container professional-canvas">
 
     <!-- ====================================================================
-         Sidebar Ledger: Document Index & Session Rail
+         Sidebar Ledger: Document Index
          ==================================================================== -->
-    <aside class="sidebar-ledger" aria-label="Document archive index">
+    <aside class="sidebar-ledger professional-sidebar" aria-label="Document Index">
       <div class="ledger-header">
-        <h2 class="ledger-title">Document Archive</h2>
-        <p class="ledger-subtitle">Multi-Document Sessions</p>
+        <h2 class="ledger-title">Documents</h2>
       </div>
 
       <!-- Action: Upload New PDF -->
-      <button id="btnOpenUpload" class="btn-upload-new" type="button" aria-haspopup="dialog">
-        + Upload Document
+      <button id="btnOpenUpload" class="btn-upload-new professional-btn-outline" type="button" aria-haspopup="dialog">
+        <span>Upload Document</span>
+        <span class="btn-arrow" aria-hidden="true">→</span>
       </button>
 
-      <div class="doc-list-heading">Ingested Papers</div>
       <ul id="docList" class="doc-list" role="listbox" aria-label="Available documents">
         <!-- Dynamically injected document items -->
       </ul>
-
-      <div class="sidebar-footer-meta">
-        <div class="meta-row">
-          <span class="meta-label">ColPali Visual</span>
-          <span class="meta-value">A100 ZeroGPU</span>
-        </div>
-        <div class="meta-row">
-          <span class="meta-label">Late Interaction</span>
-          <span class="meta-value">MaxSim Multi-Vector</span>
-        </div>
-      </div>
     </aside>
 
 
     <!-- ====================================================================
          Main Workspace: Research Canvas
          ==================================================================== -->
-    <main class="workspace-canvas" aria-label="Interactive Research Canvas">
+    <main class="workspace-canvas professional-workspace" aria-label="Research Canvas">
 
-      <!-- Header with Large EB Garamond Title & Status Spine -->
+      <!-- Header -->
       <header class="workspace-header">
         <div class="statement-group">
-          <h1 class="main-title">Multimodal Research Assistant</h1>
-          <p class="statement-notes">
-            Agentic text retrieval, late-interaction page vectors, and high-resolution figure inspection.
-          </p>
+          <h1 class="main-title">Research Assistant</h1>
         </div>
 
         <div class="header-actions-group">
           <!-- Side-by-Side Document Inspection Toggle Button -->
-          <button id="btnToggleDocViewer" class="btn-split-toggle" type="button" aria-expanded="false" title="Toggle document inspection beside conversation">
+          <button id="btnToggleDocViewer" class="btn-split-toggle professional-btn-secondary" type="button" aria-expanded="false" title="Toggle document inspection beside conversation">
             <span id="btnToggleDocViewerText">Open Document Beside Chat</span>
+            <span class="btn-arrow" aria-hidden="true">→</span>
           </button>
 
-          <div class="status-paper-strip">
-            <span class="status-indicator" id="statusDot" aria-hidden="true"></span>
-            <span id="activeDocBadge" class="mono-badge">DOC: ATTENTION</span>
-            <span class="rule-divider" aria-hidden="true">|</span>
-            <span id="routeBadge" class="mono-badge">ROUTE: READY</span>
+          <!-- Status Indicator Pill -->
+          <div class="status-paper-strip professional-status">
+            <span class="status-indicator status-dot" id="statusDot" aria-hidden="true"></span>
+            <span id="activeDocBadge" class="status-badge">attention.pdf</span>
+            <span id="routeBadge" style="display: none;"></span>
           </div>
         </div>
       </header>
@@ -77,86 +64,71 @@
       <!-- Workspace Body: Split Columns (Chat Column + Side-by-Side Document Column) -->
       <div id="workspaceSplit" class="workspace-split-container">
         
-        <!-- Left Pane: Chat Stream & Input -->
-        <section class="chat-column" aria-label="Conversation stream">
-          <!-- Chat History Stream -->
-          <div id="chatStream" class="chat-stream-container" aria-live="polite">
+        <!-- Left Pane: Chat Stream & Query Deck -->
+        <section class="chat-column" aria-label="Conversation stream and inquiry input">
+          
+          <!-- Conversation Stream Surface -->
+          <div id="chatStream" class="chat-stream-container professional-stream" aria-live="polite">
             
-            <!-- Starter Assistant Thought -->
+            <!-- Starter Assistant Overview Module -->
             <article class="message-entry assistant">
-              <div class="assistant-working-sheet">
-                <div class="assistant-header-meta">
-                  <span class="route-pill">SYSTEM ARCHIVE</span>
-                  <span class="reasoning-text">Document indexed and verified for multimodal querying</span>
-                </div>
+              <div class="assistant-working-sheet professional-card">
                 <div class="answer-body">
-                  According to the document, this session is connected to the <em>Attention Is All You Need</em> technical paper.
+                  Ask any question regarding the active document. You can inquire about text passages, figures, diagrams, or tables.
                   <br><br>
-                  The agent answers queries over:
-                  <ul>
-                    <li><strong>Architecture Diagrams:</strong> <em>"Explain the Transformer model architecture shown in Figure 1."</em></li>
-                    <li><strong>Data Tables &amp; Benchmarks:</strong> <em>"What does Table 1 report regarding layer complexity and sequential operations?"</em></li>
-                    <li><strong>Theoretical Formulations:</strong> <em>"Why is scaled dot-product attention scaled by the factor of $\sqrt{d_k}$?"</em></li>
-                  </ul>
-                  <br>
-                  Click <strong>"Open Document Beside Chat"</strong> above (or select any citation <strong>[Source N, Page P]</strong>) to inspect original document pages side-by-side with generated answers.
+                  Click <strong>"Open Document Beside Chat"</strong> above to view document pages side-by-side with answers.
                 </div>
               </div>
             </article>
 
           </div>
 
-          <!-- Input Area & Footer -->
-          <footer class="workspace-footer-ledger">
+          <!-- Input Area -->
+          <footer class="workspace-footer-ledger professional-footer-deck">
             <form id="chatForm" class="input-row-group">
               <input 
                 type="text" 
                 id="questionInput" 
-                class="sketch-input" 
-                placeholder="Ask an analytical question regarding text passages, diagrams, flowcharts, or tables..." 
+                class="sketch-input professional-input" 
+                placeholder="Ask a question about this document..." 
                 autocomplete="off"
                 required
                 aria-label="Ask a question about the active document"
               >
-              <button type="submit" id="btnSubmit" class="btn-sketch-action" aria-label="Send question">
-                <span>Submit Query</span>
-                <span aria-hidden="true">→</span>
+              <button type="submit" id="btnSubmit" class="btn-sketch-action professional-btn-primary" aria-label="Submit question">
+                <span>Submit</span>
+                <span class="btn-arrow" aria-hidden="true">→</span>
               </button>
             </form>
-
-            <div class="footer-annotation">
-              <span class="mono-footer-meta">SOURCE PROVENANCE: MANDATORY GROUNDING</span>
-              <span class="footer-red-note">CITATION: [SOURCE N, PAGE P]</span>
-            </div>
           </footer>
         </section>
 
-        <!-- Right Pane: Side-by-Side Document Viewer -->
-        <section id="docViewerColumn" class="doc-viewer-column" aria-label="Side-by-side Document Inspector" style="display: none;">
-          <div class="doc-viewer-card">
+        <!-- Right Pane: Side-by-Side Document Inspection Pane -->
+        <section id="docViewerColumn" class="doc-viewer-column professional-viewer" aria-label="Document Viewer" style="display: none;">
+          <div class="doc-viewer-card professional-viewer-card">
             
             <!-- Viewer Header with Controls -->
             <div class="viewer-header">
               <div class="viewer-title-group">
                 <h3 id="viewerDocTitle" class="viewer-doc-title">attention.pdf</h3>
-                <span id="viewerPageBadge" class="viewer-page-badge">PAGE 1 / 15</span>
+                <span id="viewerPageBadge" class="viewer-page-badge">Page 1 / 15</span>
               </div>
               <div class="viewer-header-actions">
                 <div class="viewer-tab-switch" role="tablist">
-                  <button id="tabPagesMode" class="btn-viewer-tab active" role="tab" aria-selected="true" type="button">Pages View</button>
-                  <button id="tabPdfMode" class="btn-viewer-tab" role="tab" aria-selected="false" type="button">Native PDF</button>
+                  <button id="tabPagesMode" class="btn-viewer-tab active" role="tab" aria-selected="true" type="button">Pages</button>
+                  <button id="tabPdfMode" class="btn-viewer-tab" role="tab" aria-selected="false" type="button">PDF</button>
                 </div>
-                <button id="btnCloseViewer" class="btn-close-viewer" title="Close Side-by-Side View" aria-label="Close document inspection pane">✕</button>
+                <button id="btnCloseViewer" class="btn-close-viewer" title="Close Viewer" aria-label="Close document viewer">✕</button>
               </div>
             </div>
 
             <!-- Page Navigation & Zoom Toolbar -->
-            <div id="pagesToolbar" class="pages-toolbar">
+            <div id="pagesToolbar" class="pages-toolbar professional-toolbar">
               <div class="toolbar-nav-group">
                 <button id="btnPrevPage" class="btn-toolbar-sketch" type="button" title="Previous Page">← Prev</button>
                 <div class="page-jump-container">
                   <label for="inputPageJump" class="page-jump-label">Page</label>
-                  <input type="number" id="inputPageJump" min="1" max="15" value="1" class="sketch-page-input" aria-label="Jump to page">
+                  <input type="number" id="inputPageJump" min="1" max="15" value="1" class="sketch-page-input professional-page-input" aria-label="Jump to page">
                   <span id="lblTotalPages" class="total-pages-label">/ 15</span>
                 </div>
                 <button id="btnNextPage" class="btn-toolbar-sketch" type="button" title="Next Page">Next →</button>
@@ -171,20 +143,20 @@
             </div>
 
             <!-- High-Res Page View Container -->
-            <div id="pageViewContainer" class="page-view-container">
-              <div id="pageImageWrapper" class="page-image-wrapper">
+            <div id="pageViewContainer" class="page-view-container professional-page-view">
+              <div id="pageImageWrapper" class="page-image-wrapper professional-frame">
                 <img id="viewerPageImg" src="/data/rendered_pages/page_0001.png" alt="Rendered page preview" class="rendered-page-preview">
               </div>
             </div>
 
             <!-- Thumbnail Quick-Jump Strip -->
-            <div id="thumbnailStrip" class="thumbnail-strip" aria-label="Quick page jumps">
+            <div id="thumbnailStrip" class="thumbnail-strip professional-thumb-strip" aria-label="Page thumbnails">
               <!-- Dynamically populated page chips -->
             </div>
 
-            <!-- Native Embedded PDF Container (Shown when tabPdfMode is selected) -->
-            <div id="pdfViewContainer" class="pdf-view-container" style="display: none;">
-              <iframe id="pdfIframe" src="" title="Native PDF Viewer" class="pdf-embed-frame"></iframe>
+            <!-- Native Embedded PDF Container -->
+            <div id="pdfViewContainer" class="pdf-view-container professional-pdf-container" style="display: none;">
+              <iframe id="pdfIframe" src="" title="PDF Viewer" class="pdf-embed-frame"></iframe>
             </div>
 
           </div>
@@ -198,15 +170,15 @@
 
 
   <!-- ====================================================================
-       Modal: Upload New Technical PDF
+       Modal: Upload Document
        ==================================================================== -->
   <div id="uploadModal" class="upload-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
-    <div class="upload-sheet-card">
+    <div class="upload-sheet-card professional-modal-card">
       <div class="modal-header-rule">
-        <h2 id="modalTitle" class="modal-title">Upload Technical Document</h2>
+        <h2 id="modalTitle" class="modal-title">Upload Document</h2>
       </div>
       <p class="modal-description">
-        Accepts PDF documents containing text, diagrams, flowcharts, and tabular data. The pipeline executes automated Docling layout parsing, Qdrant payload indexing, and ColPali visual late-interaction embeddings.
+        Upload a PDF document to ask questions about its text, figures, and tables.
       </p>
 
       <form id="uploadForm">
@@ -215,19 +187,20 @@
           id="pdfFileInput" 
           accept=".pdf" 
           required 
-          class="file-input-mono"
+          class="file-input-mono professional-file-input"
         >
         
-        <div id="uploadProgress" class="upload-progress-mono" style="display: none;">
-          INDEXING DOCUMENT &amp; EXTRACTING MULTIMODAL VECTORS...
+        <div id="uploadProgress" class="upload-progress-mono professional-progress" style="display: none;">
+          Processing document...
         </div>
 
         <div class="modal-actions-row">
-          <button type="button" id="btnCloseUpload" class="btn-mono-secondary">
+          <button type="button" id="btnCloseUpload" class="professional-btn-secondary">
             Cancel
           </button>
-          <button type="submit" id="btnSubmitUpload" class="btn-mono-primary">
-            Upload &amp; Ingest
+          <button type="submit" id="btnSubmitUpload" class="professional-btn-primary">
+            <span>Upload</span>
+            <span class="btn-arrow" aria-hidden="true">→</span>
           </button>
         </div>
       </form>

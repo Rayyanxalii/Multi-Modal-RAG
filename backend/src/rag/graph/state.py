@@ -1,6 +1,7 @@
 """State definition for the Multimodal Agentic RAG workflow."""
 
-from typing import Any, TypedDict
+from typing import Annotated, Any, TypedDict
+import operator
 
 
 class RAGState(TypedDict, total=False):
@@ -9,6 +10,8 @@ class RAGState(TypedDict, total=False):
     Document-agnostic state structure supporting text passages,
     diagrams, charts, figures, structured tables, and automated ingestion.
     """
+    # Conversational Short-Term Memory (Accumulated across multi-turn session)
+    chat_history: Annotated[list[dict[str, Any]], operator.add]
     # Document Input & Ingestion Status
     pdf_path: str                              # Path to source document (e.g., data/raw/attention.pdf)
     doc_name: str                              # Identifier (e.g., "attention")
