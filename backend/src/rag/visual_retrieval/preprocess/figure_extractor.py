@@ -69,6 +69,8 @@ def extract_figures(
     figures_path: Path = FIGURES_PATH,
 ) -> list[dict]:
     """Extract picture elements from the saved Docling document."""
+    if isinstance(document, (str, Path)):
+        document = DoclingDocument.load_from_json(Path(document))
 
     output_dir.mkdir(parents=True, exist_ok=True)
     figures = []
@@ -133,6 +135,8 @@ def extract_tables(
     tables_path: Path = TABLES_PATH,
 ) -> list[dict]:
     """Extract table elements as structured Markdown and metadata."""
+    if isinstance(document, (str, Path)):
+        document = DoclingDocument.load_from_json(Path(document))
 
     tables_path.parent.mkdir(parents=True, exist_ok=True)
     tables = []

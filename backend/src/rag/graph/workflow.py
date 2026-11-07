@@ -17,6 +17,7 @@ from rag.graph.nodes import (
     parse_document_node,
     extract_and_crop_node,
     index_vectors_node,
+    index_colpali_node,
     route_query_node,
     dense_retriever_node,
     bm25_retriever_node,
@@ -74,6 +75,7 @@ def build_rag_graph() -> StateGraph:
     workflow.add_node("parse_document", parse_document_node)
     workflow.add_node("extract_and_crop", extract_and_crop_node)
     workflow.add_node("index_vectors", index_vectors_node)
+    workflow.add_node("index_colpali", index_colpali_node)
 
     # 2. Query Routing Node
     workflow.add_node("route_query", route_query_node)
@@ -112,7 +114,8 @@ def build_rag_graph() -> StateGraph:
     workflow.add_edge("render_pages", "parse_document")
     workflow.add_edge("parse_document", "extract_and_crop")
     workflow.add_edge("extract_and_crop", "index_vectors")
-    workflow.add_edge("index_vectors", "route_query")
+    workflow.add_edge("index_vectors", "index_colpali")
+    workflow.add_edge("index_colpali", "route_query")
 
     # Conditional Branch 2: Intent-based Multi-Modal Retrieval
     workflow.add_conditional_edges(

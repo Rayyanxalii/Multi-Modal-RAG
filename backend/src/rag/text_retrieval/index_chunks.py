@@ -16,13 +16,14 @@ from rag.config import (
 BATCH_SIZE = 16
 
 
-def load_chunks() -> list[dict]:
-    if not CHUNKS_PATH.exists():
+def load_chunks(chunks_path: Path = CHUNKS_PATH) -> list[dict]:
+    chunks_path = Path(chunks_path)
+    if not chunks_path.exists():
         raise FileNotFoundError(
-            f"Chunks file not found: {CHUNKS_PATH}"
+            f"Chunks file not found: {chunks_path}"
         )
 
-    with CHUNKS_PATH.open("r", encoding="utf-8") as file:
+    with chunks_path.open("r", encoding="utf-8") as file:
         chunks = [
             json.loads(line)
             for line in file
@@ -40,19 +41,19 @@ def get_client() -> QdrantClient:
     return QdrantClient(url=url, api_key=api_key)
 
 
-def ensure_collection(client: QdrantClient) -> None:
-    if not client.collection_exists(COLLECTION_NAME):
+def ensure_collection(client: QdrantClient, collection_name: str = COLLECTION_NAME) -> None:
+    if not client.collection_exists(collection_name):
         client.create_collection(
-            collection_name=COLLECTION_NAME,
+            collection_name=collection_name,
             vectors_config=models.VectorParams(
                 size=VECTOR_SIZE,
                 distance=models.Distance.COSINE,
             ),
         )
-        print(f"Created collection: {COLLECTION_NAME}")
+        print(f"Created collection: {collection_name}")
     else:
-        info = client.get_collection(COLLECTION_NAME)
-        print(f"Using existing collection: {COLLECTION_NAME}")
+        info = client.get_collection(collection_name)
+        print(f"Using existing collection: {collection_name}")
 
         vector_config = info.config.params.vectors
         if (
@@ -64,15 +65,29 @@ def ensure_collection(client: QdrantClient) -> None:
                 f"{VECTOR_SIZE}. Inspect the collection config."
             )
 
+    try:
+        client.create_payload_index(
+            collection_name=collection_name,
+            field_name="document_id",
+            field_schema=models.PayloadSchemaType.KEYWORD,
+        )
+    except Exception:
+        pass
 
-def index_chunks() -> None:
-    chunks = load_chunks()
+
+def index_text_chunks(
+    chunks_file_path: Path = CHUNKS_PATH,
+    collection_name: str = COLLECTION_NAME,
+    doc_id: str | None = None,
+) -> int:
+    """Index text chunks into Qdrant vector database with optional document_id filtering."""
+    chunks = load_chunks(chunks_file_path)
     client = get_client()
 
-    ensure_collection(client)
+    ensure_collection(client, collection_name=collection_name)
 
     indexed_count = client.count(
-        collection_name=COLLECTION_NAME,
+        collection_name=collection_name,
         exact=True,
     ).count
 
@@ -107,10 +122,11 @@ def index_chunks() -> None:
                     f"{chunk['chunk_id']}: {len(embedding)}"
                 )
 
+            chunk_doc_id = str(doc_id or chunk.get("document_id") or "default").lower()
             point_id = str(
                 uuid.uuid5(
                     uuid.NAMESPACE_URL,
-                    f"{chunk['document_id']}:{chunk['chunk_id']}",
+                    f"{chunk_doc_id}:{chunk['chunk_id']}",
                 )
             )
 
@@ -119,6 +135,7 @@ def index_chunks() -> None:
                 for key, value in chunk.items()
                 if key not in {"contextualized_text"}
             }
+            payload["document_id"] = chunk_doc_id
             payload["contextualized_text"] = chunk["contextualized_text"]
 
             points.append(
@@ -130,7 +147,7 @@ def index_chunks() -> None:
             )
 
         client.upsert(
-            collection_name=COLLECTION_NAME,
+            collection_name=collection_name,
             points=points,
             wait=True,
         )
@@ -140,9 +157,13 @@ def index_chunks() -> None:
             f"/{len(chunks)} chunks"
         )
 
-    info = client.get_collection(COLLECTION_NAME)
+    info = client.get_collection(collection_name)
     print(f"\nIndexing complete.")
     print(f"Points in collection: {info.points_count}")
+    return len(chunks)
+
+
+index_chunks = index_text_chunks
 
 
 if __name__ == "__main__":

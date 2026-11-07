@@ -13,9 +13,9 @@ if sys.stdout.encoding and sys.stdout.encoding.lower() != "utf-8":
 from rag.graph import run_agentic_rag
 
 
-def run_single(question: str) -> None:
+def run_single(question: str, pdf_path: str | None = None) -> None:
     """Run a question through the LangGraph agent and display grounded results."""
-    result = run_agentic_rag(question)
+    result = run_agentic_rag(question, pdf_path=pdf_path)
     route = result.get("route", "both").capitalize()
     retries = result.get("retry_count", 0)
 
@@ -38,10 +38,11 @@ def run_single(question: str) -> None:
 
 
 
-def run_interactive() -> None:
+def run_interactive(pdf_path: str | None = None) -> None:
     """Run an interactive session where models stay loaded in RAM across queries."""
     print("=" * 65)
     print("Generalized Multi-Modal Agentic RAG Assistant (LangGraph)")
+    print(f"Active Document: {pdf_path or 'attention.pdf'}")
     print("Supports technical documents with text passages, diagrams & tables.")
     print("Type your question below, or type 'exit', 'quit', or 'q' to stop.")
     print("=" * 65)
@@ -59,7 +60,7 @@ def run_interactive() -> None:
             print("Exiting. Goodbye!")
             break
 
-        run_single(question)
+        run_single(question, pdf_path=pdf_path)
 
 
 
@@ -71,6 +72,12 @@ def main():
         type=str,
         default=None,
         help="Optional single question to ask. If omitted, starts interactive session.",
+    )
+    parser.add_argument(
+        "--pdf", "-p",
+        type=str,
+        default=None,
+        help="Optional path to custom PDF document (defaults to data/raw/attention.pdf).",
     )
     parser.add_argument(
         "--visualize",
@@ -87,9 +94,9 @@ def main():
         return
 
     if args.question:
-        run_single(args.question)
+        run_single(args.question, pdf_path=args.pdf)
     else:
-        run_interactive()
+        run_interactive(pdf_path=args.pdf)
 
 
 

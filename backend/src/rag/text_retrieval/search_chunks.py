@@ -14,7 +14,7 @@ def get_client() -> QdrantClient:
     return QdrantClient(url=url, api_key=api_key)
 
 
-def search_chunks(question: str, top_k: int = 5) -> list[dict]:
+def search_chunks(question: str, top_k: int = 5, doc_id: str | None = None) -> list[dict]:
     if not question.strip():
         raise ValueError("Question cannot be empty.")
 
@@ -30,10 +30,24 @@ def search_chunks(question: str, top_k: int = 5) -> list[dict]:
     )
     query_embedding = response["embeddings"][0]
 
+    # Optional filter by document_id
+    query_filter = None
+    if doc_id:
+        from qdrant_client import models
+        query_filter = models.Filter(
+            must=[
+                models.FieldCondition(
+                    key="document_id",
+                    match=models.MatchValue(value=str(doc_id).lower()),
+                )
+            ]
+        )
+
     # 2. Retrieve the closest vectors from Qdrant.
     response = client.query_points(
         collection_name=COLLECTION_NAME,
         query=query_embedding,
+        query_filter=query_filter,
         limit=top_k,
         with_payload=True,
     )

@@ -89,8 +89,8 @@ def check_doc_status_node(state: RAGState) -> dict[str, Any]:
         and doc_paths["chunks_path"].stat().st_size > 0
     )
     figures_exist = (
-        doc_paths["figures_jsonl"].exists()
-        or (doc_paths["chunks_dir"] / f"{doc_paths['doc_name']}_figures_cleaned.jsonl").exists()
+        doc_paths["figures_raw_jsonl"].exists()
+        or doc_paths["figures_cleaned"].exists()
     )
 
     is_ingested = bool(rendered_pages_exist and chunks_exist and figures_exist)
@@ -106,8 +106,9 @@ def render_pages_node(state: RAGState) -> dict[str, Any]:
     """Render PDF pages into high-resolution images via PyMuPDF."""
     from rag.doc_loader import render_pdf_to_images
     pdf_path = Path(state.get("pdf_path") or DEFAULT_PDF_PATH)
+    doc_paths = get_document_paths(pdf_path)
     print(f"[Ingestion] Rendering pages for: {pdf_path.name}")
-    render_pdf_to_images(pdf_path)
+    render_pdf_to_images(pdf_path, output_dir=doc_paths["rendered_pages_dir"])
     return {}
 
 
@@ -115,8 +116,9 @@ def parse_document_node(state: RAGState) -> dict[str, Any]:
     """Parse PDF layout hierarchy & extract text chunks via IBM Docling."""
     from rag.docling_parser import parse_pdf_to_chunks
     pdf_path = Path(state.get("pdf_path") or DEFAULT_PDF_PATH)
+    doc_paths = get_document_paths(pdf_path)
     print(f"[Ingestion] Parsing document layout: {pdf_path.name}")
-    parse_pdf_to_chunks(pdf_path)
+    parse_pdf_to_chunks(pdf_path, doc_paths=doc_paths)
     return {}
 
 
@@ -132,24 +134,27 @@ def extract_and_crop_node(state: RAGState) -> dict[str, Any]:
 
     print(f"[Ingestion] Extracting & cropping visual assets for: {doc_name}")
     extract_figures(
-        document_json_path=doc_paths["document_json_path"],
-        figures_jsonl_path=doc_paths["figures_jsonl"],
+        document=doc_paths["document_json_path"],
         doc_name=doc_name,
+        output_dir=doc_paths["figures_dir"],
+        figures_path=doc_paths["figures_raw_jsonl"],
     )
     extract_tables(
-        document_json_path=doc_paths["document_json_path"],
-        tables_jsonl_path=doc_paths["tables_jsonl"],
+        document=doc_paths["document_json_path"],
         doc_name=doc_name,
+        tables_path=doc_paths["tables_jsonl"],
     )
     crop_figures(
-        figures_jsonl_path=doc_paths["figures_jsonl"],
-        rendered_pages_dir=doc_paths["rendered_pages_dir"],
+        pdf_path=pdf_path,
+        figures_jsonl=doc_paths["figures_raw_jsonl"],
         output_dir=doc_paths["figures_dir"],
+        rendered_pages_dir=doc_paths["rendered_pages_dir"],
     )
     crop_tables(
-        tables_jsonl_path=doc_paths["tables_jsonl"],
-        rendered_pages_dir=doc_paths["rendered_pages_dir"],
+        pdf_path=pdf_path,
+        tables_jsonl=doc_paths["tables_jsonl"],
         output_dir=doc_paths["tables_dir"],
+        rendered_pages_dir=doc_paths["rendered_pages_dir"],
     )
     return {}
 
@@ -159,12 +164,33 @@ def index_vectors_node(state: RAGState) -> dict[str, Any]:
     from rag.text_retrieval.index_chunks import index_text_chunks
     pdf_path = Path(state.get("pdf_path") or DEFAULT_PDF_PATH)
     doc_paths = get_document_paths(pdf_path)
+    doc_name = doc_paths["doc_name"]
 
-    print(f"[Ingestion] Indexing text chunks into Qdrant: {TEXT_COLLECTION_NAME}")
+    print(f"[Ingestion] Indexing text chunks into Qdrant: {TEXT_COLLECTION_NAME} (doc_id={doc_name})")
     index_text_chunks(
         chunks_file_path=doc_paths["chunks_path"],
         collection_name=TEXT_COLLECTION_NAME,
+        doc_id=doc_name,
     )
+    return {}
+
+
+def index_colpali_node(state: RAGState) -> dict[str, Any]:
+    """Send rendered page images to Hugging Face ZeroGPU Space to index visual embeddings."""
+    from rag.visual_retrieval.colpali_client import get_colpali_cloud_client
+    pdf_path = Path(state.get("pdf_path") or DEFAULT_PDF_PATH)
+    doc_paths = get_document_paths(pdf_path)
+    doc_name = doc_paths["doc_name"]
+
+    page_images = sorted(list(doc_paths["rendered_pages_dir"].glob("*.png")))
+    if page_images:
+        print(f"[Ingestion] Registering {len(page_images)} pages with ColPali Cloud Space for '{doc_name}'...")
+        try:
+            client = get_colpali_cloud_client()
+            client.index_document(doc_id=doc_name, image_paths=page_images)
+        except Exception as exc:
+            print(f"[Warning] ColPali Cloud indexing encountered error: {exc}")
+
     return {"is_ingested": True}
 
 
@@ -239,8 +265,9 @@ Output JSON only:"""
 def dense_retriever_node(state: RAGState) -> dict[str, Any]:
     """Execute dense semantic vector search via Qdrant & nomic-embed-text."""
     query = state["question"].strip()
+    doc_id = state.get("doc_name")
     try:
-        results = search_chunks(query, top_k=5)
+        results = search_chunks(query, top_k=5, doc_id=doc_id)
     except Exception as exc:
         print(f"[Warning] Dense retriever error: {exc}")
         results = []
@@ -249,10 +276,12 @@ def dense_retriever_node(state: RAGState) -> dict[str, Any]:
 
 def bm25_retriever_node(state: RAGState) -> dict[str, Any]:
     """Execute keyword BM25 retrieval over document chunk headings."""
+    from rag.text_retrieval.bm25_retriever import search_bm25
     query = state["question"].strip()
+    pdf_path = Path(state.get("pdf_path") or DEFAULT_PDF_PATH)
+    doc_paths = get_document_paths(pdf_path)
     try:
-        chunks, heading_bm25 = _get_bm25_index()
-        results = search_headings(query=query, chunks=chunks, heading_bm25=heading_bm25, top_k=5)
+        results = search_bm25(query=query, top_k=5, chunks_path=doc_paths["chunks_path"])
     except Exception as exc:
         print(f"[Warning] BM25 retriever error: {exc}")
         results = []
@@ -279,13 +308,25 @@ def text_fusion_node(state: RAGState) -> dict[str, Any]:
 def colpali_retriever_node(state: RAGState) -> dict[str, Any]:
     """Execute ColPali multi-vector late-interaction MaxSim search over page images."""
     query = state["question"].strip()
+    pdf_path = Path(state.get("pdf_path") or DEFAULT_PDF_PATH)
+    doc_paths = get_document_paths(pdf_path)
+    doc_name = doc_paths["doc_name"]
+
+    page_results = []
     try:
-        retriever = get_colpali_retriever()
-        top_pages = min(5, len(retriever.page_names))
-        page_results = retriever.search(query=query, top_k=top_pages)
+        retriever = get_colpali_retriever(use_cloud=True)
+        page_results = retriever.search(query=query, top_k=5, doc_id=doc_name)
     except Exception as exc:
-        print(f"[Warning] ColPali retriever error: {exc}")
-        page_results = []
+        print(f"[Warning] ColPali cloud retriever error: {exc}")
+
+    # Fallback to local precomputed embeddings if cloud returned empty and local file exists
+    if not page_results and doc_paths["colpali_embeddings_path"].exists():
+        print(f"[ColPali] Falling back to local embeddings for '{doc_name}'...")
+        try:
+            local_retriever = get_colpali_retriever(use_cloud=False)
+            page_results = local_retriever.search(query=query, top_k=5, doc_id=doc_name)
+        except Exception as exc:
+            print(f"[Warning] Local ColPali fallback failed: {exc}")
 
     return {"colpali_top_pages": page_results}
 
@@ -297,16 +338,20 @@ def visual_hydration_node(state: RAGState) -> dict[str, Any]:
     if not page_results:
         return {"figure_table_results": []}
 
+    pdf_path = Path(state.get("pdf_path") or DEFAULT_PDF_PATH)
+    doc_paths = get_document_paths(pdf_path)
+
     page_rankings: dict[int, dict[str, Any]] = {}
     for res in page_results:
         try:
-            page_num = extract_page_number(res["page"])
+            page_num = res.get("page_number") or extract_page_number(res["page"])
             page_rankings[page_num] = res
         except Exception:
             continue
 
-    figures = load_jsonl(FIGURES_CLEANED_JSONL) if FIGURES_CLEANED_JSONL.exists() else []
-    tables = load_jsonl(TABLES_JSONL) if TABLES_JSONL.exists() else []
+    figures_file = doc_paths["figures_cleaned"] if doc_paths["figures_cleaned"].exists() else doc_paths["figures_raw_jsonl"]
+    figures = load_jsonl(figures_file) if figures_file.exists() else []
+    tables = load_jsonl(doc_paths["tables_jsonl"]) if doc_paths["tables_jsonl"].exists() else []
 
     matched_assets: list[dict[str, Any]] = []
 

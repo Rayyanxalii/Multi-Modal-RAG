@@ -70,23 +70,30 @@ def get_chunk_metadata(chunk: Any) -> dict:
     }
 
 
-def create_chunks(
+def parse_pdf_to_chunks(
     pdf_path: Path = DEFAULT_PDF_PATH,
-    output_dir: Path = CHUNKS_DIR,
-    document_json_path: Path = DOCUMENT_JSON_PATH,
-    markdown_path: Path = PARSED_MD_PATH,
-    chunks_path: Path = TEXT_CHUNKS_PATH,
+    doc_paths: dict | None = None,
 ) -> list[dict]:
+    """Parse document layout via IBM Docling and chunk using HybridChunker."""
+    pdf_path = Path(pdf_path)
     if not pdf_path.exists():
         raise FileNotFoundError(
             f"PDF not found: {pdf_path.resolve()}"
         )
 
+    if doc_paths is None:
+        from rag.config import get_document_paths
+        doc_paths = get_document_paths(pdf_path)
+
+    output_dir = doc_paths["chunks_dir"]
+    document_json_path = doc_paths["document_json_path"]
+    markdown_path = doc_paths["parsed_md"]
+    chunks_path = doc_paths["chunks_path"]
+
     output_dir.mkdir(parents=True, exist_ok=True)
 
     # 1. Convert the PDF into a structured document.
     print(f"Parsing PDF: {pdf_path.name}")
-
     converter = DocumentConverter()
     result = converter.convert(str(pdf_path))
     document = result.document
@@ -109,7 +116,7 @@ def create_chunks(
 
         chunk_data = {
             "chunk_id": f"{pdf_path.stem}_{index:04d}",
-            "document_id": pdf_path.stem,
+            "document_id": pdf_path.stem.lower(),
             "file_name": pdf_path.name,
             "chunk_index": index,
             **metadata,
@@ -129,6 +136,22 @@ def create_chunks(
     print(f"Chunks saved to: {chunks_path}")
 
     return chunks
+
+
+def create_chunks(
+    pdf_path: Path = DEFAULT_PDF_PATH,
+    output_dir: Path = CHUNKS_DIR,
+    document_json_path: Path = DOCUMENT_JSON_PATH,
+    markdown_path: Path = PARSED_MD_PATH,
+    chunks_path: Path = TEXT_CHUNKS_PATH,
+) -> list[dict]:
+    doc_paths = {
+        "chunks_dir": output_dir,
+        "document_json_path": document_json_path,
+        "parsed_md": markdown_path,
+        "chunks_path": chunks_path,
+    }
+    return parse_pdf_to_chunks(pdf_path, doc_paths=doc_paths)
 
 
 def main():

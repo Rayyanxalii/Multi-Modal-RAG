@@ -3,10 +3,6 @@ from pathlib import Path
 from functools import lru_cache
 import torch
 
-# Use cached models without making blocking network calls
-os.environ.setdefault("HF_HUB_OFFLINE", "1")
-os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
-
 from sentence_transformers import MultiVectorEncoder
 
 from rag.config import COLPALI_EMBEDDINGS_PATH as EMBEDDINGS_PATH
@@ -58,6 +54,7 @@ class ColPaliRetriever:
         self,
         query: str,
         top_k: int = 5,
+        doc_id: str = "attention",
     ) -> list[dict]:
         """Search precomputed page embeddings for the query."""
 
@@ -92,8 +89,16 @@ class ColPaliRetriever:
         ]
 
 
-@lru_cache(maxsize=1)
-def get_colpali_retriever() -> ColPaliRetriever:
+@lru_cache(maxsize=4)
+def get_colpali_retriever(use_cloud: bool = True):
+    """Return ColPali retriever, prioritizing cloud HF Space if configured."""
+    if use_cloud and os.getenv("COLPALI_SPACE"):
+        try:
+            from rag.visual_retrieval.colpali_client import get_colpali_cloud_client
+            return get_colpali_cloud_client()
+        except Exception as exc:
+            print(f"[ColPali] Cloud client failed to load: {exc}. Falling back to local.")
+
     return ColPaliRetriever(
         embeddings_path=EMBEDDINGS_PATH
     )

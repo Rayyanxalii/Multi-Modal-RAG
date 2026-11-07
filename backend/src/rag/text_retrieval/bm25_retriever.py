@@ -3,16 +3,18 @@ import re
 from pathlib import Path
 from rank_bm25 import BM25Okapi
 
+from functools import lru_cache
 from rag.config import TEXT_CHUNKS_PATH as CHUNKS_PATH
 
 
-def load_chunks() -> list[dict]:
-    if not CHUNKS_PATH.exists():
+def load_chunks(chunks_path: Path = CHUNKS_PATH) -> list[dict]:
+    chunks_path = Path(chunks_path)
+    if not chunks_path.exists():
         raise FileNotFoundError(
-            f"Chunks file not found: {CHUNKS_PATH}"
+            f"Chunks file not found: {chunks_path}"
         )
 
-    with CHUNKS_PATH.open("r", encoding="utf-8") as file:
+    with chunks_path.open("r", encoding="utf-8") as file:
         chunks = [
             json.loads(line)
             for line in file
@@ -100,3 +102,23 @@ def search_headings(
             break
 
     return results
+
+
+@lru_cache(maxsize=16)
+def get_bm25_index_for_file(file_path_str: str):
+    """Cache parsed chunks and BM25 index per document file path."""
+    chunks = load_chunks(Path(file_path_str))
+    body_bm25, heading_bm25 = build_field_indexes(chunks)
+    return chunks, body_bm25, heading_bm25
+
+
+def search_bm25(query: str, top_k: int = 5, chunks_path: Path | None = None) -> list[dict]:
+    """Search chunks for a specific document using BM25."""
+    p = Path(chunks_path or CHUNKS_PATH)
+    if not p.exists():
+        return []
+    chunks, _, heading_bm25 = get_bm25_index_for_file(str(p.resolve()))
+    try:
+        return search_headings(query, chunks, heading_bm25, top_k=top_k)
+    except Exception:
+        return []

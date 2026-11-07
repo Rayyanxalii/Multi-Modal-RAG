@@ -64,20 +64,38 @@ def get_document_paths(pdf_path: Path | str | None = None) -> dict[str, Any]:
     else:
         p = Path(pdf_path)
 
-    doc_id = p.stem
+    doc_id = p.stem.lower()
+
+    # Document-namespaced directories for visual assets
+    if doc_id == "attention":
+        rendered_pages_dir = RENDERED_PAGES_DIR
+        figures_dir = FIGURES_DIR
+        tables_dir = TABLES_DIR
+    else:
+        rendered_pages_dir = RENDERED_PAGES_DIR / doc_id
+        figures_dir = FIGURES_DIR / doc_id
+        tables_dir = TABLES_DIR / doc_id
+
+    # Cleaned figures preference
+    cleaned_fig = CHUNKS_DIR / f"{doc_id}_figures_cleaned.jsonl"
+    raw_fig = CHUNKS_DIR / f"{doc_id}_figures.jsonl"
+    figures_jsonl = cleaned_fig if cleaned_fig.exists() else raw_fig
+
     return {
         "pdf_path": p,
         "doc_id": doc_id,
         "doc_name": doc_id,
         "chunks_dir": CHUNKS_DIR,
-        "rendered_pages_dir": RENDERED_PAGES_DIR,
-        "figures_dir": FIGURES_DIR,
-        "tables_dir": TABLES_DIR,
+        "rendered_pages_dir": rendered_pages_dir,
+        "figures_dir": figures_dir,
+        "tables_dir": tables_dir,
         "chunks_path": CHUNKS_DIR / f"{doc_id}_chunks.jsonl",
         "document_json": CHUNKS_DIR / f"{doc_id}_document.json",
         "document_json_path": CHUNKS_DIR / f"{doc_id}_document.json",
         "parsed_md": CHUNKS_DIR / f"{doc_id}_parsed.md",
-        "figures_jsonl": CHUNKS_DIR / f"{doc_id}_figures.jsonl",
-        "figures_cleaned": CHUNKS_DIR / f"{doc_id}_figures_cleaned.jsonl",
+        "figures_jsonl": figures_jsonl,
+        "figures_raw_jsonl": raw_fig,
+        "figures_cleaned": cleaned_fig,
         "tables_jsonl": CHUNKS_DIR / f"{doc_id}_tables.jsonl",
+        "colpali_embeddings_path": EMBEDDINGS_DIR / f"{doc_id}.pt",
     }
