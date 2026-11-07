@@ -70,10 +70,14 @@ def retrieve_visual_assets(
 
     # 1. Run ColPali page search
     retriever = get_colpali_retriever()
-    page_results = retriever.search(
-        query=query.strip(),
-        top_k=min(top_pages, len(retriever.page_names)),
-    )
+    try:
+        page_results = retriever.search(
+            query=query.strip(),
+            top_k=top_pages,
+        )
+    except Exception as exc:
+        print(f"[Visual Retrieval] ColPali search encountered exception: {exc}")
+        page_results = []
 
     # Map page number to ColPali ranking metadata
     page_rankings: dict[int, dict[str, Any]] = {}
@@ -134,6 +138,48 @@ def retrieve_visual_assets(
                     "bounding_boxes": tab.get("bounding_boxes", []),
                     "item_type": tab.get("item_type", "TableItem"),
                 })
+
+    # Fallback if ColPali returns 0 assets (e.g. cloud ZeroGPU rate-limit or network timeout)
+    if not matched_assets:
+        query_words = set(re.findall(r"\w+", query.lower()))
+        if record_type in (None, "figure"):
+            for fig in figures:
+                fig_text = f"{fig.get('figure_id', '')} {fig.get('caption', '')} {fig.get('panel_caption', '')}".lower()
+                matches = sum(1 for w in query_words if len(w) > 2 and w in fig_text)
+                if matches > 0:
+                    fig_page = fig.get("page_number") or (fig.get("page_numbers") or [1])[0]
+                    matched_assets.append({
+                        "record_type": "figure",
+                        "record_id": fig.get("figure_id", "unknown_fig"),
+                        "figure_id": fig.get("figure_id", "unknown_fig"),
+                        "page": fig_page,
+                        "colpali_rank": 99,
+                        "colpali_score": float(matches),
+                        "caption": fig.get("caption") or "",
+                        "panel_caption": fig.get("panel_caption") or "",
+                        "image_path": fig.get("image_path", ""),
+                        "bounding_boxes": fig.get("bounding_boxes", []),
+                        "item_type": fig.get("item_type", "PictureItem"),
+                    })
+        if record_type in (None, "table"):
+            for tab in tables:
+                tab_text = f"{tab.get('table_id', '')} {tab.get('caption', '')} {tab.get('table_markdown', '')}".lower()
+                matches = sum(1 for w in query_words if len(w) > 2 and w in tab_text)
+                if matches > 0:
+                    tab_page = tab.get("page_number") or (tab.get("page_numbers") or [1])[0]
+                    matched_assets.append({
+                        "record_type": "table",
+                        "record_id": tab.get("table_id", "unknown_tab"),
+                        "table_id": tab.get("table_id", "unknown_tab"),
+                        "page": tab_page,
+                        "colpali_rank": 99,
+                        "colpali_score": float(matches),
+                        "caption": tab.get("caption") or "",
+                        "table_markdown": tab.get("table_markdown") or "",
+                        "image_path": tab.get("image_path", ""),
+                        "bounding_boxes": tab.get("bounding_boxes", []),
+                        "item_type": tab.get("item_type", "TableItem"),
+                    })
 
     # 5. Sort by ColPali page rank, then highest ColPali score
     matched_assets.sort(

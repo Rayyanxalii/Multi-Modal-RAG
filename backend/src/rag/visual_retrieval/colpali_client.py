@@ -4,6 +4,9 @@ import os
 from pathlib import Path
 from typing import Any
 from functools import lru_cache
+from dotenv import load_dotenv
+
+load_dotenv(override=True)
 
 try:
     from gradio_client import Client, handle_file
@@ -22,8 +25,14 @@ class ColPaliCloudClient:
             self.space_name = f"https://{user}-{repo}.hf.space"
         else:
             self.space_name = target
-        self.hf_token = hf_token or os.getenv("HF_TOKEN")
+        raw_token = hf_token or os.getenv("HF_TOKEN")
+        self.hf_token = raw_token.strip().strip("'\"") if raw_token else None
         self._client = None
+
+    @property
+    def page_names(self) -> list[str]:
+        """Virtual page names for backwards compatibility."""
+        return [f"page_{i}" for i in range(1, 100)]
 
     @property
     def client(self):
@@ -53,8 +62,8 @@ class ColPaliCloudClient:
         files = [handle_file(str(p)) for p in sorted(image_paths)]
 
         result = self.client.predict(
-            new_doc_id=doc_id,
-            upload_pages=files,
+            doc_id=doc_id,
+            image_files=files,
             api_name="/index",
         )
         print(f"[ColPali Cloud] Indexing complete: {result}")
@@ -84,7 +93,11 @@ class ColPaliCloudClient:
                 )
                 break
             except Exception as exc:
-                print(f"[ColPali Cloud] Search attempt {attempt}/3 failed: {exc}")
+                exc_str = str(exc)
+                print(f"[ColPali Cloud] Search attempt {attempt}/3 failed: {exc_str}")
+                if "ZeroGPU runs limit" in exc_str:
+                    print("[ColPali Cloud] Notice: ZeroGPU quota limit reached. Falling back to local layout search. Add HF_TOKEN in .env for unlimited quota.")
+                    break
                 if attempt < 3:
                     import time
                     time.sleep(1.5)
