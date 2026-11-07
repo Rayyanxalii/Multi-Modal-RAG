@@ -84,7 +84,42 @@ def main():
         action="store_true",
         help="Generate and save the LangGraph workflow image and Mermaid file.",
     )
+    parser.add_argument(
+        "--list",
+        action="store_true",
+        help="List all currently ingested documents in the system.",
+    )
+    parser.add_argument(
+        "--delete",
+        type=str,
+        default=None,
+        help="Purge all assets, vectors, and cloud embeddings for a document ID.",
+    )
     args = parser.parse_args()
+
+    if args.list:
+        from rag.document_manager import list_all_documents
+        docs = list_all_documents()
+        print("\n" + "=" * 65)
+        print("INGESTED DOCUMENTS IN THE SYSTEM:")
+        print("=" * 65)
+        if not docs:
+            print("No documents ingested yet.")
+        for d in docs:
+            print(f"- [{d['doc_id']}] {d['title']}: {d['pages']} pages | {d['chunks']} chunks | {d['figures']} figures | {d['tables']} tables")
+        print("=" * 65)
+        return
+
+    if args.delete:
+        from rag.document_manager import delete_document
+        res = delete_document(args.delete, delete_raw_pdf=True)
+        print(f"\nDeletion result for '{args.delete}': {res.get('status').upper()}")
+        for item in res.get("deleted_items", []):
+            print(f"  ✓ {item}")
+        for err in res.get("errors", []):
+            print(f"  ✗ {err}")
+        print()
+        return
 
     if args.visualize:
         from rag.graph.visualize import save_graph_artifacts

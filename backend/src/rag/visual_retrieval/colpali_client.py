@@ -121,6 +121,17 @@ class ColPaliCloudClient:
             print(f"[ColPali Cloud] Failed to list documents: {exc}")
             return []
 
+    def delete_document(self, doc_id: str) -> dict[str, Any]:
+        """Delete document embeddings on the remote Space."""
+        doc_id = (doc_id or "").strip().lower()
+        if not doc_id:
+            return {"status": "error", "message": "doc_id cannot be empty"}
+        try:
+            return self.client.predict(doc_id=doc_id, api_name="/delete")
+        except Exception as exc:
+            print(f"[ColPali Cloud] Failed to delete document '{doc_id}': {exc}")
+            return {"status": "error", "message": str(exc)}
+
 
 @lru_cache(maxsize=1)
 def get_colpali_cloud_client() -> ColPaliCloudClient:
