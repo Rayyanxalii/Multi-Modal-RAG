@@ -306,27 +306,18 @@ def text_fusion_node(state: RAGState) -> dict[str, Any]:
 
 
 def colpali_retriever_node(state: RAGState) -> dict[str, Any]:
-    """Execute ColPali multi-vector late-interaction MaxSim search over page images."""
+    """Execute ColPali multi-vector late-interaction MaxSim search via Hugging Face Space."""
     query = state["question"].strip()
     pdf_path = Path(state.get("pdf_path") or DEFAULT_PDF_PATH)
     doc_paths = get_document_paths(pdf_path)
     doc_name = doc_paths["doc_name"]
 
-    page_results = []
     try:
-        retriever = get_colpali_retriever(use_cloud=True)
+        retriever = get_colpali_retriever()
         page_results = retriever.search(query=query, top_k=5, doc_id=doc_name)
     except Exception as exc:
-        print(f"[Warning] ColPali cloud retriever error: {exc}")
-
-    # Fallback to local precomputed embeddings if cloud returned empty and local file exists
-    if not page_results and doc_paths["colpali_embeddings_path"].exists():
-        print(f"[ColPali] Falling back to local embeddings for '{doc_name}'...")
-        try:
-            local_retriever = get_colpali_retriever(use_cloud=False)
-            page_results = local_retriever.search(query=query, top_k=5, doc_id=doc_name)
-        except Exception as exc:
-            print(f"[Warning] Local ColPali fallback failed: {exc}")
+        print(f"[Warning] ColPali cloud search error: {exc}")
+        page_results = []
 
     return {"colpali_top_pages": page_results}
 
