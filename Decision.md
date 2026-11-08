@@ -836,3 +836,24 @@ This document captures every major architectural, technical, algorithmic, and en
   2. **Client-Side Self-Healing (`frontend/static/app.js`)**: Updated `renderTapedMount` to automatically detect legacy `/data/src/pdf/...` patterns or missing `web_image_url` and reconstruct `/data/figures/${filename}` or `/data/tables/${filename}` directly in the browser.
   3. **Visual Quality Enhancement (`frontend/static/style.css`)**: Removed destructive `filter: grayscale(100%) contrast(108%)` from `.mount-image` and increased `max-height` to `380px` so technical diagrams, model architectures, and flowcharts display with crisp clarity and full visual fidelity.
 - **Outcome**: Figures and tables render reliably and immediately in the visual references deck across all document sessions.
+
+
+---
+
+## 31. Elimination of Verbose Meta-Explanations for Unanswerable Queries
+
+### Decision 31.1: Strict Single-Sentence Unanswerable Standard & Provenance Purging
+- **Context & Problem**: When asked about a topic absent from the active document (e.g. *"what is random forest?"* while reading *Attention Is All You Need*), the LLM responded with a verbose multi-paragraph meta-explanation:
+  > *"I don't have information about that in the document. The provided text chunks exclusively discuss the Transformer architecture, specifically focusing on Scaled Dot-Product Attention, Multi-Head Attention... The documents do not contain any information regarding Random Forests, decision trees, bagging, bootstrap aggregating..."*
+  Additionally, the interface attached unrelated figures/tables because `sources` still contained the nearest (yet irrelevant) semantic chunks. The user requested: *"it is answering like 'The provided text chunks ..... ', don't do it like this. if the answer is not present so just say that I dont have information about this .......... etc etc something like this"*.
+- **Decision**:
+  1. **System Prompt Hardening (`backend/src/rag/graph/nodes.py`)**: Updated Guideline 6 with explicit negative constraints:
+     - Must reply *only* with `"I don't have information about that in the document."`
+     - Strictly forbidden from mentioning `"The provided text chunks..."` or summarizing document topics that *are* present.
+     - Must stop immediately without reciting missing keywords or speculating.
+  2. **Deterministic Response Guard (`_is_unanswerable_response`)**: Added a regex/prefix classifier in `nodes.py` that intercepts any response beginning with or containing meta-disclaimers (e.g. `"The provided text chunks exclusively discuss..."`, `"does not contain any information regarding..."`, `"I don't have information about..."`) and clamps the final output strictly to:
+     ```python
+     response = "I don't have information about that in the document."
+     ```
+  3. **Visual & Text Provenance Purge**: When an unanswerable response is identified, `sources` is reset to `[]`. This prevents the frontend from displaying irrelevant figure/table mounts or citation bars for out-of-scope questions.
+- **Outcome**: Clean, concise single-sentence response with zero meta-clutter and zero irrelevant attachments whenever a question cannot be answered from the document.

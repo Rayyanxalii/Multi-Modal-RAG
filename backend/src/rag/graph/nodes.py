@@ -629,6 +629,41 @@ def _resolve_image_path(raw_path: str, record_type: str = "figure") -> Path | No
 
 
 
+def _is_unanswerable_response(text: str) -> bool:
+    """Detect whether LLM response indicates that the document lacks information for the query."""
+    if not text:
+        return True
+    lower = text.lower().strip()
+
+    # Exact or prefix match
+    if lower.startswith("i don't have information") or lower.startswith("i do not have information"):
+        return True
+    if lower.startswith("there is no information") or lower.startswith("there's no information"):
+        return True
+    if lower.startswith("the document does not contain") or lower.startswith("the provided document does not"):
+        return True
+    if lower.startswith("the provided text chunks") or lower.startswith("based on the provided text chunks"):
+        return True
+    if lower.startswith("based on the provided document context, there is no"):
+        return True
+
+    # Substring checks
+    unanswerable_phrases = [
+        "the provided text chunks exclusively discuss",
+        "the provided text chunks do not contain",
+        "not contain any information regarding",
+        "does not contain any information about",
+        "does not mention anything about",
+        "no information about that in the document",
+        "no information regarding this in the document",
+    ]
+    for phrase in unanswerable_phrases:
+        if phrase in lower:
+            return True
+
+    return False
+
+
 def generate_answer_node(state: RAGState) -> dict[str, Any]:
     """Synthesize a grounded answer using the multimodal vision LLM (llm_vision) passing text, figures, tables, and conversation history."""
     question = state.get("original_question") or state["question"]
@@ -659,7 +694,11 @@ def generate_answer_node(state: RAGState) -> dict[str, Any]:
         "   - Use inline math '$...$' for variables, dimensions, and short expressions (e.g. '$d_k$', '$d_v$', '$Q$', '$K$', '$V$', '$\\sqrt{d_k}$', '$O(n^2 \\cdot d)$').\n"
         "4. Citations: Ground your statements with concise source citations [Source N, Page P] placed at the end of sentences where facts are introduced. Do not interrupt formulas or insert citations between words.\n"
         "5. Visual References: When referencing figures or tables, explicitly mention them (e.g. 'as illustrated in Figure 2 [Source N, Page P]').\n"
-        "6. Unanswerable: If the document contains genuinely no information to answer the question, respond with: 'I don't have information about that in the document.'"
+        "6. Unanswerable Questions: If the document contains genuinely no information to answer the question, respond ONLY with: 'I don't have information about that in the document.'\n"
+        "   - Do NOT add any extra explanation, summary, or commentary.\n"
+        "   - Do NOT mention 'The provided text chunks...' or 'The provided context...'.\n"
+        "   - Do NOT list or describe what topics, formulas, or architectures ARE in the document.\n"
+        "   - Stop immediately after stating that you do not have information about it."
     )
 
     user_blocks: list[Any] = []
@@ -833,7 +872,13 @@ def generate_answer_node(state: RAGState) -> dict[str, Any]:
         else:
             response = f"An error occurred while generating the answer: {exc}"
 
-    sources = state.get("sources", [])
+    # If response indicates unanswerable topic, enforce clean single-sentence response and purge sources
+    if _is_unanswerable_response(response):
+        response = "I don't have information about that in the document."
+        sources = []
+    else:
+        sources = state.get("sources", [])
+
     new_turn = [
         {"role": "user", "content": question},
         {"role": "assistant", "content": response, "sources": sources},
@@ -841,5 +886,6 @@ def generate_answer_node(state: RAGState) -> dict[str, Any]:
 
     return {
         "answer": response,
+        "sources": sources,
         "chat_history": new_turn,
     }
