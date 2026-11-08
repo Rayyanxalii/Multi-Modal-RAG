@@ -1,6 +1,5 @@
 """FastAPI Web Server for the Multimodal Agentic RAG """
 
-import os
 import shutil
 from pathlib import Path
 from typing import Any
@@ -82,6 +81,7 @@ def get_document_pdf(doc_id: str):
     )
 
 
+
 @app.get("/api/documents/{doc_id}/pages")
 def get_document_pages(doc_id: str) -> dict[str, Any]:
     """List all rendered page images for side-by-side inspection."""
@@ -129,6 +129,8 @@ def get_document_pages(doc_id: str) -> dict[str, Any]:
     }
 
 
+
+
 @app.get("/api/documents/{doc_id}/history")
 def get_document_history(doc_id: str) -> dict[str, Any]:
     """Retrieve full conversation history stored in the LangGraph checkpointer for this document."""
@@ -147,6 +149,15 @@ def get_document_history(doc_id: str) -> dict[str, Any]:
         print(f"[Warning] Failed to read checkpointer history for {thread_id}: {exc}")
         messages = []
 
+    # Format web_image_url for sources in messages
+    for msg in messages:
+        if msg.get("role") == "assistant" and "sources" in msg:
+            for src in msg.get("sources", []):
+                img = src.get("image_path")
+                if img and not src.get("web_image_url"):
+                    clean_img = str(img).replace("\\", "/").replace("data/", "")
+                    src["web_image_url"] = f"/data/{clean_img}"
+
     return {
         "status": "success",
         "doc_id": clean_id,
@@ -154,6 +165,27 @@ def get_document_history(doc_id: str) -> dict[str, Any]:
         "total_messages": len(messages),
         "messages": messages,
     }
+
+
+
+@app.delete("/api/documents/{doc_id}/history")
+def clear_document_history(doc_id: str) -> dict[str, Any]:
+    """Purge stored conversation checkpoints for a document thread."""
+    clean_id = (doc_id or "attention").strip().lower()
+    thread_id = f"doc_{clean_id}"
+    try:
+        from rag.graph.workflow import DB_PATH
+        import sqlite3
+        conn = sqlite3.connect(str(DB_PATH))
+        with conn:
+            conn.execute("DELETE FROM checkpoints WHERE thread_id = ?", (thread_id,))
+            conn.execute("DELETE FROM writes WHERE thread_id = ?", (thread_id,))
+        print(f"[Checkpointer] Cleared conversation thread '{thread_id}'.")
+        return {"status": "success", "message": f"Cleared chat history for {clean_id}."}
+    except Exception as exc:
+        print(f"[Error clearing checkpointer]: {exc}")
+        raise HTTPException(status_code=500, detail=str(exc))
+
 
 
 @app.post("/api/chat")
@@ -204,6 +236,7 @@ def submit_question(payload: ChatRequest) -> dict[str, Any]:
 
 
 
+
 @app.post("/api/upload")
 async def upload_document(file: UploadFile = File(...)) -> dict[str, Any]:
     """Upload a new PDF file and initiate automated ingestion."""
@@ -247,9 +280,21 @@ async def upload_document(file: UploadFile = File(...)) -> dict[str, Any]:
         }
 
 
+
 @app.delete("/api/documents/{doc_id}")
 def purge_document(doc_id: str) -> dict[str, Any]:
-    """Purge document assets, Qdrant vectors, and cloud embeddings."""
+    """Purge document assets, Qdrant vectors, cloud embeddings, and conversation checkpoints."""
+    clean_id = (doc_id or "attention").strip().lower()
+    thread_id = f"doc_{clean_id}"
+    try:
+        from rag.graph.workflow import DB_PATH
+        import sqlite3
+        conn = sqlite3.connect(str(DB_PATH))
+        with conn:
+            conn.execute("DELETE FROM checkpoints WHERE thread_id = ?", (thread_id,))
+            conn.execute("DELETE FROM writes WHERE thread_id = ?", (thread_id,))
+    except Exception as exc:
+        print(f"[Warning] Failed to clean checkpointer for {clean_id}: {exc}")
     return delete_document(doc_id, delete_raw_pdf=True)
 
 

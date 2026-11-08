@@ -281,53 +281,28 @@ def route_query_node(state: RAGState) -> dict[str, Any]:
     # Resolve follow-up references using short-term conversational memory
     active_question = contextualize_query(original_q, history)
 
-    routing_prompt = f"""You are an expert query router in an advanced multimodal RAG system.
-Analyze the user's question and determine the optimal retrieval route:
-- "visual": The user explicitly or implicitly asks about a figure, diagram, system architecture, flowchart, schema, plot, or visual layout (e.g. "show Figure 1", "how does the diagram represent...", "what does the visual layout show?").
-- "text": The user asks for high-level narrative, definitions, conceptual motivations, literature background, or philosophy without needing equations, tables, or diagrams (e.g. "why was the Transformer created?", "who proposed the model?").
-- "both": The user asks for mathematical equations, formulas, architectural mechanics, calculations, metrics, tables, parameter dimensions, or comprehensive explanations (e.g. "explain the equation of attention mechanism", "what is the formula for scaled dot-product attention?", "what are the BLEU scores in Table 2?", "how does multi-head attention work?").
+    # -------------------------------------------------------------------------
+    # Routing code commented out per user instruction: always invoke 'both'
+    # (ColPali figures & tables + Dense retrieval + BM25)
+    # -------------------------------------------------------------------------
+    # routing_prompt = f"""You are an expert query router in an advanced multimodal RAG system..."""
+    # try:
+    #     response = llm.complete(routing_prompt).text.strip()
+    #     ...
+    # -------------------------------------------------------------------------
 
-Respond strictly in valid JSON matching this schema:
-{{
-  "route": "text" | "visual" | "both",
-  "confidence": 1.0,
-  "reasoning": "brief one-sentence explanation"
-}}
+    print("\n" + "=" * 65)
+    print("[Query Intent Router] Routing bypassed: Always invoking BOTH (Dense + BM25 + ColPali)")
+    if active_question != original_q:
+        print(f"  └─ Contextualized from: '{original_q}' -> '{active_question}'")
+    print("=" * 65)
 
-User Question: {active_question}
-
-Output JSON only:"""
-
-    try:
-        response = llm.complete(routing_prompt).text.strip()
-        match = re.search(r"\{.*\}", response, re.DOTALL)
-        if match:
-            data = json.loads(match.group(0))
-            intent = QueryIntent.model_validate(data)
-            print("\n" + "=" * 65)
-            print(f"[Query Intent Router] Classified Route: {intent.route.upper()} (confidence: {intent.confidence:.2f})")
-            print(f"  └─ Reasoning: {intent.reasoning}")
-            if active_question != original_q:
-                print(f"  └─ Contextualized from: '{original_q}' -> '{active_question}'")
-            print("=" * 65)
-            return {
-                "question": active_question,
-                "original_question": original_q,
-                "route": intent.route,
-                "routing_reasoning": intent.reasoning,
-            }
-        raise ValueError(f"No JSON object found in LLM response: {response}")
-    except Exception as exc:
-        print(f"[Warning] LLM intent routing encountered an error: {exc}. Defaulting route to 'both'.")
-        print("\n" + "=" * 65)
-        print(f"[Query Intent Router] Classified Route: BOTH (Fallback due to error: {exc})")
-        print("=" * 65)
-        return {
-            "question": active_question,
-            "original_question": original_q,
-            "route": "both",
-            "routing_reasoning": f"Default fallback to comprehensive multimodal retrieval: {exc}",
-        }
+    return {
+        "question": active_question,
+        "original_question": original_q,
+        "route": "both",
+        "routing_reasoning": "Routing bypassed: always executing parallel multimodal retrieval (Dense + BM25 + ColPali).",
+    }
 
 
 # =============================================================================
@@ -435,11 +410,14 @@ def visual_hydration_node(state: RAGState) -> dict[str, Any]:
                 "record_type": "figure",
                 "record_id": fig.get("figure_id", "unknown_fig"),
                 "figure_id": fig.get("figure_id", "unknown_fig"),
+                "parent_figure": fig.get("parent_figure") or "",
+                "panel": fig.get("panel") or "",
+                "panel_caption": fig.get("panel_caption") or "",
+                "shared_caption": fig.get("shared_caption") or "",
                 "page": p,
                 "colpali_rank": p_info.get("rank", 99),
                 "colpali_score": p_info.get("score", 0.0),
                 "caption": fig.get("caption") or "",
-                "panel_caption": fig.get("panel_caption") or "",
                 "image_path": fig.get("image_path", ""),
                 "item_type": fig.get("item_type", "PictureItem"),
             })
@@ -518,17 +496,38 @@ def format_context_node(state: RAGState) -> dict[str, Any]:
             "type": rec_type,
             "id": rec_id,
             "pages": [page] if page != "Unknown" else [],
+            "parent_figure": item.get("parent_figure"),
+            "panel": item.get("panel"),
+            "panel_caption": item.get("panel_caption"),
+            "caption": caption,
+            "table_markdown": item.get("table_markdown", ""),
+            "image_path": item.get("image_path", ""),
         })
 
         if rec_type == "table":
             table_md = str(item.get("table_markdown", "")).strip()
-            block_content = f"Caption: {caption}\nData:\n{table_md}" if table_md else f"Caption: {caption}"
+            block_content = f"Caption: {caption}"
+            if table_md:
+                block_content += f"\nTable Markdown Grid:\n{table_md}"
             context_blocks.append(
                 f"[Source {source_idx} | Table {rec_id} | Page: {page}]\n{block_content}"
             )
         else:
+            fig_lines = []
+            parent_fig = item.get("parent_figure")
+            panel = item.get("panel")
+            panel_cap = item.get("panel_caption")
+            if parent_fig:
+                fig_lines.append(f"Parent Figure: {parent_fig}")
+            if panel:
+                fig_lines.append(f"Panel: {panel}")
+            if panel_cap:
+                fig_lines.append(f"Panel Caption: {panel_cap}")
+            if caption:
+                fig_lines.append(f"Caption: {caption}")
+            block_content = "\n".join(fig_lines) if fig_lines else f"Caption: {caption}"
             context_blocks.append(
-                f"[Source {source_idx} | Figure {rec_id} | Page: {page}]\nCaption: {caption}"
+                f"[Source {source_idx} | Figure {rec_id} | Page: {page}]\n{block_content}"
             )
         source_idx += 1
 
@@ -644,7 +643,7 @@ def generate_answer_node(state: RAGState) -> dict[str, Any]:
             "answer": ans,
             "chat_history": [
                 {"role": "user", "content": question},
-                {"role": "assistant", "content": ans},
+                {"role": "assistant", "content": ans, "sources": []},
             ],
         }
 
@@ -653,7 +652,7 @@ def generate_answer_node(state: RAGState) -> dict[str, Any]:
     system_prompt = (
         "You are an expert scientific and technical AI assistant answering questions based strictly on the provided technical document context.\n"
         "Guidelines:\n"
-        "1. Style & Tone: Write in clear, authoritative, fluent prose. Directly address the user's question using facts from the document.\n"
+        "1. Style & Tone: Write in clear, authoritative, fluent prose with clean markdown formatting. Use **bold** for key terms and concepts. When presenting lists, ensure each item starts on a new line. Directly address the user's question using facts from the document.\n"
         "2. Grounding: Answer strictly using the retrieved text chunks, tables, and figures. Synthesize explanations accurately without speculating or hallucinating unmentioned facts.\n"
         "3. Mathematical Equations: When expressing formulas, equations, or variables, ALWAYS use standard LaTeX syntax:\n"
         "   - Use display math blocks '$$ ... $$' on their own separate lines for primary equations (e.g. $$ \\text{Attention}(Q, K, V) = \\text{softmax}\\left(\\frac{QK^T}{\\sqrt{d_k}}\\right)V $$).\n"
@@ -668,8 +667,9 @@ def generate_answer_node(state: RAGState) -> dict[str, Any]:
     max_images = 2
     attached_images = 0
 
-    # 1. Text Chunks (top 4 to stay within rate-limit token budgets)
-    selected_text_results = text_results[:6]
+    # 1. Text Chunks (stay comfortably within Groq's 7,000 ITPM rate limit)
+    max_chunks = 4 if fig_tab_results else 5
+    selected_text_results = text_results[:max_chunks]
     if selected_text_results:
         text_parts = ["Retrieved Text Chunks:"]
         for item in selected_text_results:
@@ -685,6 +685,7 @@ def generate_answer_node(state: RAGState) -> dict[str, Any]:
         user_blocks.append(TextBlock(text="\n\n".join(text_parts)))
 
     # 2. Visual Assets (Figures and Tables with cropped images)
+    max_images = 1  # 1 image keeps total payload safely under Groq's 7,000 ITPM limit
     if fig_tab_results:
         for item in fig_tab_results:
             rec_type = item.get("record_type", "visual")
@@ -696,15 +697,34 @@ def generate_answer_node(state: RAGState) -> dict[str, Any]:
 
             if rec_type == "table":
                 table_md = str(item.get("table_markdown", "")).strip()
-                block_content = f"[Source {source_idx} | Table {rec_id} | Page: {page}]\nCaption: {caption}"
+                # Truncate giant table markdown to 800 chars to prevent rate limit spikes
+                if len(table_md) > 850:
+                    table_md = table_md[:850] + "\n... [table truncated for token budget]"
+                lines = [f"[Source {source_idx} | Table {rec_id} | Page: {page}]"]
+                if caption:
+                    lines.append(f"Caption: {caption}")
                 if table_md:
-                    block_content += f"\nData:\n{table_md}"
+                    lines.append(f"Table Markdown Grid:\n{table_md}")
+                block_content = "\n".join(lines)
                 user_blocks.append(TextBlock(text=block_content))
-                if resolved_img and attached_images < max_images:
+                # Tables with text markdown do not need redundant heavy image tokens
+                if resolved_img and not table_md and attached_images < max_images:
                     user_blocks.append(ImageBlock(path=resolved_img))
                     attached_images += 1
             else:
-                block_content = f"[Source {source_idx} | Figure {rec_id} | Page: {page}]\nCaption: {caption}"
+                lines = [f"[Source {source_idx} | Figure {rec_id} | Page: {page}]"]
+                parent_fig = item.get("parent_figure")
+                panel = item.get("panel")
+                panel_cap = item.get("panel_caption")
+                if parent_fig:
+                    lines.append(f"Parent Figure: {parent_fig}")
+                if panel:
+                    lines.append(f"Panel: {panel}")
+                if panel_cap:
+                    lines.append(f"Panel Caption: {panel_cap}")
+                if caption:
+                    lines.append(f"Caption: {caption}")
+                block_content = "\n".join(lines)
                 user_blocks.append(TextBlock(text=block_content))
                 if resolved_img and attached_images < max_images:
                     user_blocks.append(ImageBlock(path=resolved_img))
@@ -763,7 +783,19 @@ def generate_answer_node(state: RAGState) -> dict[str, Any]:
         else:
             v_status = "TEXT/TABLE-ONLY (No cropped image path)"
 
-        print(f"    [{idx}] {rtype.upper()} {rid} (Page {page}): \"{cap}\"")
+        parent_fig = v.get("parent_figure")
+        panel = v.get("panel")
+        panel_cap = v.get("panel_caption")
+        meta_sub = []
+        if parent_fig:
+            meta_sub.append(f"Parent: {parent_fig}")
+        if panel:
+            meta_sub.append(f"Panel: {panel}")
+        meta_str = f" [{', '.join(meta_sub)}]" if meta_sub else ""
+
+        print(f"    [{idx}] {rtype.upper()} {rid} (Page {page}){meta_str}: \"{cap}\"")
+        if panel_cap and panel_cap != cap:
+            print(f"        |-- Panel Caption: \"{_safe_str(panel_cap, 70)}\"")
         if v.get("table_markdown"):
             md_prev = _safe_str(v["table_markdown"], 60)
             print(f"        |-- Table Grid Markdown: \"{md_prev}\" ({len(v['table_markdown'])} chars)")
@@ -784,11 +816,27 @@ def generate_answer_node(state: RAGState) -> dict[str, Any]:
     try:
         response = llm_vision.chat(messages).message.content.strip()
     except Exception as exc:
-        response = f"An error occurred while generating the answer: {exc}"
+        err_str = str(exc)
+        if "413" in err_str or "rate_limit_exceeded" in err_str or "tokens" in err_str.lower():
+            print(f"\n[Self-Healing] Groq rate-limit/token ceiling encountered ({err_str[:70]}). Retrying with lean text payload...")
+            # Strip heavy ImageBlocks and retry with pure text/table markdown
+            lean_blocks = [b for b in user_blocks if not isinstance(b, ImageBlock)]
+            lean_messages = [
+                ChatMessage(role=MessageRole.SYSTEM, content=system_prompt),
+                ChatMessage(role=MessageRole.USER, blocks=lean_blocks),
+            ]
+            try:
+                response = llm_vision.chat(lean_messages).message.content.strip()
+                print("[Self-Healing] Recovery successful: generated grounded answer without visual tokens.")
+            except Exception as retry_exc:
+                response = f"An error occurred while generating the answer: {retry_exc}"
+        else:
+            response = f"An error occurred while generating the answer: {exc}"
 
+    sources = state.get("sources", [])
     new_turn = [
         {"role": "user", "content": question},
-        {"role": "assistant", "content": response},
+        {"role": "assistant", "content": response, "sources": sources},
     ]
 
     return {

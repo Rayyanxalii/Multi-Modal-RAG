@@ -41,26 +41,30 @@ def decide_ingestion(state: RAGState) -> Literal["render_pages", "route_query"]:
 
 
 def branch_retrieval(state: RAGState) -> list[str]:
-    """Conditional edge: route to Dense, BM25, and/or ColPali based on classified intent."""
-    route = (state.get("route") or "both").lower()
+    """Conditional edge: always invoke both Dense + BM25 and ColPali visual retrieval (routing commented out)."""
+    # -------------------------------------------------------------------------
+    # Intent-based routing logic (commented out per user instruction):
+    # route = (state.get("route") or "both").lower()
+    # if route == "dense":
+    #     print(f"[Query Path: DENSE ONLY] Executing dense semantic vector search (Qdrant).")
+    #     branches = ["dense_retriever"]
+    # elif route == "bm25":
+    #     print(f"[Query Path: BM25 ONLY] Executing lexical keyword search (BM25).")
+    #     branches = ["bm25_retriever"]
+    # elif route == "text":
+    #     print(f"[Query Path: TEXT ONLY] Executing Dense Vector (Qdrant) + BM25 Keywords (Reciprocal Rank Fusion). ColPali is bypassed.")
+    #     branches = ["dense_retriever", "bm25_retriever"]
+    # elif route == "visual":
+    #     print(f"[Query Path: COLPALI ONLY] Executing ColPali visual late-interaction on page embeddings. Dense/BM25 are bypassed.")
+    #     branches = ["colpali_retriever"]
+    # else:
+    #     print(f"[Query Path: BOTH MULTIMODAL] Executing parallel Dense, BM25, AND ColPali visual late-interaction.")
+    #     branches = ["dense_retriever", "bm25_retriever", "colpali_retriever"]
+    # -------------------------------------------------------------------------
     print("\n" + "-" * 65)
-    if route == "dense":
-        print(f"[Query Path: DENSE ONLY] Executing dense semantic vector search (Qdrant).")
-        branches = ["dense_retriever"]
-    elif route == "bm25":
-        print(f"[Query Path: BM25 ONLY] Executing lexical keyword search (BM25).")
-        branches = ["bm25_retriever"]
-    elif route == "text":
-        print(f"[Query Path: TEXT ONLY] Executing Dense Vector (Qdrant) + BM25 Keywords (Reciprocal Rank Fusion). ColPali is bypassed.")
-        branches = ["dense_retriever", "bm25_retriever"]
-    elif route == "visual":
-        print(f"[Query Path: COLPALI ONLY] Executing ColPali visual late-interaction on page embeddings. Dense/BM25 are bypassed.")
-        branches = ["colpali_retriever"]
-    else:
-        print(f"[Query Path: BOTH MULTIMODAL] Executing parallel Dense, BM25, AND ColPali visual late-interaction.")
-        branches = ["dense_retriever", "bm25_retriever", "colpali_retriever"]
+    print("[Query Path: FIXED MULTIMODAL] Executing parallel Dense, BM25, AND ColPali (figures & tables).")
     print("-" * 65)
-    return branches
+    return ["dense_retriever", "bm25_retriever", "colpali_retriever"]
 
 
 def decide_after_grading(state: RAGState) -> Literal["generate_answer", "rewrite_query"]:

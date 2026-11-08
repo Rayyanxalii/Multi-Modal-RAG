@@ -3,12 +3,13 @@
  * Handles document switching, side-by-side inspection, streaming Q&A, and uploads.
  */
 
-let currentDocId = "attention";
-const chatHistories = {}; // doc_id -> list of DOM elements or HTML
+const savedActiveDoc = localStorage.getItem("rag_active_doc_id");
+let currentDocId = savedActiveDoc || "attention";
+const chatHistories = {}; // doc_id -> in-memory HTML snapshot
 
 // Document Viewer State
 let isDocViewerOpen = false;
-let currentViewerDoc = "attention";
+let currentViewerDoc = currentDocId;
 let currentPage = 1;
 let totalPages = 1;
 let docPagesList = [];
@@ -18,6 +19,7 @@ let viewerMode = "pages"; // "pages" or "pdf"
 document.addEventListener("DOMContentLoaded", () => {
   initDocumentLedger();
   initChatForm();
+  initClearChatButton();
   initUploadModal();
   initDocViewer();
 
@@ -44,6 +46,8 @@ document.addEventListener("DOMContentLoaded", () => {
 // ============================================================================
 async function initDocumentLedger() {
   await loadDocuments();
+  // Restore conversational history from SQLite checkpointer for active document
+  await loadDocumentHistory(currentDocId);
 }
 
 async function loadDocuments() {
@@ -59,11 +63,19 @@ async function loadDocuments() {
       return;
     }
 
+    // Verify currentDocId exists among docs, otherwise fallback to first
+    const docExists = docs.some((d) => d.doc_id.toLowerCase() === currentDocId.toLowerCase());
+    if (!docExists && docs.length > 0) {
+      currentDocId = docs[0].doc_id;
+      localStorage.setItem("rag_active_doc_id", currentDocId);
+    }
+
     docs.forEach((doc) => {
       const li = document.createElement("li");
-      li.className = `doc-item-scrap ${doc.doc_id === currentDocId ? "active" : ""}`;
+      const isSelected = doc.doc_id.toLowerCase() === currentDocId.toLowerCase();
+      li.className = `doc-item-scrap ${isSelected ? "active" : ""}`;
       li.setAttribute("role", "option");
-      li.setAttribute("aria-selected", doc.doc_id === currentDocId ? "true" : "false");
+      li.setAttribute("aria-selected", isSelected ? "true" : "false");
 
       li.innerHTML = `
         <div class="doc-info" onclick="switchDocument('${doc.doc_id}')">
@@ -87,52 +99,72 @@ async function loadDocuments() {
   }
 }
 
-async function switchDocument(docId) {
-  if (docId === currentDocId) return;
-
-  // Save current chat stream HTML into cache
+/**
+ * Load and restore conversation history from SQLite checkpointer.
+ */
+async function loadDocumentHistory(docId) {
   const chatStream = document.getElementById("chatStream");
-  chatHistories[currentDocId] = chatStream.innerHTML;
+  if (!chatStream) return;
 
-  currentDocId = docId;
-  updateActiveBadge();
+  chatStream.innerHTML = `
+    <article class="message-entry assistant" id="historyLoader">
+      <div class="assistant-working-sheet professional-card" style="opacity: 0.9;">
+        <div class="answer-body" style="color: var(--dp-color-ink-muted); font-style: italic;">
+          Restoring conversation history for <strong>${escapeHtml(docId)}.pdf</strong>...
+        </div>
+      </div>
+    </article>
+  `;
 
-  // Restore or reset chat stream for new document
-  if (chatHistories[docId]) {
-    chatStream.innerHTML = chatHistories[docId];
-  } else {
-    // Check if the checkpointer has stored history on the backend
-    try {
-      const res = await fetch(`/api/documents/${docId}/history`);
-      if (res.ok) {
-        const data = await res.json();
-        if (data.messages && data.messages.length > 0) {
-          chatStream.innerHTML = "";
-          data.messages.forEach((msg) => {
-            if (msg.role === "user") {
-              appendUserMessage(msg.content);
-            } else if (msg.role === "assistant") {
-              appendAssistantMessage({ answer: msg.content, sources: msg.sources || [] });
-            }
-          });
-        } else {
-          renderInitialGreeting(docId);
+  try {
+    const res = await fetch(`/api/documents/${docId}/history`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+
+    chatStream.innerHTML = "";
+    if (data.messages && data.messages.length > 0) {
+      data.messages.forEach((msg) => {
+        if (msg.role === "user") {
+          appendUserMessage(msg.content);
+        } else if (msg.role === "assistant") {
+          appendAssistantMessage(
+            { answer: msg.content, sources: msg.sources || [] },
+            { immediate: true }
+          );
         }
-      } else {
-        renderInitialGreeting(docId);
-      }
-    } catch (err) {
+      });
+      chatHistories[docId] = chatStream.innerHTML;
+    } else {
       renderInitialGreeting(docId);
     }
+  } catch (err) {
+    console.warn(`Failed to restore history for ${docId}:`, err);
+    renderInitialGreeting(docId);
   }
 
-  // Refresh active styles in list
-  document.querySelectorAll(".doc-item-scrap").forEach((el) => {
-    const isTarget = el.querySelector(".doc-name")?.textContent.toLowerCase().includes(docId.toLowerCase());
-    el.classList.toggle("active", isTarget);
-  });
-
   chatStream.scrollTop = chatStream.scrollHeight;
+}
+
+async function switchDocument(docId, forceReload = false) {
+  if (docId === currentDocId && !forceReload) return;
+
+  const chatStream = document.getElementById("chatStream");
+  if (currentDocId && chatStream) {
+    chatHistories[currentDocId] = chatStream.innerHTML;
+  }
+
+  currentDocId = docId;
+  localStorage.setItem("rag_active_doc_id", docId);
+  updateActiveBadge();
+
+  if (chatHistories[docId] && !forceReload) {
+    chatStream.innerHTML = chatHistories[docId];
+    chatStream.scrollTop = chatStream.scrollHeight;
+  } else {
+    await loadDocumentHistory(docId);
+  }
+
+  updateDocListHighlight();
 
   // If document viewer is currently open beside chat, update its content
   if (isDocViewerOpen) {
@@ -141,6 +173,36 @@ async function switchDocument(docId) {
     currentViewerDoc = docId;
     currentPage = 1;
   }
+}
+
+function updateDocListHighlight() {
+  document.querySelectorAll(".doc-item-scrap").forEach((el) => {
+    const docName = el.querySelector(".doc-name")?.textContent.trim().toLowerCase();
+    const isTarget = docName === currentDocId.toLowerCase() || docName?.startsWith(currentDocId.toLowerCase());
+    el.classList.toggle("active", isTarget);
+    el.setAttribute("aria-selected", isTarget ? "true" : "false");
+  });
+}
+
+function initClearChatButton() {
+  const btn = document.getElementById("btnClearChat");
+  if (!btn) return;
+
+  btn.addEventListener("click", async () => {
+    const confirmed = confirm(`Are you sure you want to clear conversation history for "${currentDocId}.pdf"?`);
+    if (!confirmed) return;
+
+    try {
+      const res = await fetch(`/api/documents/${currentDocId}/history`, { method: "DELETE" });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      delete chatHistories[currentDocId];
+      renderInitialGreeting(currentDocId);
+    } catch (err) {
+      console.error("Failed to clear chat history:", err);
+      delete chatHistories[currentDocId];
+      renderInitialGreeting(currentDocId);
+    }
+  });
 }
 
 function renderInitialGreeting(docId) {
@@ -174,7 +236,8 @@ async function handleDeleteDoc(event, docId) {
     if (res.ok) {
       delete chatHistories[docId];
       if (currentDocId === docId) {
-        switchDocument("attention");
+        localStorage.setItem("rag_active_doc_id", "attention");
+        await switchDocument("attention", true);
       }
       await loadDocuments();
     } else {
@@ -262,127 +325,320 @@ function appendThinkingIndicator() {
   return entry;
 }
 
-function appendAssistantMessage(data) {
+let activeStreamingTimer = null;
+
+function appendAssistantMessage(data, options = {}) {
+  if (!options.immediate) {
+    return streamAssistantResponse(data);
+  }
+
+  // Immediate rendering path (e.g. for restored history)
   const stream = document.getElementById("chatStream");
   const entry = document.createElement("article");
   entry.className = "message-entry assistant";
 
-  // Format equations, citations, and markdown into structured HTML
-  const formattedAnswer = formatAssistantAnswer(data.answer || "");
+  const workingSheet = document.createElement("div");
+  workingSheet.className = "assistant-working-sheet professional-card";
 
-  // Extract visual sources with images or table markdown
+  const answerBody = document.createElement("div");
+  answerBody.className = "answer-body";
+
+  const { cleanText, pages } = cleanAnswerTextAndExtractPages(data.answer || "", data.sources || []);
+  answerBody.innerHTML = parseMarkdownToHtml(cleanText);
+  workingSheet.appendChild(answerBody);
+
+  renderMathInElementSafely(answerBody);
+
+  if (pages.length > 0) {
+    workingSheet.appendChild(renderSourcesBar(pages));
+  }
+
   const visualSources = (data.sources || []).filter(
     (s) => s.web_image_url || s.image_path || s.table_markdown
   );
-
-  let visualDeckHtml = "";
   if (visualSources.length > 0) {
-    visualDeckHtml = `
-      <div class="visual-references-deck">
-        <div class="deck-label">
-          <span>Figures &amp; Tables</span>
-        </div>
-        <div class="taped-references-grid">
-          ${visualSources.map((src) => renderTapedMount(src)).join("")}
-        </div>
-      </div>
-    `;
-  }
-
-  entry.innerHTML = `
-    <div class="assistant-working-sheet professional-card">
-      <div class="answer-body">
-        ${formattedAnswer}
-      </div>
-      ${visualDeckHtml}
-    </div>
-  `;
-
-  stream.appendChild(entry);
-  stream.scrollTop = stream.scrollHeight;
-
-  // Post-render KaTeX sweep if KaTeX auto-render is present
-  const answerBody = entry.querySelector(".answer-body");
-  if (answerBody && window.renderMathInElement) {
-    try {
-      window.renderMathInElement(answerBody, {
-        delimiters: [
-          { left: "$$", right: "$$", display: true },
-          { left: "\\[", right: "\\]", display: true },
-          { left: "$", right: "$", display: false },
-          { left: "\\(", right: "\\)", display: false },
-        ],
-        throwOnError: false,
-      });
-    } catch (e) {
-      console.warn("KaTeX post-render notice:", e);
+    const deckContainer = document.createElement("div");
+    deckContainer.innerHTML = renderVisualDeckHtml(visualSources);
+    if (deckContainer.firstElementChild) {
+      workingSheet.appendChild(deckContainer.firstElementChild);
     }
   }
+
+  entry.appendChild(workingSheet);
+  stream.appendChild(entry);
+  stream.scrollTop = stream.scrollHeight;
 
   const routeBadge = document.getElementById("routeBadge");
   if (routeBadge) routeBadge.textContent = (data.route || "both").toUpperCase();
 }
 
 /**
- * High-Fidelity Math Equation and Citation Parser
- * Safely extracts LaTeX math, parses citations, escapes HTML, and renders via KaTeX with Unicode fallback.
+ * Progressive Typewriter Streaming Effect
+ * Streams tokens word-by-word with a blinking cursor before settling into rich markdown.
  */
-function formatAssistantAnswer(rawText) {
-  if (!rawText) return "";
+function streamAssistantResponse(data) {
+  const stream = document.getElementById("chatStream");
+  const entry = document.createElement("article");
+  entry.className = "message-entry assistant";
 
-  // 1. Extract LaTeX Math blocks and inline expressions into placeholders
-  const mathTokens = [];
+  const workingSheet = document.createElement("div");
+  workingSheet.className = "assistant-working-sheet professional-card";
+  workingSheet.style.cursor = "pointer";
+  workingSheet.title = "Click to skip typing animation";
 
-  // Display math: $$ ... $$ and \[ ... \]
-  let text = rawText.replace(/\$\$([\s\S]+?)\$\$/g, (m, eq) => {
-    const idx = mathTokens.length;
-    mathTokens.push({ type: "block", code: eq.trim() });
-    return `___MATH_TOKEN_${idx}___`;
+  const answerBody = document.createElement("div");
+  answerBody.className = "answer-body";
+  workingSheet.appendChild(answerBody);
+
+  entry.appendChild(workingSheet);
+  stream.appendChild(entry);
+  stream.scrollTop = stream.scrollHeight;
+
+  // 1. Clean answer text and extract cited pages
+  const { cleanText, pages } = cleanAnswerTextAndExtractPages(data.answer || "", data.sources || []);
+
+  const visualSources = (data.sources || []).filter(
+    (s) => s.web_image_url || s.image_path || s.table_markdown
+  );
+
+  let isFinalized = false;
+
+  const finalize = () => {
+    if (isFinalized) return;
+    isFinalized = true;
+
+    if (activeStreamingTimer) {
+      clearInterval(activeStreamingTimer);
+      activeStreamingTimer = null;
+    }
+
+    workingSheet.style.cursor = "default";
+    workingSheet.title = "";
+
+    // 1. Render complete rich markdown with KaTeX
+    answerBody.innerHTML = parseMarkdownToHtml(cleanText);
+    renderMathInElementSafely(answerBody);
+
+    // 2. Attach unified end-of-answer sources provenance bar: Sources: Page 10, 12, 15...
+    if (pages.length > 0) {
+      workingSheet.appendChild(renderSourcesBar(pages));
+    }
+
+    // 3. Attach visual references deck
+    if (visualSources.length > 0) {
+      const deckContainer = document.createElement("div");
+      deckContainer.innerHTML = renderVisualDeckHtml(visualSources);
+      if (deckContainer.firstElementChild) {
+        workingSheet.appendChild(deckContainer.firstElementChild);
+      }
+    }
+
+    const routeBadge = document.getElementById("routeBadge");
+    if (routeBadge) routeBadge.textContent = (data.route || "both").toUpperCase();
+
+    stream.scrollTop = stream.scrollHeight;
+  };
+
+  // Allow clicking anywhere on the card to instantly skip animation
+  workingSheet.addEventListener("click", finalize, { once: true });
+
+  // Tokenize text into words and spaces for progressive streaming
+  const tokens = cleanText.split(/(\s+)/);
+  if (tokens.length <= 1) {
+    finalize();
+    return;
+  }
+
+  let tokenIdx = 0;
+  let displayedText = "";
+
+  // Dynamic pacing: ~15-20ms per tick, batch tokens if response is long
+  const batchSize = tokens.length > 350 ? 3 : (tokens.length > 180 ? 2 : 1);
+  const intervalMs = 16;
+
+  activeStreamingTimer = setInterval(() => {
+    for (let b = 0; b < batchSize && tokenIdx < tokens.length; b++) {
+      displayedText += tokens[tokenIdx];
+      tokenIdx++;
+    }
+
+    answerBody.innerHTML = `<span class="streaming-text">${escapeHtml(displayedText)}</span><span class="streaming-cursor"></span>`;
+    stream.scrollTop = stream.scrollHeight;
+
+    if (tokenIdx >= tokens.length) {
+      clearInterval(activeStreamingTimer);
+      activeStreamingTimer = null;
+      setTimeout(finalize, 80);
+    }
+  }, intervalMs);
+}
+
+/**
+ * Robust Citation Extractor & Body Cleaner
+ * Strips all inline bracket tags [Source N, Page P] and extracts unique pages.
+ */
+function cleanAnswerTextAndExtractPages(rawText, sources = []) {
+  if (!rawText) return { cleanText: "", pages: [] };
+
+  const citedPages = new Set();
+  const mathPlaceholders = [];
+  let text = rawText;
+
+  // Stash math blocks and inlines so regexes don't touch them
+  text = text.replace(/\$\$([\s\S]+?)\$\$/g, (m, eq) => {
+    const idx = mathPlaceholders.length;
+    mathPlaceholders.push({ type: "block", code: eq.trim() });
+    return `___MATH_BLOCK_${idx}___`;
   });
   text = text.replace(/\\\[([\s\S]+?)\\\]/g, (m, eq) => {
+    const idx = mathPlaceholders.length;
+    mathPlaceholders.push({ type: "block", code: eq.trim() });
+    return `___MATH_BLOCK_${idx}___`;
+  });
+  text = text.replace(/(?<!\$)\$([^\$\n]+?)\$(?!\$)/g, (m, eq) => {
+    const idx = mathPlaceholders.length;
+    mathPlaceholders.push({ type: "inline", code: eq.trim() });
+    return `___MATH_INLINE_${idx}___`;
+  });
+  text = text.replace(/\\\(([\s\S]+?)\\\)/g, (m, eq) => {
+    const idx = mathPlaceholders.length;
+    mathPlaceholders.push({ type: "inline", code: eq.trim() });
+    return `___MATH_INLINE_${idx}___`;
+  });
+
+  // Extract page numbers from compound or single citations e.g. [Source 1, Page 1; Source 2, Page 10], [Page 4]
+  text = text.replace(/\[([^\]]*?Page[s]?\s*\d+[^\]]*?)\]/gi, (match) => {
+    const pageMatches = [...match.matchAll(/Page[s]?\s*(\d+)/gi)];
+    pageMatches.forEach((m) => {
+      const num = parseInt(m[1], 10);
+      if (!isNaN(num)) citedPages.add(num);
+    });
+    return "";
+  });
+
+  // Extract from [Source N] using sources metadata
+  text = text.replace(/\[Source\s*(\d+)\]/gi, (match, srcNum) => {
+    const idx = parseInt(srcNum, 10) - 1;
+    if (sources && sources[idx] && Array.isArray(sources[idx].pages)) {
+      sources[idx].pages.forEach((p) => {
+        const num = parseInt(p, 10);
+        if (!isNaN(num)) citedPages.add(num);
+      });
+    }
+    return "";
+  });
+
+  // Strip standalone brackets like [1, 2] or [Source 1]
+  text = text.replace(/\[(?:Source\s*)?\d+(?:\s*,\s*\d+)*\]/gi, "");
+
+  // Clean trailing spaces before punctuation: " (£) ." -> " (£)."
+  text = text.replace(/\s+([.,;:!?])/g, "$1");
+  // Normalize whitespace
+  text = text.replace(/[ \t]{2,}/g, " ");
+
+  // Fallback to sources metadata if no pages cited in text
+  if (citedPages.size === 0 && Array.isArray(sources)) {
+    sources.forEach((src) => {
+      if (Array.isArray(src.pages)) {
+        src.pages.forEach((p) => {
+          const num = parseInt(p, 10);
+          if (!isNaN(num)) citedPages.add(num);
+        });
+      }
+    });
+  }
+
+  // Restore math placeholders
+  text = text.replace(/___MATH_BLOCK_(\d+)___/g, (m, idx) => `$$${mathPlaceholders[idx].code}$$`);
+  text = text.replace(/___MATH_INLINE_(\d+)___/g, (m, idx) => `$${mathPlaceholders[idx].code}$`);
+
+  const sortedPages = [...citedPages].sort((a, b) => a - b);
+  return { cleanText: text.trim(), pages: sortedPages };
+}
+
+/**
+ * Rich Semantic Markdown & LaTeX Math Parser
+ * Converts **bold**, headings, lists, inline code, and formulas into structured semantic HTML.
+ */
+function parseMarkdownToHtml(rawText) {
+  if (!rawText) return "";
+
+  const mathTokens = [];
+  let s = rawText;
+
+  // Stash math expressions
+  s = s.replace(/\$\$([\s\S]+?)\$\$/g, (m, eq) => {
     const idx = mathTokens.length;
     mathTokens.push({ type: "block", code: eq.trim() });
     return `___MATH_TOKEN_${idx}___`;
   });
-
-  // Inline math: $ ... $ (excluding bare currency) and \( ... \)
-  text = text.replace(/(?<!\$)\$([^\$\n]+?)\$(?!\$)/g, (m, eq) => {
+  s = s.replace(/\\\[([\s\S]+?)\\\]/g, (m, eq) => {
+    const idx = mathTokens.length;
+    mathTokens.push({ type: "block", code: eq.trim() });
+    return `___MATH_TOKEN_${idx}___`;
+  });
+  s = s.replace(/(?<!\$)\$([^\$\n]+?)\$(?!\$)/g, (m, eq) => {
     const idx = mathTokens.length;
     mathTokens.push({ type: "inline", code: eq.trim() });
     return `___MATH_TOKEN_${idx}___`;
   });
-  text = text.replace(/\\\(([\s\S]+?)\\\)/g, (m, eq) => {
+  s = s.replace(/\\\(([\s\S]+?)\\\)/g, (m, eq) => {
     const idx = mathTokens.length;
     mathTokens.push({ type: "inline", code: eq.trim() });
     return `___MATH_TOKEN_${idx}___`;
   });
 
-  // 2. Escape non-math text safely
-  let processed = escapeHtml(text);
+  // Pre-process inline sub-bullets like ": * **" or ". * **" -> newline with indent
+  s = s.replace(/([.:;])\s*[\*\-]\s+(?=\*\*|[a-zA-Z])/g, "$1\n   * ");
 
-  // 3. Convert citations (handles both single [Source 1, Page 4] and compound [Source 5, Page 4; Source 6, Page 4])
-  processed = processed.replace(/\[([^\]]*?Page\s*\d+[^\]]*?)\]/gi, (match) => {
-    const pageMatches = [...match.matchAll(/Page\s*(\d+)/gi)].map((m) => parseInt(m[1], 10));
-    const uniquePages = [...new Set(pageMatches)];
-    if (uniquePages.length === 0) return match;
-    return uniquePages
-      .map(
-        (p) =>
-          `<button type="button" class="citation-highlight-btn" onclick="openAndJumpToPage(${p})" title="View Page ${p} beside chat"><span class="citation-dot" style="display:inline-block; width:6px; height:6px; border-radius:50%; background:var(--dp-color-accent); margin-right:4px;" aria-hidden="true"></span><span>Page ${p}</span><span class="btn-arrow" style="font-size:13px; margin-left:3px;" aria-hidden="true">→</span></button>`
-      )
-      .join(" ");
+  // Escape HTML
+  s = escapeHtml(s);
+
+  // Fenced Code Blocks (```lang ... ```)
+  s = s.replace(/```([a-zA-Z0-9_-]*)\n([\s\S]+?)```/g, (m, lang, code) => {
+    return `<pre class="md-code-block"><code class="language-${lang}">${code.trim()}</code></pre>`;
   });
 
-  // Also convert any standalone citations matching [Source N]
-  processed = processed.replace(/\[Source\s*(\d+)[,\s]*Page\s*(\d+)\]/gi, (match, src, page) => {
-    return `<button type="button" class="citation-highlight-btn" onclick="openAndJumpToPage(${page})" title="View Page ${page} beside chat"><span class="citation-dot" style="display:inline-block; width:6px; height:6px; border-radius:50%; background:var(--dp-color-accent); margin-right:4px;" aria-hidden="true"></span><span>Page ${page}</span><span class="btn-arrow" style="font-size:13px; margin-left:3px;" aria-hidden="true">→</span></button>`;
-  });
+  // Inline Code (`code`)
+  s = s.replace(/`([^`\n]+)`/g, '<code class="md-code">$1</code>');
 
-  // Clean paragraph breaks
-  processed = processed.replace(/\n\s*\n/g, "<br><br>");
+  // Headings
+  s = s.replace(/^####\s+(.+)$/gm, '<h5 class="md-subheading">$1</h5>');
+  s = s.replace(/^###\s+(.+)$/gm, '<h4 class="md-subheading">$1</h4>');
+  s = s.replace(/^##\s+(.+)$/gm, '<h3 class="md-heading">$1</h3>');
+  s = s.replace(/^#\s+(.+)$/gm, '<h2 class="md-title">$1</h2>');
 
-  // 4. Render and re-inject math expressions
-  processed = processed.replace(/___MATH_TOKEN_(\d+)___/g, (match, idxStr) => {
+  // Bold (**text** or __text__)
+  s = s.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+  s = s.replace(/__(.+?)__/g, '<strong>$1</strong>');
+
+  // Italic (*text* or _text_)
+  s = s.replace(/(?<!\*)\*([^\*\n]+?)\*(?!\*)/g, '<em>$1</em>');
+  s = s.replace(/(^|[\s(])_([^\s_][^_]*?[^\s_]|[^_\s])_([)\s.,;:!?]|$)/g, '$1<em>$2</em>$3');
+
+  // Lists
+  // Sub-bullets (indented with 2+ spaces: "   * item")
+  s = s.replace(/^[ \t]{2,}[\*\-]\s+(.+)$/gm, '<li class="md-sublist-item">$1</li>');
+  // Top-level bullets ("* item" or "- item")
+  s = s.replace(/^[ \t]*[\*\-]\s+(.+)$/gm, '<li class="md-list-item">$1</li>');
+  // Numbered items ("1. item")
+  s = s.replace(/^[ \t]*(\d+)\.\s+(.+)$/gm, '<li class="md-ordered-item" data-num="$1">$2</li>');
+
+  // Wrap lists
+  s = s.replace(/((?:<li class="md-sublist-item">[\s\S]+?<\/li>\s*)+)/g, '<ul class="md-sublist">$1</ul>');
+  s = s.replace(/((?:<li class="md-list-item">[\s\S]+?<\/li>\s*)+)/g, '<ul class="md-list">$1</ul>');
+  s = s.replace(/((?:<li class="md-ordered-item"[^>]*>[\s\S]+?<\/li>\s*)+)/g, '<ol class="md-ordered-list">$1</ol>');
+
+  s = s.replace(/<\/ul>\s*<ul class="md-list">/g, '');
+  s = s.replace(/<\/ol>\s*<ol class="md-ordered-list">/g, '');
+
+  // Paragraph breaks
+  s = s.replace(/\n{2,}/g, '<br><br>');
+  // Single newlines
+  s = s.replace(/([^>])\n([^<])/g, '$1<br>$2');
+
+  // Render & Re-inject math expressions
+  s = s.replace(/___MATH_TOKEN_(\d+)___/g, (match, idxStr) => {
     const token = mathTokens[parseInt(idxStr, 10)];
     if (!token) return match;
 
@@ -401,12 +657,84 @@ function formatAssistantAnswer(rawText) {
         console.warn("KaTeX direct render error:", err);
       }
     }
-
-    // High-quality readable fallback if KaTeX CDN is loading/unreachable
     return formatMathFallback(token.code, token.type === "block");
   });
 
-  return processed;
+  return s;
+}
+
+/**
+ * End-of-Answer Sources Bar: "Sources: Page 10, 12, 15..."
+ * Formatted with interactive jump pills for each referenced page.
+ */
+function renderSourcesBar(pages) {
+  const bar = document.createElement("div");
+  bar.className = "sources-provenance-bar";
+
+  const label = document.createElement("span");
+  label.className = "sources-label";
+  label.textContent = "Sources:";
+  bar.appendChild(label);
+
+  const prefix = document.createElement("span");
+  prefix.className = "sources-prefix";
+  prefix.textContent = "Page";
+  bar.appendChild(prefix);
+
+  const listSpan = document.createElement("span");
+  listSpan.className = "sources-list";
+
+  pages.forEach((p, idx) => {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "source-page-pill";
+    btn.textContent = `${p}`;
+    btn.title = `View Page ${p} beside chat`;
+    btn.onclick = (e) => {
+      e.stopPropagation();
+      openAndJumpToPage(p);
+    };
+    listSpan.appendChild(btn);
+
+    if (idx < pages.length - 1) {
+      const sep = document.createTextNode(", ");
+      listSpan.appendChild(sep);
+    }
+  });
+
+  bar.appendChild(listSpan);
+  return bar;
+}
+
+function renderVisualDeckHtml(visualSources) {
+  if (!visualSources || visualSources.length === 0) return "";
+  return `
+    <div class="visual-references-deck">
+      <div class="deck-label">
+        <span>Figures &amp; Tables</span>
+      </div>
+      <div class="taped-references-grid">
+        ${visualSources.map((src) => renderTapedMount(src)).join("")}
+      </div>
+    </div>
+  `;
+}
+
+function renderMathInElementSafely(element) {
+  if (!element || !window.renderMathInElement) return;
+  try {
+    window.renderMathInElement(element, {
+      delimiters: [
+        { left: "$$", right: "$$", display: true },
+        { left: "\\[", right: "\\]", display: true },
+        { left: "$", right: "$", display: false },
+        { left: "\\(", right: "\\)", display: false },
+      ],
+      throwOnError: false,
+    });
+  } catch (err) {
+    console.warn("KaTeX post-render notice:", err);
+  }
 }
 
 function formatMathFallback(code, isBlock) {

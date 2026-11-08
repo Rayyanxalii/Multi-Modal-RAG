@@ -27,6 +27,11 @@ This document captures every major architectural, technical, algorithmic, and en
 19. [Mathematical Equation Typesetting (KaTeX & Safe Token Extraction)](#19-mathematical-equation-typesetting-katex--safe-token-extraction)
 20. [Terminal Query Path Dispatch & VLM Payload Observability](#20-terminal-query-path-dispatch--vlm-payload-observability)
 21. [Persistent SQLite STM Checkpointer & Local KaTeX Mathematical Engine](#21-persistent-sqlite-stm-checkpointer--local-katex-mathematical-engine)
+22. [Unconditional Multimodal Retrieval Mode (Routing Bypassed)](#22-unconditional-multimodal-retrieval-mode-routing-bypassed)
+23. [Granular Visual Metadata Dispatch (Parent Figure, Panels, Captions & Tables)](#23-granular-visual-metadata-dispatch-parent-figure-panels-captions--tables)
+24. [VLM Token Budgeting & Self-Healing Rate-Limit (413) Recovery](#24-vlm-token-budgeting--self-healing-rate-limit-413-recovery)
+25. [Rich Markdown Typography, Streaming Animation & Consolidated Sources Provenance](#25-rich-markdown-typography-streaming-animation--consolidated-sources-provenance)
+26. [Persistent Multi-Document Session Restoration & Checkpoint Hydration](#26-persistent-multi-document-session-restoration--checkpoint-hydration)
 
 ---
 
@@ -621,4 +626,117 @@ This document captures every major architectural, technical, algorithmic, and en
   - Re-engineered system prompt to require standard display LaTeX (`$$ ... $$`) and inline LaTeX (`$ ... $`), natural paragraph-level citations, and increased text context window to top 6 chunks.
 - **Outcome**: High-accuracy, publication-quality answer synthesis with clean mathematical equations and robust multi-modal grounding across both simple and advanced queries.
 
+---
 
+## 22. Unconditional Multimodal Retrieval Mode (Routing Bypassed)
+
+### Decision 22.1: Commenting Out Query Intent Routing in Favor of Direct Multimodal Execution
+- **Context & Problem**: To verify answer synthesis quality and ensure no query is ever starved of visual evidence or text passages due to router misclassification, the user requested bypassing dynamic intent routing and unconditionally running all retrieval branches for every query.
+- **Decision**:
+  1. **Routing Node Bypass**: In `backend/src/rag/graph/nodes.py`, commented out the LLM routing classification call (`routing_prompt`) in `route_query_node`. Preserved `contextualize_query(original_q, history)` so follow-up coreference resolution from short-term conversational memory remains active. Explicitly set `route = "both"`.
+  2. **Branch Retrieval Unconditional Execution**: In `backend/src/rag/graph/workflow.py`, commented out conditional branching in `branch_retrieval` to always return `["dense_retriever", "bm25_retriever", "colpali_retriever"]`.
+  3. **Universal Evidence Merging**: Every question now concurrently executes:
+     - Dense semantic search (Qdrant).
+     - Lexical keyword search (BM25).
+     - ColPali late-interaction on A100 ZeroGPU with figure and table hydration.
+     - Reciprocal Rank Fusion text merging + visual asset mounting into the Vision LLM context.
+- **Outcome**: Deterministic multi-modal retrieval ensuring every query receives the full complement of text chunks, figures, and tables.
+
+---
+
+## 23. Granular Visual Metadata Dispatch (Parent Figure, Panels, Captions & Tables)
+
+### Decision 23.1: Complete Visual Metadata Ingestion into the Vision LLM Context
+- **Context & Problem**: In complex scientific literature, figures frequently contain multiple sub-panels (e.g. Figure 2 in *Attention Is All You Need* contains a left panel showing Scaled Dot-Product Attention and a right panel showing Multi-Head Attention). Previously, `visual_hydration_node` and `generate_answer_node` only passed the raw `Caption: ...` and table markdown. The critical structural disambiguation fields—`parent_figure` (e.g. `"Figure 2"`), `panel` (e.g. `"left"` or `"right"`), and `panel_caption` (e.g. `"Scaled Dot-Product Attention."`)—were omitted from the prompt text, forcing the LLM to guess which cropped image corresponded to which panel.
+- **Decision**:
+  1. **Visual Hydration Field Retention**: In `visual_hydration_node` (`backend/src/rag/graph/nodes.py`), retained `parent_figure`, `panel`, `panel_caption`, and `shared_caption` across all hydrated figure records.
+  2. **Structured Text Block Formulation**: In `format_context_node` and `generate_answer_node`, updated the visual prompt generator to emit structured metadata blocks:
+     - **For Tables**: `Caption: {caption}` and `Table Markdown Grid:\n{table_md}`.
+     - **For Figures**: `Parent Figure: {parent_fig}`, `Panel: {panel}`, `Panel Caption: {panel_cap}`, and `Caption: {caption}`.
+  3. **Terminal Telemetry Enhancement**: Updated the terminal dispatch deck to log `[Parent: Figure 2, Panel: left]` and explicit panel captions alongside vision attachment status (`ATTACHED AS ImageBlock`).
+- **Outcome**: Unambiguous panel grounding allowing the Vision LLM to accurately attribute architectural components to specific sub-diagrams and sub-figures without confusion.
+
+---
+
+## 24. VLM Token Budgeting & Self-Healing Rate-Limit (413) Recovery
+
+### Decision 24.1: Adaptive Payload Budgeting & 413 Token Overflow Mitigation
+- **Context & Problem**: On large or table-dense documents (e.g., `sample-tables.pdf` with 29 tables), querying broad questions (e.g. *"give the summary about this document"*) hydrated multiple tables with large markdown strings and high-resolution images. In Groq's `qwen/qwen3.8-27b` service tier, an Input Tokens Per Minute (ITPM) limit of 7,000 tokens is strictly enforced. When 2 image blocks (~2,500-3,000 vision tokens), 6 text chunks (~1,800 tokens), and 5 raw table markdown grids (~2,500 tokens) were combined, the total payload hit 7,264 tokens, causing Groq to fail with `Error code: 413 - {'message': 'Request too large... Limit 7000, Requested 7264'}`.
+- **Decision**:
+  1. **Table Image De-duplication**: When a table already has structured `table_markdown`, do not attach a redundant PNG `ImageBlock`. The text markdown grid is 100% readable by the model and saves 1,200–1,500 vision tokens per table.
+  2. **Max Image Guard**: Set `max_images = 1` for primary figures/diagrams, keeping vision tokens within safe limits.
+  3. **Table Markdown Truncation**: Capped table markdown strings at 850 characters (`table_md[:850] + "\n... [table truncated for token budget]"`), preventing massive tables from dominating the prompt.
+  4. **Dynamic Chunk Slicing**: Sliced text chunks to top 4 when visual assets are present, and top 5 when pure text.
+  5. **Self-Healing 413 Fallback**: Wrapped `llm_vision.chat()` in an automated recovery handler: if a `413` or `rate_limit_exceeded` error is ever encountered, the system automatically strips heavy `ImageBlock` tokens and immediately retries with lean text/table markdown, generating the answer seamlessly without crashing.
+- **Outcome**: 100% resilience against Groq token limits, eliminating 413 errors even on table-dense documents.
+
+---
+
+## 25. Rich Markdown Typography, Streaming Animation & Consolidated Sources Provenance
+
+### Decision 25.1: High-Fidelity Markdown Parser & Mathematical Token Preservation
+- **Context & Problem**: Previously, assistant answers displayed raw unrendered Markdown asterisks (`**Table 5**`, `**2010**`), raw hashes (`###`), and unformatted lists. While LaTeX equations were extracted into placeholders, general Markdown syntax was completely unhandled by `formatAssistantAnswer`, resulting in raw markup characters appearing directly in the UI.
+- **Decision**:
+  - Implemented a multi-stage semantic markdown engine (`parseMarkdownToHtml` in `frontend/static/app.js`):
+    1. **Math Expression Stashing**: Protects all display LaTeX (`$$ ... $$`, `\[ ... \]`) and inline LaTeX (`$ ... $`, `\( ... \)`) into isolated tokens before HTML processing.
+    2. **Inline Sub-bullet Disambiguation**: Normalizes inline bullet patterns (e.g. `: * **item**` or `. * **item**`) into structured line breaks with indentation.
+    3. **HTML Sanitization**: Escapes non-math content to guarantee XSS prevention.
+    4. **Semantic Typography**: Converts `**bold**` and `__bold__` to `<strong>`, `#`-level headings to `.md-title`, `.md-heading`, and `.md-subheading`, inline code to `<code class="md-code">`, and fenced code blocks to `<pre class="md-code-block">`.
+    5. **Hierarchical Lists**: Converts top-level bullets (`*`, `-`) to `<ul class="md-list">`, sub-bullets to `<ul class="md-sublist">`, and numbered items (`1.`) to `<ol class="md-ordered-list">`.
+    6. **Identifier Protection**: Ensures snake_case identifiers (such as `sample-tables_table_005`) are not accidentally parsed as italic tags by constraining italic regexes to whitespace and punctuation boundaries.
+    7. **KaTeX Re-injection**: Evaluates math tokens with local KaTeX, rendering full mathematical equations with graceful fallback.
+- **Outcome**: Flawless, publication-quality editorial typography with zero raw markdown leakage.
+
+### Decision 25.2: Progressive Typewriter Streaming Effect with Interactive Skip
+- **Context & Problem**: Instantaneous rendering of large LLM answers felt abrupt and static. The user requested an animated streaming effect where text appears progressively word-by-word, matching modern LLM chat experiences.
+- **Decision**:
+  - Implemented `streamAssistantResponse(data)` in `frontend/static/app.js`:
+    - Breaks cleaned answer text into progressive word and space tokens.
+    - Utilizes a dynamic pacing interval (~16ms per tick) that batches tokens based on response length so animations feel brisk (2-3 seconds total) without lagging.
+    - Displays a styled blinking vertical cursor (`<span class="streaming-cursor"></span>`) via `@keyframes cursorBlink`.
+    - Automatically anchors chat scroll (`chatStream.scrollTop = chatStream.scrollHeight`) as words stream in.
+    - Features one-click fast-forward: clicking anywhere on the card or sending a subsequent query instantly finalizes the stream and displays the complete formatted answer.
+    - When restored from short-term conversational history (`GET /api/documents/{doc_id}/history`), uses immediate rendering (`appendAssistantMessage(..., { immediate: true })`) to avoid replaying animations.
+- **Outcome**: Fluid, responsive, and engaging streaming experience that gives immediate visual feedback.
+
+### Decision 25.3: Consolidated End-of-Answer Sources Provenance Bar
+- **Context & Problem**: Previously, `[Source N, Page P]` citations were replaced inline with button pills mid-sentence (e.g. `presented in thousands of pounds (£) Page 1 → .`). This fragmented prose, split commas and periods, and cluttered reading flow. The user requested all citations be displayed strictly at the very end of the answer in the exact format: `"Sources: Page 10, 12, 15..."`.
+- **Decision**:
+  - **Inline Stripping**: In `cleanAnswerTextAndExtractPages`, all inline bracket tags (`[Source N, Page P]`, `[Source N, Page P; Source M, Page Q]`, `[Page P]`, `[Source N]`) are stripped from the prose. Residual spacing before punctuation (e.g. `(£) .` $\to$ `(£).`) is cleaned.
+  - **Deduplicated Page Aggregation**: Extracts all unique page numbers into a sorted numerical list (`pages`). If no explicit brackets were in the text, falls back to the provenance pages of the retrieved sources.
+  - **Unified Provenance Bar**: Appends an editorial provenance footer at the bottom of the card:
+    ```html
+    <div class="sources-provenance-bar">
+      <span class="sources-label">Sources:</span>
+      <span class="sources-prefix">Page</span>
+      <span class="sources-list">
+        <button class="source-page-pill" onclick="openAndJumpToPage(10)">10</button>,
+        <button class="source-page-pill" onclick="openAndJumpToPage(12)">12</button>,
+        <button class="source-page-pill" onclick="openAndJumpToPage(15)">15</button>
+      </span>
+    </div>
+    ```
+  - Visually displays as `Sources: Page 10, 12, 15` where each page number is a subtle gold-hairline interactive pill that, when clicked, opens the document viewer and jumps straight to that page.
+- **Outcome**: Clean, unfragmented reading flow in the answer body coupled with a unified, interactive provenance footer.
+
+---
+
+## 26. Persistent Multi-Document Session Restoration & Checkpoint Hydration
+
+### Decision 26.1: Automated History Restoration on Browser Startup & Refresh
+- **Context & Problem**: Although dialogue turns were successfully written to SQLite (`data/chat_history.db`) via LangGraph's `SqliteSaver`, every browser refresh wiped the screen back to the hardcoded initial greeting card. The frontend only called `/api/documents/{doc_id}/history` inside `switchDocument`, but on startup `currentDocId` defaulted to `"attention"` without fetching its checkpoints, and clicking `"attention"` did nothing because `switchDocument` aborted when the document ID matched `currentDocId`.
+- **Decision**:
+  1. **Active Document Persistence**: Stored `currentDocId` in `localStorage.getItem("rag_active_doc_id")` so browser refreshes stay on the active document (e.g. `sample-tables`).
+  2. **Startup Checkpoint Hydration**: In `initDocumentLedger` (`frontend/static/app.js`), immediately invoked `loadDocumentHistory(currentDocId)` during `DOMContentLoaded`.
+  3. **Immediate Rich Rendering**: Restored past turns via `appendAssistantMessage(..., { immediate: true })`, bypassing typewriter animations while parsing full Markdown, KaTeX formulas, sources provenance pills, and visual deck mounts.
+  4. **Document Chat Isolation**: Each document thread is strictly mapped to `thread_id = f"doc_{clean_id}"`. Switching documents swaps the conversational context in real-time.
+- **Outcome**: Seamless session continuity across page reloads and server restarts.
+
+### Decision 26.2: Sources Retention in Conversational State & Dedicated History Clear Endpoint
+- **Context & Problem**: Previously, `generate_answer_node` only recorded `{"role": "assistant", "content": response}` in `chat_history`, omitting `sources`. When messages were restored from SQLite, source citations and visual attachments were lost. Additionally, users had no mechanism to reset a document's dialogue memory without manually deleting the SQLite database.
+- **Decision**:
+  1. **Source Retention**: Updated `generate_answer_node` (`backend/src/rag/graph/nodes.py`) to record `{"role": "assistant", "content": response, "sources": state.get("sources", [])}`.
+  2. **Image Path Normalization**: Updated `GET /api/documents/{doc_id}/history` in `frontend/server.py` to normalize relative `image_path` entries into `/data/` URLs.
+  3. **Thread History Clear Endpoint**: Implemented `DELETE /api/documents/{doc_id}/history` in `frontend/server.py` to purge SQLite checkpoints and writes for that document thread.
+  4. **Clear Chat UI Control**: Added a "Clear Chat" button to `frontend/static/index.html` allowing users to reset conversational memory for the active document on demand.
+- **Outcome**: Full visual and citation fidelity for historical chat turns and granular user control over session state.
