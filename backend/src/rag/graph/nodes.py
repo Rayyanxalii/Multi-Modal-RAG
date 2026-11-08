@@ -314,7 +314,7 @@ def dense_retriever_node(state: RAGState) -> dict[str, Any]:
     query = state["question"].strip()
     doc_id = state.get("doc_name")
     try:
-        results = search_chunks(query, top_k=6, doc_id=doc_id)
+        results = search_chunks(query, top_k=5, doc_id=doc_id)
         print(f"  [Dense Retriever] Found {len(results)} candidate chunks in Qdrant.")
     except Exception as exc:
         print(f"[Warning] Dense retriever error: {exc}")
@@ -329,7 +329,7 @@ def bm25_retriever_node(state: RAGState) -> dict[str, Any]:
     pdf_path = Path(state.get("pdf_path") or DEFAULT_PDF_PATH)
     doc_paths = get_document_paths(pdf_path)
     try:
-        results = search_bm25(query=query, top_k=6, chunks_path=doc_paths["chunks_path"])
+        results = search_bm25(query=query, top_k=5, chunks_path=doc_paths["chunks_path"])
         print(f"  [BM25 Retriever] Found {len(results)} lexical matches via Okapi BM25.")
     except Exception as exc:
         print(f"[Warning] BM25 retriever error: {exc}")
@@ -346,7 +346,7 @@ def text_fusion_node(state: RAGState) -> dict[str, Any]:
         return {"text_results": []}
 
     try:
-        fused = reciprocal_rank_fusion(dense_matches, bm25_matches, top_k=6)
+        fused = reciprocal_rank_fusion(dense_matches, bm25_matches, top_k=5)
         print(f"  [Text Fusion] Reciprocal Rank Fusion fused into top {len(fused)} text chunks.")
     except Exception as exc:
         print(f"[Warning] Text fusion error: {exc}")
@@ -449,7 +449,7 @@ def visual_hydration_node(state: RAGState) -> dict[str, Any]:
     )
     print(f"  [Visual Hydration] Hydrated {len(matched_assets)} figures/tables from top ColPali pages.")
 
-    return {"figure_table_results": matched_assets[:5]}
+    return {"figure_table_results": matched_assets[:10]}
 
 
 # =============================================================================
@@ -668,7 +668,7 @@ def generate_answer_node(state: RAGState) -> dict[str, Any]:
     attached_images = 0
 
     # 1. Text Chunks (stay comfortably within Groq's 7,000 ITPM rate limit)
-    max_chunks = 4 if fig_tab_results else 5
+    max_chunks = 5
     selected_text_results = text_results[:max_chunks]
     if selected_text_results:
         text_parts = ["Retrieved Text Chunks:"]

@@ -49,7 +49,7 @@ def extract_page_number(page_str: str) -> int:
 def retrieve_visual_assets(
     query: str,
     top_pages: int = 5,
-    top_k: int = 5,
+    top_k: int = 10,
     record_type: str | None = None,
 ) -> list[dict[str, Any]]:
     """Retrieve figures and tables by mapping ColPali page rankings.

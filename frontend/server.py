@@ -9,7 +9,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-from rag.config import DATA_DIR, RAW_DATA_DIR, DEFAULT_PDF_PATH, get_document_paths
+from rag.config import DATA_DIR, RAW_DATA_DIR, DEFAULT_PDF_PATH, FIGURES_DIR, TABLES_DIR, get_document_paths
 from rag.graph import app as rag_app, run_agentic_rag
 from rag.document_manager import list_all_documents, delete_document
 
@@ -33,6 +33,57 @@ if DATA_DIR.exists():
 
 # Mount frontend static files
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+
+
+def resolve_asset_url(image_path: str | None, doc_id: str = "attention", record_type: str = "figure") -> str | None:
+    """Resolve an asset image path to a working /data/... static URL."""
+    if not image_path:
+        return None
+
+    raw_path_str = str(image_path).replace("\\", "/").strip()
+    filename = Path(raw_path_str).name
+    clean_doc = (doc_id or "attention").strip().lower()
+
+    # 1. If path is already a valid relative path under DATA_DIR
+    direct_candidate = DATA_DIR / raw_path_str.lstrip("/")
+    if direct_candidate.exists() and direct_candidate.is_file():
+        rel = direct_candidate.relative_to(DATA_DIR).as_posix()
+        return f"/data/{rel}"
+
+    # 2. Check document-specific folders first (for uploaded documents)
+    if clean_doc != "attention":
+        doc_cands = [
+            FIGURES_DIR / clean_doc / filename,
+            TABLES_DIR / clean_doc / filename,
+        ]
+        for c in doc_cands:
+            if c.exists() and c.is_file():
+                rel = c.relative_to(DATA_DIR).as_posix()
+                return f"/data/{rel}"
+
+    # 3. Check canonical FIGURES_DIR and TABLES_DIR
+    if record_type == "figure" or "fig" in filename.lower():
+        fig_cand = FIGURES_DIR / filename
+        if fig_cand.exists() and fig_cand.is_file():
+            return f"/data/figures/{filename}"
+    if record_type == "table" or "tab" in filename.lower():
+        tab_cand = TABLES_DIR / filename
+        if tab_cand.exists() and tab_cand.is_file():
+            return f"/data/tables/{filename}"
+
+    # 4. Check both folders regardless of type
+    for d, folder_name in [(FIGURES_DIR, "figures"), (TABLES_DIR, "tables")]:
+        cand = d / filename
+        if cand.exists() and cand.is_file():
+            return f"/data/{folder_name}/{filename}"
+
+    # 5. Recursive fallback search in DATA_DIR
+    matches = list(DATA_DIR.glob(f"**/{filename}"))
+    if matches and matches[0].is_file():
+        rel = matches[0].relative_to(DATA_DIR).as_posix()
+        return f"/data/{rel}"
+
+    return None
 
 
 class ChatRequest(BaseModel):
@@ -154,9 +205,10 @@ def get_document_history(doc_id: str) -> dict[str, Any]:
         if msg.get("role") == "assistant" and "sources" in msg:
             for src in msg.get("sources", []):
                 img = src.get("image_path")
-                if img and not src.get("web_image_url"):
-                    clean_img = str(img).replace("\\", "/").replace("data/", "")
-                    src["web_image_url"] = f"/data/{clean_img}"
+                rec_type = src.get("type", "figure")
+                resolved = resolve_asset_url(img, doc_id=clean_id, record_type=rec_type)
+                if resolved:
+                    src["web_image_url"] = resolved
 
     return {
         "status": "success",
@@ -213,10 +265,10 @@ def submit_question(payload: ChatRequest) -> dict[str, Any]:
         sources = result.get("sources", [])
         for src in sources:
             img = src.get("image_path")
-            if img:
-                # Normalize relative path to /data/ URL
-                clean_img = str(img).replace("\\", "/").replace("data/", "")
-                src["web_image_url"] = f"/data/{clean_img}"
+            rec_type = src.get("type", "figure")
+            resolved = resolve_asset_url(img, doc_id=doc_id, record_type=rec_type)
+            if resolved:
+                src["web_image_url"] = resolved
 
         return {
             "status": "success",

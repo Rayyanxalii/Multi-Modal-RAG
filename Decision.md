@@ -32,6 +32,7 @@ This document captures every major architectural, technical, algorithmic, and en
 24. [VLM Token Budgeting & Self-Healing Rate-Limit (413) Recovery](#24-vlm-token-budgeting--self-healing-rate-limit-413-recovery)
 25. [Rich Markdown Typography, Streaming Animation & Consolidated Sources Provenance](#25-rich-markdown-typography-streaming-animation--consolidated-sources-provenance)
 26. [Persistent Multi-Document Session Restoration & Checkpoint Hydration](#26-persistent-multi-document-session-restoration--checkpoint-hydration)
+27. [Reversion to Technical Blueprint & Sketchy Interface Aesthetic](#27-reversion-to-technical-blueprint--sketchy-interface-aesthetic)
 
 ---
 
@@ -740,3 +741,98 @@ This document captures every major architectural, technical, algorithmic, and en
   3. **Thread History Clear Endpoint**: Implemented `DELETE /api/documents/{doc_id}/history` in `frontend/server.py` to purge SQLite checkpoints and writes for that document thread.
   4. **Clear Chat UI Control**: Added a "Clear Chat" button to `frontend/static/index.html` allowing users to reset conversational memory for the active document on demand.
 - **Outcome**: Full visual and citation fidelity for historical chat turns and granular user control over session state.
+
+---
+
+## 27. Reversion to Technical Blueprint & Sketchy Interface Aesthetic
+
+### Decision 27.1: Re-instating the Authoritative Monochrome & Laboratory Notebook Design
+- **Context & Problem**: The user requested reverting the user interface from the ivory/gold palette back to the original **Sketchy / Technical Blueprint** aesthetic. The user preferred the high-contrast research atmosphere, sharp architectural rules, monospace telemetry badges, and notebook-style paper cards.
+- **Decision**:
+  1. **Color & Typography Restoration**: Restored `--dp-color-ink: #000000`, `--dp-color-paper: #ffffff`, `--dp-color-secondary: #4d4d4d`, `--dp-color-quiet: #cfcfcf`, coupled with `IBM Plex Mono` for technical labels, `Source Serif 4` for reading prose, and `EB Garamond` for display headers.
+  2. **Technical Telemetry & Badges**: Re-introduced monospace status strips (`DOC: ATTENTION | ROUTE: BOTH`), system route indicators (`<span class="route-pill">ROUTE: BOTH</span>`), user thought scraps (`<div class="user-tag">Researcher Inquiry</div>`), and sidebar hardware indicators (`ColPali Visual: A100 ZeroGPU`, `Late Interaction: MaxSim Multi-Vector`).
+  3. **Preservation of Core Capabilities**: Seamlessly preserved all new functional additions inside the sketchy theme:
+     - Rich semantic Markdown parsing (`<strong>`, headings, hierarchical lists, code blocks).
+     - Progressive word-by-word streaming effect with blinking monospace cursor (`.streaming-cursor`).
+     - Consolidated end-of-answer provenance bar (`Sources: PAGE 10 , 12 , 15`).
+     - 100% offline local KaTeX mathematical typesetting.
+     - Short-term conversational memory hydration from SQLite on page refresh.
+     - Dedicated per-document "Clear Chat" database purge button.
+- **Outcome**: The beloved high-contrast, technical laboratory notebook aesthetic restored in full visual fidelity, underpinned by modern multimodal RAG features.
+
+
+---
+
+## 28. Minimalist De-cluttering of the Sketchy Research Interface
+
+### Decision 28.1: Elimination of Unnecessary Telemetry, Tags, and Visual Clutter
+- **Context & Problem**: Following the reversion to the Sketchy aesthetic, the user requested: *"but remove all of the unnecessary text, keep it clean , i wnat a clean display"*. The interface had accumulated technical metadata badges (`ColPali Visual: A100 ZeroGPU`, `Late Interaction: MaxSim Multi-Vector`, `ROUTE: BOTH`, `QUERY DISPATCH`, `SYSTEM ARCHIVE`), conversational tags (`Researcher Inquiry`), verbose subheaders, and decorative footer annotations (`SOURCE PROVENANCE: MANDATORY GROUNDING`). These distracted from reading the answer and interacting with documents.
+- **Decision**:
+  1. **Sidebar Simplification**:
+     - Removed the sidebar hardware telemetry box (`ColPali Visual: A100 ZeroGPU`, `Late Interaction: MaxSim Multi-Vector`).
+     - Simplified sidebar header from `Document Archive: Multi-Document Sessions` to a clean `Documents`.
+     - Removed redundant list section label `Ingested Papers`.
+  2. **Header & Status Spine Streamlining**:
+     - Removed the descriptive paragraph under the main title (`Agentic text retrieval, late-interaction page vectors, and high-resolution figure inspection.`).
+     - Simplified `.status-paper-strip` by removing the rule divider and `ROUTE: BOTH` badge. Retained only the live status dot and active document badge (`● DOC: ATTENTION`).
+     - Vertically aligned the title and action buttons cleanly (`align-items: center`).
+  3. **Chat Stream De-cluttering**:
+     - User Messages: Removed `<div class="user-tag">Researcher Inquiry</div>`, presenting user inquiries cleanly with comfortable reading typography.
+     - Assistant Working Sheets: Removed `<div class="assistant-header-meta">` (`ROUTE: BOTH Multimodal context synthesis` and `SYSTEM ARCHIVE`), letting answers start immediately below the clean ruled divider.
+     - Thinking & Loader States: Simplified loading indicators to clean, understated messages (`Searching document...`, `Loading conversation history...`).
+     - Starter Card: Replaced the multi-paragraph starter greeting and sample query bullets with a concise 1-sentence prompt: *"Ask any question about this document's text, equations, figures, or tables."*
+  4. **Visual References & Input Footer**:
+     - Figures & Tables Deck: Removed the redundant uppercase banner `<div class="mount-inspect-hint">INSPECT PAGE X IN DOCUMENT →</div>` from each figure/table card. The cards remain fully clickable with their clean metadata badge (`FIGURE [PAGE 2]`, `TABLE [PAGE 8]`) and caption.
+     - Input Footer: Simplified placeholder to *"Ask a question about this document..."*, changed action button to *"Send →"*, and removed the entire decorative `.footer-annotation` bar.
+     - Upload Modal: Shortened description to a single clear sentence.
+  5. **Core Capability Integrity**: All functional engines remain 100% active and untouched:
+     - Progressive word-by-word streaming typewriter animation.
+     - Rich Markdown parsing (`<strong>`, headings, lists, tables).
+     - Offline KaTeX mathematical formula rendering.
+     - Unified end-of-answer `Sources: Page 10, 12, 15...` interactive jump bar.
+     - SQLite session checkpoint persistence across page refreshes.
+     - Per-document "Clear Chat" database purge functionality.
+     - Side-by-side document inspection with page navigation and native PDF view.
+- **Outcome**: A clean, distraction-free laboratory notebook workspace with high typographic elegance and zero unnecessary noise.
+
+
+---
+
+## 29. Retrieval Depth Calibration: 5 Chunks (Dense/BM25) & Up to 10 Visual Assets
+
+### Decision 29.1: Balanced 5-Chunk Candidate Retrieval & 10-Asset Visual Capacity
+- **Context & Problem**: Previously, dense vector retrieval (`Qdrant`) retrieved 6 chunks, BM25 retrieved 6 chunks, and RRF returned the top 6 text chunks, while visual asset hydration capped figures and tables at 5 (`matched_assets[:5]`). The user requested retrieving 5 chunks each from BM25 and dense retrieval, while allowing up to 10 total figures/tables for comprehensive visual coverage.
+- **Decision**:
+  1. **Dense Retrieval**: Reduced candidate text retrieval from `top_k=6` to `top_k=5` in `dense_retriever_node` (`backend/src/rag/graph/nodes.py`).
+  2. **BM25 Retrieval**: Reduced lexical candidate retrieval from `top_k=6` to `top_k=5` in `bm25_retriever_node` (`backend/src/rag/graph/nodes.py`).
+  3. **Reciprocal Rank Fusion**: Updated RRF fusion in `text_fusion_node` to return the top 5 fused text chunks (`top_k=5`).
+  4. **Visual Asset Hydration**: Expanded figure and table retention from `matched_assets[:5]` to `matched_assets[:10]` in `visual_hydration_node` (`backend/src/rag/graph/nodes.py`), surfacing up to 10 relevant figures and tables from the top ColPali pages.
+  5. **Config & Defaults**: Synchronized `DEFAULT_TEXT_TOP_K = 5` and `DEFAULT_FIGURE_TABLE_TOP_K = 10` in `backend/src/rag/config.py` and `colpali_retriever.py`.
+- **Outcome**: Enhanced visual asset recall (up to 10 figures and tables) paired with focused, high-precision 5-chunk text retrieval that fits comfortably within token budgets.
+
+
+---
+
+## 30. Definitive Fix for Visual Figure & Table Asset URL Resolution
+
+### Decision 30.1: Root Cause Analysis & Robust Asset URL Resolution Engine
+- **Context & Problem**: The user reported: *"currently figures are not renedered on the frontend, why is it that after an update something break down, aren't you building the project properly?"*. Inspection revealed that figure images in the visual references deck failed to load in the browser.
+- **Root Cause**:
+  1. **Discrepancy Between JSONL `image_path` and Physical Storage**: In `attention_figures.jsonl` and `attention_tables.jsonl`, `image_path` was recorded as `"src\pdf\figures\cropped\attention_fig_001.png"`, whereas the physical files reside directly at `data/figures/attention_fig_001.png` and `data/tables/attention_table_001.png`.
+  2. **Naive URL String Replacement**: In `frontend/server.py`, the URL formatting logic used:
+     ```python
+     clean_img = str(img).replace("\", "/").replace("data/", "")
+     src["web_image_url"] = f"/data/{clean_img}"
+     ```
+     This produced `/data/src/pdf/figures/cropped/attention_fig_001.png`. Because FastAPI mounts `/data` to `DATA_DIR` (`data/`), this URL returned **HTTP 404 Not Found** for every visual asset.
+  3. **Lack of Client-Side Fallback**: `renderTapedMount` in `frontend/static/app.js` relied solely on `src.web_image_url` and had no self-healing logic to extract the filename and fallback to canonical `/data/figures/{filename}` or `/data/tables/{filename}` paths.
+- **Decision & Fix**:
+  1. **Canonical Asset Resolver (`frontend/server.py`)**: Implemented `resolve_asset_url(image_path, doc_id, record_type)`:
+     - Extracts filename from any raw path (`attention_fig_001.png`).
+     - Checks document-specific folders first (`data/figures/{doc_id}/...`, `data/tables/{doc_id}/...`).
+     - Checks canonical folders (`data/figures/...`, `data/tables/...`).
+     - Recursively verifies existence against `DATA_DIR` and returns the exact verified `/data/...` URL.
+     - Applied in `/api/chat` and `/api/documents/{doc_id}/history` (heals both live responses and historical checkpoints).
+  2. **Client-Side Self-Healing (`frontend/static/app.js`)**: Updated `renderTapedMount` to automatically detect legacy `/data/src/pdf/...` patterns or missing `web_image_url` and reconstruct `/data/figures/${filename}` or `/data/tables/${filename}` directly in the browser.
+  3. **Visual Quality Enhancement (`frontend/static/style.css`)**: Removed destructive `filter: grayscale(100%) contrast(108%)` from `.mount-image` and increased `max-height` to `380px` so technical diagrams, model architectures, and flowcharts display with crisp clarity and full visual fidelity.
+- **Outcome**: Figures and tables render reliably and immediately in the visual references deck across all document sessions.

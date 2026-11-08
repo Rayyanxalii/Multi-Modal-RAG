@@ -3,7 +3,7 @@
  * Handles document switching, side-by-side inspection, streaming Q&A, and uploads.
  */
 
-const savedActiveDoc = localStorage.getItem("rag_active_doc_id");
+const savedActiveDoc = typeof localStorage !== "undefined" ? localStorage.getItem("rag_active_doc_id") : null;
 let currentDocId = savedActiveDoc || "attention";
 const chatHistories = {}; // doc_id -> in-memory HTML snapshot
 
@@ -67,7 +67,7 @@ async function loadDocuments() {
     const docExists = docs.some((d) => d.doc_id.toLowerCase() === currentDocId.toLowerCase());
     if (!docExists && docs.length > 0) {
       currentDocId = docs[0].doc_id;
-      localStorage.setItem("rag_active_doc_id", currentDocId);
+      if (typeof localStorage !== "undefined") localStorage.setItem("rag_active_doc_id", currentDocId);
     }
 
     docs.forEach((doc) => {
@@ -108,9 +108,9 @@ async function loadDocumentHistory(docId) {
 
   chatStream.innerHTML = `
     <article class="message-entry assistant" id="historyLoader">
-      <div class="assistant-working-sheet professional-card" style="opacity: 0.9;">
-        <div class="answer-body" style="color: var(--dp-color-ink-muted); font-style: italic;">
-          Restoring conversation history for <strong>${escapeHtml(docId)}.pdf</strong>...
+      <div class="assistant-working-sheet">
+        <div class="answer-body" style="color: var(--dp-color-secondary); font-style: italic;">
+          Loading conversation history for <strong>${escapeHtml(docId)}.pdf</strong>...
         </div>
       </div>
     </article>
@@ -154,7 +154,7 @@ async function switchDocument(docId, forceReload = false) {
   }
 
   currentDocId = docId;
-  localStorage.setItem("rag_active_doc_id", docId);
+  if (typeof localStorage !== "undefined") localStorage.setItem("rag_active_doc_id", docId);
   updateActiveBadge();
 
   if (chatHistories[docId] && !forceReload) {
@@ -220,20 +220,19 @@ function renderInitialGreeting(docId) {
   const chatStream = document.getElementById("chatStream");
   chatStream.innerHTML = `
     <article class="message-entry assistant">
-      <div class="assistant-working-sheet professional-card">
+      <div class="assistant-working-sheet">
         <div class="answer-body">
-          Active document: <strong>${escapeHtml(docId)}.pdf</strong>.
-          <br><br>
-          Ask any question regarding this document's text, figures, or tables. Click <strong>"Open Document Beside Chat"</strong> to inspect document pages side-by-side.
+          Ask any question about <strong>${escapeHtml(docId)}.pdf</strong>'s text, equations, figures, or tables.
         </div>
       </div>
     </article>
   `;
+  chatHistories[docId] = chatStream.innerHTML;
 }
 
 function updateActiveBadge() {
   const badge = document.getElementById("activeDocBadge");
-  if (badge) badge.textContent = `${currentDocId}.pdf`;
+  if (badge) badge.textContent = `DOC: ${currentDocId.toUpperCase()}`;
 }
 
 async function handleDeleteDoc(event, docId) {
@@ -247,7 +246,7 @@ async function handleDeleteDoc(event, docId) {
     if (res.ok) {
       delete chatHistories[docId];
       if (currentDocId === docId) {
-        localStorage.setItem("rag_active_doc_id", "attention");
+        if (typeof localStorage !== "undefined") localStorage.setItem("rag_active_doc_id", "attention");
         await switchDocument("attention", true);
       }
       await loadDocuments();
@@ -325,8 +324,8 @@ function appendThinkingIndicator() {
   const entry = document.createElement("article");
   entry.className = "message-entry assistant";
   entry.innerHTML = `
-    <div class="assistant-working-sheet professional-card" style="opacity: 0.95;">
-      <div class="answer-body" style="color: var(--dp-color-ink-muted); font-style: italic;">
+    <div class="assistant-working-sheet">
+      <div class="answer-body" style="color: var(--dp-color-secondary); font-style: italic;">
         Searching document...
       </div>
     </div>
@@ -349,7 +348,9 @@ function appendAssistantMessage(data, options = {}) {
   entry.className = "message-entry assistant";
 
   const workingSheet = document.createElement("div");
-  workingSheet.className = "assistant-working-sheet professional-card";
+  workingSheet.className = "assistant-working-sheet";
+
+
 
   const answerBody = document.createElement("div");
   answerBody.className = "answer-body";
@@ -380,7 +381,7 @@ function appendAssistantMessage(data, options = {}) {
   stream.scrollTop = stream.scrollHeight;
 
   const routeBadge = document.getElementById("routeBadge");
-  if (routeBadge) routeBadge.textContent = (data.route || "both").toUpperCase();
+  if (routeBadge) routeBadge.textContent = `ROUTE: ${(data.route || "both").toUpperCase()}`;
 }
 
 /**
@@ -393,9 +394,10 @@ function streamAssistantResponse(data) {
   entry.className = "message-entry assistant";
 
   const workingSheet = document.createElement("div");
-  workingSheet.className = "assistant-working-sheet professional-card";
+  workingSheet.className = "assistant-working-sheet";
   workingSheet.style.cursor = "pointer";
-  workingSheet.title = "Click to skip typing animation";
+
+
 
   const answerBody = document.createElement("div");
   answerBody.className = "answer-body";
@@ -424,7 +426,6 @@ function streamAssistantResponse(data) {
     }
 
     workingSheet.style.cursor = "default";
-    workingSheet.title = "";
 
     // 1. Render complete rich markdown with KaTeX
     answerBody.innerHTML = parseMarkdownToHtml(cleanText);
@@ -445,7 +446,7 @@ function streamAssistantResponse(data) {
     }
 
     const routeBadge = document.getElementById("routeBadge");
-    if (routeBadge) routeBadge.textContent = (data.route || "both").toUpperCase();
+    if (routeBadge) routeBadge.textContent = `ROUTE: ${(data.route || "both").toUpperCase()}`;
 
     stream.scrollTop = stream.scrollHeight;
   };
@@ -782,24 +783,41 @@ function formatMathFallback(code, isBlock) {
 }
 
 function renderTapedMount(src) {
-  const isTable = (src.type || "").toLowerCase() === "table" || !!src.table_markdown;
+  const isTable = (src.type || "").toLowerCase() === "table" || Boolean(src.table_markdown);
   const pages = (src.pages || []).join(", ") || "?";
-  const badgeText = isTable ? `Table (Page ${pages})` : `Figure (Page ${pages})`;
-  const caption = src.caption || src.panel_caption || "";
+  const badgeText = isTable ? `TABLE [PAGE ${pages}]` : `FIGURE [PAGE ${pages}]`;
+  const caption = src.caption || src.panel_caption || "Visual asset extracted from document";
   const targetPage = (src.pages && src.pages.length > 0 && parseInt(src.pages[0], 10)) || 1;
 
+  // Resolve image URL with resilient fallback
+  let imgUrl = src.web_image_url;
+  if (!imgUrl && src.image_path) {
+    const rawPath = String(src.image_path).replace(/\\/g, "/");
+    const filename = rawPath.split("/").pop();
+    const folder = isTable || filename.toLowerCase().includes("tab") ? "tables" : "figures";
+    imgUrl = `/data/${folder}/${filename}`;
+  } else if (imgUrl && imgUrl.includes("src/pdf/")) {
+    const filename = imgUrl.split("/").pop();
+    const folder = isTable || filename.toLowerCase().includes("tab") ? "tables" : "figures";
+    imgUrl = `/data/${folder}/${filename}`;
+  }
+
   let bodyHtml = "";
-  if (src.web_image_url) {
-    bodyHtml = `<img class="mount-image" src="${escapeHtml(src.web_image_url)}" alt="${escapeHtml(caption)}" loading="lazy">`;
-  } else if (src.table_markdown) {
-    bodyHtml = `<pre class="table-markdown-box">${escapeHtml(src.table_markdown)}</pre>`;
+  if (!isTable && imgUrl) {
+    bodyHtml = `<img class="mount-image" src="${escapeHtml(imgUrl)}" alt="${escapeHtml(caption)}" loading="lazy" onerror="this.style.display='none'">`;
+  } else if (isTable) {
+    if (src.table_markdown) {
+      bodyHtml = `<pre class="table-markdown-box">${escapeHtml(src.table_markdown)}</pre>`;
+    } else if (imgUrl) {
+      bodyHtml = `<img class="mount-image" src="${escapeHtml(imgUrl)}" alt="${escapeHtml(caption)}" loading="lazy" onerror="this.style.display='none'">`;
+    }
   }
 
   return `
     <div class="taped-mount clickable-mount" onclick="openAndJumpToPage(${targetPage})" title="Click to view Page ${targetPage} beside chat">
       <div class="mount-badge">${escapeHtml(badgeText)}</div>
       ${bodyHtml}
-      ${caption ? `<div class="mount-caption">${escapeHtml(caption)}</div>` : ""}
+      <div class="mount-caption">${escapeHtml(caption)}</div>
     </div>
   `;
 }
