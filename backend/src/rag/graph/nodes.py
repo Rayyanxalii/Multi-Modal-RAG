@@ -29,7 +29,23 @@ from pathlib import Path
 from typing import Any, Literal
 from pydantic import BaseModel, Field
 
+import sys
 from llama_index.core.llms import ChatMessage, ImageBlock, MessageRole, TextBlock
+
+try:
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+except Exception:
+    pass
+
+def _safe_str(text: Any, max_len: int = 80) -> str:
+    """Safely truncate and sanitize arbitrary text for console printing."""
+    if not text:
+        return ""
+    cleaned = str(text).replace("\n", " ").strip()
+    if len(cleaned) > max_len:
+        cleaned = cleaned[:max_len] + "..."
+    return cleaned.encode("ascii", errors="replace").decode("ascii")
 from rag.config import (
     DEFAULT_PDF_PATH,
     FIGURES_CLEANED_JSONL,
@@ -201,7 +217,7 @@ def index_colpali_node(state: RAGState) -> dict[str, Any]:
 class QueryIntent(BaseModel):
     """Structured classification of user query intent."""
     route: Literal["text", "visual", "both"] = Field(
-        description="The primary retrieval route: 'text' for prose/explanations/formulas, 'visual' for diagrams/figures/tables/charts, or 'both' for hybrid/comprehensive questions."
+        description="The primary retrieval route: 'text' for verbal prose/definitions/background, 'visual' for pure diagrams/figures/plots, or 'both' for equations/formulas, architectural mechanics, tables, calculations, or hybrid queries."
     )
     confidence: float = Field(
         default=1.0,
@@ -267,9 +283,9 @@ def route_query_node(state: RAGState) -> dict[str, Any]:
 
     routing_prompt = f"""You are an expert query router in an advanced multimodal RAG system.
 Analyze the user's question and determine the optimal retrieval route:
-- "visual": The user explicitly or implicitly asks about a figure, diagram, system architecture, flowchart, schema, plot, image, chart, or data table (e.g. "show the architecture", "how does the diagram represent...", "what are the BLEU scores?").
-- "text": The user asks for definitions, conceptual explanations, mathematical motivations, background prose, or summaries without needing visual inspection (e.g. "define self-attention", "why use dot-product scaling?").
-- "both": The question is broad, complex, asks for a comprehensive explanation, or benefits from both textual explanations and visual diagrams/tables (e.g. "how does multi-head attention work and what does its structure look like?").
+- "visual": The user explicitly or implicitly asks about a figure, diagram, system architecture, flowchart, schema, plot, or visual layout (e.g. "show Figure 1", "how does the diagram represent...", "what does the visual layout show?").
+- "text": The user asks for high-level narrative, definitions, conceptual motivations, literature background, or philosophy without needing equations, tables, or diagrams (e.g. "why was the Transformer created?", "who proposed the model?").
+- "both": The user asks for mathematical equations, formulas, architectural mechanics, calculations, metrics, tables, parameter dimensions, or comprehensive explanations (e.g. "explain the equation of attention mechanism", "what is the formula for scaled dot-product attention?", "what are the BLEU scores in Table 2?", "how does multi-head attention work?").
 
 Respond strictly in valid JSON matching this schema:
 {{
@@ -288,6 +304,12 @@ Output JSON only:"""
         if match:
             data = json.loads(match.group(0))
             intent = QueryIntent.model_validate(data)
+            print("\n" + "=" * 65)
+            print(f"[Query Intent Router] Classified Route: {intent.route.upper()} (confidence: {intent.confidence:.2f})")
+            print(f"  └─ Reasoning: {intent.reasoning}")
+            if active_question != original_q:
+                print(f"  └─ Contextualized from: '{original_q}' -> '{active_question}'")
+            print("=" * 65)
             return {
                 "question": active_question,
                 "original_question": original_q,
@@ -297,6 +319,9 @@ Output JSON only:"""
         raise ValueError(f"No JSON object found in LLM response: {response}")
     except Exception as exc:
         print(f"[Warning] LLM intent routing encountered an error: {exc}. Defaulting route to 'both'.")
+        print("\n" + "=" * 65)
+        print(f"[Query Intent Router] Classified Route: BOTH (Fallback due to error: {exc})")
+        print("=" * 65)
         return {
             "question": active_question,
             "original_question": original_q,
@@ -314,7 +339,8 @@ def dense_retriever_node(state: RAGState) -> dict[str, Any]:
     query = state["question"].strip()
     doc_id = state.get("doc_name")
     try:
-        results = search_chunks(query, top_k=5, doc_id=doc_id)
+        results = search_chunks(query, top_k=6, doc_id=doc_id)
+        print(f"  [Dense Retriever] Found {len(results)} candidate chunks in Qdrant.")
     except Exception as exc:
         print(f"[Warning] Dense retriever error: {exc}")
         results = []
@@ -328,7 +354,8 @@ def bm25_retriever_node(state: RAGState) -> dict[str, Any]:
     pdf_path = Path(state.get("pdf_path") or DEFAULT_PDF_PATH)
     doc_paths = get_document_paths(pdf_path)
     try:
-        results = search_bm25(query=query, top_k=5, chunks_path=doc_paths["chunks_path"])
+        results = search_bm25(query=query, top_k=6, chunks_path=doc_paths["chunks_path"])
+        print(f"  [BM25 Retriever] Found {len(results)} lexical matches via Okapi BM25.")
     except Exception as exc:
         print(f"[Warning] BM25 retriever error: {exc}")
         results = []
@@ -344,7 +371,8 @@ def text_fusion_node(state: RAGState) -> dict[str, Any]:
         return {"text_results": []}
 
     try:
-        fused = reciprocal_rank_fusion(dense_matches, bm25_matches, top_k=5)
+        fused = reciprocal_rank_fusion(dense_matches, bm25_matches, top_k=6)
+        print(f"  [Text Fusion] Reciprocal Rank Fusion fused into top {len(fused)} text chunks.")
     except Exception as exc:
         print(f"[Warning] Text fusion error: {exc}")
         fused = dense_matches or bm25_matches or []
@@ -362,6 +390,7 @@ def colpali_retriever_node(state: RAGState) -> dict[str, Any]:
     try:
         retriever = get_colpali_retriever()
         page_results = retriever.search(query=query, top_k=5, doc_id=doc_name)
+        print(f"  [ColPali Retriever] MaxSim late interaction retrieved {len(page_results)} top pages on A100 ZeroGPU.")
     except Exception as exc:
         print(f"[Warning] ColPali cloud search error: {exc}")
         page_results = []
@@ -440,6 +469,7 @@ def visual_hydration_node(state: RAGState) -> dict[str, Any]:
     matched_assets.sort(
         key=lambda item: (item.get("colpali_rank", 999), -float(item.get("colpali_score", 0.0)))
     )
+    print(f"  [Visual Hydration] Hydrated {len(matched_assets)} figures/tables from top ColPali pages.")
 
     return {"figure_table_results": matched_assets[:5]}
 
@@ -518,15 +548,15 @@ def grade_context_node(state: RAGState) -> dict[str, Any]:
     if not context_str.strip():
         return {"is_relevant": False}
 
-    grading_prompt = f"""You are a strict relevance grader assessing whether retrieved document context contains facts or visual references useful to answer a question.
+    grading_prompt = f"""You are a strict relevance grader assessing whether retrieved document context contains facts, figures, formulas, or explanations useful to answer the user's specific question.
 
 Question: {question}
 
 Retrieved Context:
-{context_str[:2500]}
+{context_str[:3000]}
 
-Respond ONLY with 'YES' if the context contains information, data, figures, or explanations relevant to answering the question.
-Respond ONLY with 'NO' if the context is completely unrelated or insufficient.
+Respond ONLY with 'YES' if the context contains information, data, figures, formulas, or explanations directly useful to address the question.
+Respond ONLY with 'NO' if the context is completely unrelated, irrelevant, or missing the requested mechanism/formula/table.
 Your verdict (YES/NO):"""
 
     try:
@@ -618,26 +648,19 @@ def generate_answer_node(state: RAGState) -> dict[str, Any]:
             ],
         }
 
-    if not is_relevant:
-        ans = "I don't have information about that."
-        return {
-            "answer": ans,
-            "chat_history": [
-                {"role": "user", "content": question},
-                {"role": "assistant", "content": ans},
-            ],
-        }
+# Removed premature is_relevant blocker; model synthesizes with all available evidence
 
     system_prompt = (
-        "You are an expert AI assistant answering questions based on the provided technical document.\n"
+        "You are an expert scientific and technical AI assistant answering questions based strictly on the provided technical document context.\n"
         "Guidelines:\n"
-        "1. Never say 'From the context/document I received', 'Based on the provided context', or similar introductory meta-phrases.\n"
-        "2. Start your response using: 'According to the document, ...' or directly address the question using facts from the document.\n"
-        "3. Answer ONLY using the facts, figures, tables, and explanations present in the context.\n"
-        "4. Do NOT extrapolate, speculate, or introduce external knowledge.\n"
-        "5. Every factual claim, architecture detail, or numeric result MUST cite its source using: [Source N, Page P].\n"
-        "6. When referencing a figure or table, mention its name (e.g. Figure 1, Table 2) and citation [Source N, Page P].\n"
-        "7. If the document does not contain enough information to answer the question, respond ONLY with: 'I don't have information about that.' without further explanation."
+        "1. Style & Tone: Write in clear, authoritative, fluent prose. Directly address the user's question using facts from the document.\n"
+        "2. Grounding: Answer strictly using the retrieved text chunks, tables, and figures. Synthesize explanations accurately without speculating or hallucinating unmentioned facts.\n"
+        "3. Mathematical Equations: When expressing formulas, equations, or variables, ALWAYS use standard LaTeX syntax:\n"
+        "   - Use display math blocks '$$ ... $$' on their own separate lines for primary equations (e.g. $$ \\text{Attention}(Q, K, V) = \\text{softmax}\\left(\\frac{QK^T}{\\sqrt{d_k}}\\right)V $$).\n"
+        "   - Use inline math '$...$' for variables, dimensions, and short expressions (e.g. '$d_k$', '$d_v$', '$Q$', '$K$', '$V$', '$\\sqrt{d_k}$', '$O(n^2 \\cdot d)$').\n"
+        "4. Citations: Ground your statements with concise source citations [Source N, Page P] placed at the end of sentences where facts are introduced. Do not interrupt formulas or insert citations between words.\n"
+        "5. Visual References: When referencing figures or tables, explicitly mention them (e.g. 'as illustrated in Figure 2 [Source N, Page P]').\n"
+        "6. Unanswerable: If the document contains genuinely no information to answer the question, respond with: 'I don't have information about that in the document.'"
     )
 
     user_blocks: list[Any] = []
@@ -646,7 +669,7 @@ def generate_answer_node(state: RAGState) -> dict[str, Any]:
     attached_images = 0
 
     # 1. Text Chunks (top 4 to stay within rate-limit token budgets)
-    selected_text_results = text_results[:4]
+    selected_text_results = text_results[:6]
     if selected_text_results:
         text_parts = ["Retrieved Text Chunks:"]
         for item in selected_text_results:
@@ -690,7 +713,7 @@ def generate_answer_node(state: RAGState) -> dict[str, Any]:
 
     # 3. Question Prompt
     user_blocks.append(
-        TextBlock(text=f"Question: {question}\n\nAnswer (starting with 'According to the document, ...' or state 'I don't have information about that.'):")
+        TextBlock(text=f"Question: {question}\n\nPlease provide a clear, detailed, grounded explanation citing relevant sources.")
     )
 
     messages = [
@@ -706,6 +729,57 @@ def generate_answer_node(state: RAGState) -> dict[str, Any]:
                 messages.append(ChatMessage(role=role, content=content))
 
     messages.append(ChatMessage(role=MessageRole.USER, blocks=user_blocks))
+
+    # -------------------------------------------------------------------------
+    # Terminal Logging: Complete VLM Payload Inspection
+    # -------------------------------------------------------------------------
+    print("\n" + "=" * 75)
+    print(">>> [VLM INPUT DISPATCH] Payload sent to Vision LLM (qwen/qwen3.8-27b):")
+    print(f"  * Question: '{_safe_str(question, 120)}'")
+
+    print(f"  * Retrieved Text Chunks ({len(selected_text_results)} attached):")
+    for idx, c in enumerate(selected_text_results, 1):
+        cid = c.get("chunk_id", "Unknown")
+        pages = c.get("page_numbers") or ["?"]
+        raw_t = c.get("text") or c.get("contextualized_text") or ""
+        print(f"    [{idx}] Chunk {cid} (Page {pages}): \"{_safe_str(raw_t, 85)}\"")
+
+    v_count = len(fig_tab_results or [])
+    print(f"  * Visual Assets ({v_count} candidates evaluated, max {max_images} attached as PNG ImageBlock):")
+    v_img_count = 0
+    for idx, v in enumerate(fig_tab_results or [], 1):
+        rtype = v.get("record_type", "visual")
+        rid = v.get("record_id", v.get("figure_id", v.get("table_id", "Unknown")))
+        page = v.get("page", "?")
+        cap = _safe_str(v.get("caption") or v.get("panel_caption") or "No caption", 75)
+        raw_img = v.get("image_path", "")
+        resolved = _resolve_image_path(raw_img, rtype)
+        is_attached = resolved and v_img_count < max_images
+        if is_attached:
+            v_img_count += 1
+            v_status = f"ATTACHED AS ImageBlock ({resolved.name})"
+        elif resolved:
+            v_status = "SKIPPED IMAGE (Limit reached; caption/table kept in text)"
+        else:
+            v_status = "TEXT/TABLE-ONLY (No cropped image path)"
+
+        print(f"    [{idx}] {rtype.upper()} {rid} (Page {page}): \"{cap}\"")
+        if v.get("table_markdown"):
+            md_prev = _safe_str(v["table_markdown"], 60)
+            print(f"        |-- Table Grid Markdown: \"{md_prev}\" ({len(v['table_markdown'])} chars)")
+        print(f"        |-- Vision Status: [{v_status}]")
+
+    if chat_history:
+        print(f"  * Conversational Memory ({len(chat_history[-4:])} recent message(s) included):")
+        for h in chat_history[-4:]:
+            role = h.get("role", "unknown")
+            snippet = _safe_str(h.get("content", ""), 65)
+            print(f"    [{role.upper()}]: {snippet}")
+    else:
+        print("  * Conversational Memory: None (first turn)")
+
+    print(f"  * System Prompt: Citation grounding [Source N, Page P] enforced.")
+    print("=" * 75 + "\n")
 
     try:
         response = llm_vision.chat(messages).message.content.strip()

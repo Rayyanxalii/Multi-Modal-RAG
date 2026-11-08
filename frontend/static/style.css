@@ -553,6 +553,39 @@ body {
   border-color: var(--dp-color-accent-ink);
 }
 
+/* Mathematical Typography & Display Equations */
+.math-block {
+  margin: 14px 0;
+  padding: 12px 18px;
+  overflow-x: auto;
+  text-align: center;
+  background-color: #fbf9f4;
+  border: var(--dp-border-hairline) solid var(--dp-color-band-edge);
+  border-radius: var(--dp-radius-corner);
+}
+
+.math-inline {
+  display: inline-block;
+  padding: 0 2px;
+  vertical-align: -0.08em;
+}
+
+.math-fallback {
+  font-family: var(--dp-typography-display);
+  font-style: italic;
+  color: var(--dp-color-ink);
+  letter-spacing: 0.02em;
+}
+
+.katex-display {
+  margin: 4px 0 !important;
+}
+
+.katex {
+  font-size: 1.08em;
+  color: var(--dp-color-ink);
+}
+
 /* --------------------------------------------------------------------------
    Editorial Visual References: Natural Framing for Figures & Tables
    -------------------------------------------------------------------------- */

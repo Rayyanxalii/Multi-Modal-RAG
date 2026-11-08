@@ -20,6 +20,23 @@ document.addEventListener("DOMContentLoaded", () => {
   initChatForm();
   initUploadModal();
   initDocViewer();
+
+  // Re-sweep any initial answer bodies with KaTeX
+  if (window.renderMathInElement) {
+    document.querySelectorAll(".answer-body").forEach((el) => {
+      try {
+        window.renderMathInElement(el, {
+          delimiters: [
+            { left: "$$", right: "$$", display: true },
+            { left: "\\[", right: "\\]", display: true },
+            { left: "$", right: "$", display: false },
+            { left: "\\(", right: "\\)", display: false },
+          ],
+          throwOnError: false,
+        });
+      } catch (e) {}
+    });
+  }
 });
 
 // ============================================================================
@@ -250,11 +267,8 @@ function appendAssistantMessage(data) {
   const entry = document.createElement("article");
   entry.className = "message-entry assistant";
 
-  // Format citations [Source N, Page P] into clean page reference buttons
-  let formattedAnswer = escapeHtml(data.answer || "");
-  formattedAnswer = formattedAnswer.replace(/\[Source\s+(\d+),\s*Page\s+(\d+)\]/gi, (match, srcNum, pageNum) => {
-    return `<button type="button" class="citation-highlight-btn" onclick="openAndJumpToPage(${pageNum})" title="View Page ${pageNum} beside chat"><span class="citation-dot" style="display:inline-block; width:6px; height:6px; border-radius:50%; background:var(--dp-color-accent); margin-right:4px;" aria-hidden="true"></span><span>Page ${pageNum}</span><span class="btn-arrow" style="font-size:13px; margin-left:3px;" aria-hidden="true">→</span></button>`;
-  });
+  // Format equations, citations, and markdown into structured HTML
+  const formattedAnswer = formatAssistantAnswer(data.answer || "");
 
   // Extract visual sources with images or table markdown
   const visualSources = (data.sources || []).filter(
@@ -287,8 +301,145 @@ function appendAssistantMessage(data) {
   stream.appendChild(entry);
   stream.scrollTop = stream.scrollHeight;
 
+  // Post-render KaTeX sweep if KaTeX auto-render is present
+  const answerBody = entry.querySelector(".answer-body");
+  if (answerBody && window.renderMathInElement) {
+    try {
+      window.renderMathInElement(answerBody, {
+        delimiters: [
+          { left: "$$", right: "$$", display: true },
+          { left: "\\[", right: "\\]", display: true },
+          { left: "$", right: "$", display: false },
+          { left: "\\(", right: "\\)", display: false },
+        ],
+        throwOnError: false,
+      });
+    } catch (e) {
+      console.warn("KaTeX post-render notice:", e);
+    }
+  }
+
   const routeBadge = document.getElementById("routeBadge");
   if (routeBadge) routeBadge.textContent = (data.route || "both").toUpperCase();
+}
+
+/**
+ * High-Fidelity Math Equation and Citation Parser
+ * Safely extracts LaTeX math, parses citations, escapes HTML, and renders via KaTeX with Unicode fallback.
+ */
+function formatAssistantAnswer(rawText) {
+  if (!rawText) return "";
+
+  // 1. Extract LaTeX Math blocks and inline expressions into placeholders
+  const mathTokens = [];
+
+  // Display math: $$ ... $$ and \[ ... \]
+  let text = rawText.replace(/\$\$([\s\S]+?)\$\$/g, (m, eq) => {
+    const idx = mathTokens.length;
+    mathTokens.push({ type: "block", code: eq.trim() });
+    return `___MATH_TOKEN_${idx}___`;
+  });
+  text = text.replace(/\\\[([\s\S]+?)\\\]/g, (m, eq) => {
+    const idx = mathTokens.length;
+    mathTokens.push({ type: "block", code: eq.trim() });
+    return `___MATH_TOKEN_${idx}___`;
+  });
+
+  // Inline math: $ ... $ (excluding bare currency) and \( ... \)
+  text = text.replace(/(?<!\$)\$([^\$\n]+?)\$(?!\$)/g, (m, eq) => {
+    const idx = mathTokens.length;
+    mathTokens.push({ type: "inline", code: eq.trim() });
+    return `___MATH_TOKEN_${idx}___`;
+  });
+  text = text.replace(/\\\(([\s\S]+?)\\\)/g, (m, eq) => {
+    const idx = mathTokens.length;
+    mathTokens.push({ type: "inline", code: eq.trim() });
+    return `___MATH_TOKEN_${idx}___`;
+  });
+
+  // 2. Escape non-math text safely
+  let processed = escapeHtml(text);
+
+  // 3. Convert citations (handles both single [Source 1, Page 4] and compound [Source 5, Page 4; Source 6, Page 4])
+  processed = processed.replace(/\[([^\]]*?Page\s*\d+[^\]]*?)\]/gi, (match) => {
+    const pageMatches = [...match.matchAll(/Page\s*(\d+)/gi)].map((m) => parseInt(m[1], 10));
+    const uniquePages = [...new Set(pageMatches)];
+    if (uniquePages.length === 0) return match;
+    return uniquePages
+      .map(
+        (p) =>
+          `<button type="button" class="citation-highlight-btn" onclick="openAndJumpToPage(${p})" title="View Page ${p} beside chat"><span class="citation-dot" style="display:inline-block; width:6px; height:6px; border-radius:50%; background:var(--dp-color-accent); margin-right:4px;" aria-hidden="true"></span><span>Page ${p}</span><span class="btn-arrow" style="font-size:13px; margin-left:3px;" aria-hidden="true">→</span></button>`
+      )
+      .join(" ");
+  });
+
+  // Also convert any standalone citations matching [Source N]
+  processed = processed.replace(/\[Source\s*(\d+)[,\s]*Page\s*(\d+)\]/gi, (match, src, page) => {
+    return `<button type="button" class="citation-highlight-btn" onclick="openAndJumpToPage(${page})" title="View Page ${page} beside chat"><span class="citation-dot" style="display:inline-block; width:6px; height:6px; border-radius:50%; background:var(--dp-color-accent); margin-right:4px;" aria-hidden="true"></span><span>Page ${page}</span><span class="btn-arrow" style="font-size:13px; margin-left:3px;" aria-hidden="true">→</span></button>`;
+  });
+
+  // Clean paragraph breaks
+  processed = processed.replace(/\n\s*\n/g, "<br><br>");
+
+  // 4. Render and re-inject math expressions
+  processed = processed.replace(/___MATH_TOKEN_(\d+)___/g, (match, idxStr) => {
+    const token = mathTokens[parseInt(idxStr, 10)];
+    if (!token) return match;
+
+    if (window.katex && typeof window.katex.renderToString === "function") {
+      try {
+        const isBlock = token.type === "block";
+        const rendered = window.katex.renderToString(token.code, {
+          displayMode: isBlock,
+          throwOnError: false,
+        });
+        if (isBlock) {
+          return `<div class="math-block">${rendered}</div>`;
+        }
+        return `<span class="math-inline">${rendered}</span>`;
+      } catch (err) {
+        console.warn("KaTeX direct render error:", err);
+      }
+    }
+
+    // High-quality readable fallback if KaTeX CDN is loading/unreachable
+    return formatMathFallback(token.code, token.type === "block");
+  });
+
+  return processed;
+}
+
+function formatMathFallback(code, isBlock) {
+  let s = code
+    .replace(/\\text\{([^\}]+)\}/g, "$1")
+    .replace(/\\mathrm\{([^\}]+)\}/g, "$1")
+    .replace(/\\left\(/g, "(")
+    .replace(/\\right\)/g, ")")
+    .replace(/\\left\[/g, "[")
+    .replace(/\\right\]/g, "]")
+    .replace(/\\frac\{([^\}]+)\}\{([^\}]+)\}/g, "($1 / $2)")
+    .replace(/\\sqrt\{([^\}]+)\}/g, "√($1)")
+    .replace(/\\sqrt\s*([a-zA-Z0-9]+)/g, "√$1")
+    .replace(/\\cdot/g, "·")
+    .replace(/\\times/g, "×")
+    .replace(/\\le/g, "≤")
+    .replace(/\\ge/g, "≥")
+    .replace(/\\neq/g, "≠")
+    .replace(/\\approx/g, "≈")
+    .replace(/\\in/g, "∈")
+    .replace(/_k\b/g, "ₖ")
+    .replace(/_v\b/g, "ᵥ")
+    .replace(/_i\b/g, "ᵢ")
+    .replace(/_j\b/g, "ⱼ")
+    .replace(/\^T\b/g, "ᵀ")
+    .replace(/\^2\b/g, "²")
+    .replace(/\^d\b/g, "ᵈ");
+
+  s = escapeHtml(s);
+  if (isBlock) {
+    return `<div class="math-block math-fallback">${s}</div>`;
+  }
+  return `<span class="math-inline math-fallback">${s}</span>`;
 }
 
 function renderTapedMount(src) {

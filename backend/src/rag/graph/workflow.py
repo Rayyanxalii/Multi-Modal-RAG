@@ -5,9 +5,10 @@ retrieval, RRF text fusion, visual asset hydration, Self-RAG relevance grading,
 query reformulation, and grounded answer synthesis.
 """
 
+import sqlite3
 from pathlib import Path
 from typing import Any, Literal
-from langgraph.checkpoint.memory import MemorySaver
+from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.graph import StateGraph, START, END
 
 from rag.config import DEFAULT_PDF_PATH
@@ -42,15 +43,24 @@ def decide_ingestion(state: RAGState) -> Literal["render_pages", "route_query"]:
 def branch_retrieval(state: RAGState) -> list[str]:
     """Conditional edge: route to Dense, BM25, and/or ColPali based on classified intent."""
     route = (state.get("route") or "both").lower()
+    print("\n" + "-" * 65)
     if route == "dense":
-        return ["dense_retriever"]
-    if route == "bm25":
-        return ["bm25_retriever"]
-    if route == "text":
-        return ["dense_retriever", "bm25_retriever"]
-    if route == "visual":
-        return ["colpali_retriever"]
-    return ["dense_retriever", "bm25_retriever", "colpali_retriever"]
+        print(f"[Query Path: DENSE ONLY] Executing dense semantic vector search (Qdrant).")
+        branches = ["dense_retriever"]
+    elif route == "bm25":
+        print(f"[Query Path: BM25 ONLY] Executing lexical keyword search (BM25).")
+        branches = ["bm25_retriever"]
+    elif route == "text":
+        print(f"[Query Path: TEXT ONLY] Executing Dense Vector (Qdrant) + BM25 Keywords (Reciprocal Rank Fusion). ColPali is bypassed.")
+        branches = ["dense_retriever", "bm25_retriever"]
+    elif route == "visual":
+        print(f"[Query Path: COLPALI ONLY] Executing ColPali visual late-interaction on page embeddings. Dense/BM25 are bypassed.")
+        branches = ["colpali_retriever"]
+    else:
+        print(f"[Query Path: BOTH MULTIMODAL] Executing parallel Dense, BM25, AND ColPali visual late-interaction.")
+        branches = ["dense_retriever", "bm25_retriever", "colpali_retriever"]
+    print("-" * 65)
+    return branches
 
 
 def decide_after_grading(state: RAGState) -> Literal["generate_answer", "rewrite_query"]:
@@ -154,10 +164,17 @@ def build_rag_graph() -> StateGraph:
     return workflow
 
 
-# Checkpointer for session & multi-turn conversational memory
-checkpointer = MemorySaver()
+# Persistent SQLite database checkpointer for Short-Term Memory (STM)
+DB_PATH = Path("data/chat_history.db")
+DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+_sqlite_conn = sqlite3.connect(str(DB_PATH), check_same_thread=False)
+checkpointer = SqliteSaver(_sqlite_conn)
+try:
+    checkpointer.setup()
+except Exception as exc:
+    print(f"[Warning] SqliteSaver setup notice: {exc}")
 
-# Compile the graph into a runnable application with checkpointer persistence
+# Compile the graph into a runnable application with persistent SQLite checkpointer
 app = build_rag_graph().compile(checkpointer=checkpointer)
 
 

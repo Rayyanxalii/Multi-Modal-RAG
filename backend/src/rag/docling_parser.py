@@ -112,18 +112,46 @@ def parse_pdf_to_chunks(
     document.save_as_json(document_json_path)
     print(f"Structured document saved to: {document_json_path}")
 
-    # 2. Save Markdown for inspection.
+    # Extract raw formula strings from Docling JSON to heal un-decoded formula placeholders
+    formula_strings: list[str] = []
+    try:
+        with open(document_json_path, "r", encoding="utf-8") as f:
+            doc_dict = json.load(f)
+        formula_strings = [
+            t["orig"].strip()
+            for t in doc_dict.get("texts", [])
+            if t.get("label") == "formula" and t.get("orig")
+        ]
+        if formula_strings:
+            print(f"Recovered {len(formula_strings)} raw formula expressions from Docling document model.")
+    except Exception as exc:
+        print(f"[Warning] Could not extract formula strings from {document_json_path.name}: {exc}")
+
+    # 2. Save Markdown for inspection (with healed formulas).
     markdown = document.export_to_markdown()
+    if formula_strings:
+        for f_str in formula_strings:
+            markdown = markdown.replace("<!-- formula-not-decoded -->", f_str, 1)
     markdown_path.write_text(markdown, encoding="utf-8")
     print(f"Parsed Markdown saved to: {markdown_path}")
 
-    # 3. Chunk the document using its structure.
+    # 3. Chunk the document using its structure and heal formula placeholders.
     chunker = HybridChunker()
     chunks = []
+    f_idx = 0
 
     for index, chunk in enumerate(chunker.chunk(document)):
         contextualized_text = chunker.contextualize(chunk)
         metadata = get_chunk_metadata(chunk)
+
+        chunk_text = chunk.text
+        while "<!-- formula-not-decoded -->" in chunk_text and f_idx < len(formula_strings):
+            chunk_text = chunk_text.replace("<!-- formula-not-decoded -->", formula_strings[f_idx], 1)
+            f_idx += 1
+
+        for f_str in formula_strings:
+            if "<!-- formula-not-decoded -->" in contextualized_text and f_str in chunk_text:
+                contextualized_text = contextualized_text.replace("<!-- formula-not-decoded -->", f_str, 1)
 
         chunk_data = {
             "chunk_id": f"{pdf_path.stem}_{index:04d}",
@@ -131,7 +159,7 @@ def parse_pdf_to_chunks(
             "file_name": pdf_path.name,
             "chunk_index": index,
             **metadata,
-            "text": chunk.text,
+            "text": chunk_text,
             "contextualized_text": contextualized_text,
         }
         chunks.append(chunk_data)

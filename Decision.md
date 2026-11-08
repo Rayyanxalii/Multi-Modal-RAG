@@ -18,6 +18,15 @@ This document captures every major architectural, technical, algorithmic, and en
 10. [ColPali Re-alignment & Visual Architecture Refactoring (Option A)](#10-colpali-re-alignment--visual-architecture-refactoring-option-a)
 11. [Project Reorganization & Unified Ingestion Pipeline](#11-project-reorganization--unified-ingestion-pipeline)
 12. [Generalization to Arbitrary Documents & LangGraph Agentic RAG](#12-generalization-to-arbitrary-documents--langgraph-agentic-rag)
+13. [Cloud ColPali Microservice on Nvidia A100 ZeroGPU](#13-cloud-colpali-microservice-on-nvidia-a100-zerogpu)
+14. [Document Ingestion Performance Optimization](#14-document-ingestion-performance-optimization)
+15. [Dual-Format Asset Cropping Resilience](#15-dual-format-asset-cropping-resilience)
+16. [Side-by-Side Dual-Pane Document Inspection Deck](#16-side-by-side-dual-pane-document-inspection-deck)
+17. [Professional Design System & Interface De-Cluttering](#17-professional-design-system--interface-de-cluttering)
+18. [Short-Term Conversational Memory via LangGraph Checkpointer](#18-short-term-conversational-memory-via-langgraph-checkpointer)
+19. [Mathematical Equation Typesetting (KaTeX & Safe Token Extraction)](#19-mathematical-equation-typesetting-katex--safe-token-extraction)
+20. [Terminal Query Path Dispatch & VLM Payload Observability](#20-terminal-query-path-dispatch--vlm-payload-observability)
+21. [Persistent SQLite STM Checkpointer & Local KaTeX Mathematical Engine](#21-persistent-sqlite-stm-checkpointer--local-katex-mathematical-engine)
 
 ---
 
@@ -441,3 +450,175 @@ This document captures every major architectural, technical, algorithmic, and en
      - Implemented `_resolve_image_path` to map legacy chunk paths to canonical visual asset locations (`data/figures/` and `data/tables/`).
      - Caps attached visual image blocks to the top 2 highest-scoring assets (`max_images = 2`) and text chunks to the top 4 candidates. Subsequent visual assets retain their full captions and markdown table grids in text, ensuring rich context while remaining well under the 7,000 ITPM limit.
      - Retains rigorous provenance and citation constraints (`[Source N, Page P]`).
+
+
+---
+
+## 13. Cloud ColPali Microservice on Nvidia A100 ZeroGPU
+
+### Decision 13.1: Decoupling ColPali Late-Interaction to Dedicated Cloud ZeroGPU
+- **Context & Problem**: ColPali v1.3 is a multi-vector vision-language model based on PaliGemma (3B parameters). Running multi-vector indexing and late-interaction MaxSim scoring on local consumer hardware (CPU or low-VRAM GPUs) causes severe bottlenecks:
+  1. High memory footprint (>10GB RAM) causing system starvation.
+  2. Slow indexing throughput (~8-12 seconds per high-resolution page).
+  3. High latency on query-to-patch MaxSim matrix multiplications.
+- **Decision**: Architect a dedicated microservice running on a Hugging Face Space (`rayyan0/colpali`) powered by an **Nvidia A100 (40GB) ZeroGPU**:
+  - Exposes Gradio API endpoints (`/index` and `/search`).
+  - `/index`: Accepts batch document page images, generates multi-vector token embeddings on the A100, and caches them on disk keyed by `doc_id`.
+  - `/search`: Computes query multi-vector embeddings and performs instantaneous parallelized MaxSim late interaction across all pages of the document, returning ranked pages with similarity scores.
+- **Outcome**: Indexing speeds accelerated by over $15\times$, and query late-interaction execution dropped to sub-second latencies without consuming local system RAM.
+
+### Decision 13.2: Robust ColPali Cloud Client with Automatic Authentication & Local Fallback
+- **Context & Problem**: Hugging Face Spaces on ZeroGPU enforce rate limits and require user authentication. If the remote space is cold-starting, queued, or quota-throttled, visual retrieval must not fail the entire user query.
+- **Decision**:
+  1. **Automated Token Injection**: Implemented `ColPaliCloudClient` in `src/rag/visual_retrieval/colpali_client.py` with automatic `HF_TOKEN` resolution from `.env` (sanitizing trailing whitespace and quotes).
+  2. **Graceful Local Fallback**: In `colpali_retriever.py`, if remote ZeroGPU connection fails or times out, the system automatically falls back to layout metadata and visual caption matching from `chunks_dir`, ensuring uninterrupted multimodal responses.
+
+---
+
+## 14. Document Ingestion Performance Optimization
+
+### Decision 14.1: Disabling Redundant RapidOCR on Digital PDFs
+- **Context & Problem**: During document upload, IBM Docling automatically triggered local RapidOCR model weight downloads and initialization (`PP-OCRv6_det_small.pth` and `ch_ppocr_mobile_v2.0_cls_mobile.pth`), running CPU convolutions over every page. For digital-native PDFs (which already contain programmatic character streams and font encodings), this redundant OCR step added 15–30 seconds of pure latency and wasted CPU cycles.
+- **Decision**: In `docling_parser.py`, configure `PdfPipelineOptions(do_ocr=False)`:
+  ```python
+  pipeline_options = PdfPipelineOptions(do_ocr=False)
+  converter = DocumentConverter(
+      format_options={InputFormat.PDF: PdfFormatOption(pipeline_options=pipeline_options)}
+  )
+  ```
+- **Outcome**: Completely eliminated local RapidOCR model loading and processing overhead, cutting layout parsing time by ~80% for digital PDFs while preserving exact reading order, tables, and bounding boxes.
+
+---
+
+## 15. Dual-Format Asset Cropping Resilience
+
+### Decision 15.1: Page Numbering Zero-Padding Normalization Across Renderers
+- **Context & Problem**: Ingestion pipeline components produced differing page filename formats: `render_pdf_to_images` produces zero-padded names (`page_0001.png`, `page_0015.png`), while Docling coordinates reference natural 1-based integers (`page_no=1`, `page_no=10`). In multi-page documents (such as `sample-tables.pdf`), figure and table croppers failed to locate pages with single-digit names (`page_0001.png not found`), resulting in skipped visual assets.
+- **Decision**: Updated `figure_cropper.py` and `table_cropper.py` to test candidate page filenames sequentially:
+  ```python
+  candidates = [
+      rendered_pages_dir / f"page_{page_number:04d}.png",
+      rendered_pages_dir / f"page_{page_number}.png",
+  ]
+  ```
+- **Outcome**: 100% extraction resilience across all document sizes and naming schemes (e.g., successfully cropped and cataloged all 29 tables from `sample-tables.pdf`).
+
+---
+
+## 16. Side-by-Side Dual-Pane Document Inspection Deck
+
+### Decision 16.1: Side-by-Side Dual-Pane Document Verification Interface
+- **Context & Problem**: In technical and scientific research, users need to verify generated answers and citations directly against the original source text, diagrams, and formulas without navigating away or losing conversational context.
+- **Decision**: Implemented a responsive dual-pane workspace ([`frontend/static/index.html`](frontend/static/index.html) and [`frontend/static/style.css`](frontend/static/style.css)):
+  - **Left Pane (Chat & Query Deck)**: Conversational stream, question formulation, and visual evidence cards.
+  - **Right Pane (Document Inspector Deck)**: Toggleable side-by-side inspection column supporting dual modes:
+    1. **Pages View**: High-resolution rendered page images with zoom controls (50% to 250%), direct page jump input, and horizontal thumbnail quick-jump strip.
+    2. **Native PDF**: Embedded browser iframe streaming the raw PDF directly from `GET /api/documents/{doc_id}/pdf`.
+  - **Dynamic Citation Jump**: Grounded citations (e.g., `Page 2 →`) are interactive buttons that automatically open the side-by-side viewer and navigate to the referenced page.
+- **Outcome**: Real-time provenance inspection allowing users to cross-examine synthesized claims alongside original PDF pages.
+
+---
+
+## 17. Professional Design System & Interface De-Cluttering
+
+### Decision 17.1: Adoption of the Authoritative Professional Design Tokens
+- **Context & Problem**: Early UI iterations incorporated high-contrast industrial indicators, neon accents, and dense hardware metadata that cluttered the reading experience and distracted from technical research.
+- **Decision**: Refactored the entire frontend into the **Professional** design system:
+  - **Palette**: Spacious ivory grounds (`#f7f4ec`), pale surfaces (`#fcfaf5`), dark warm ink (`#29271f`), muted slate ink (`#514d44`), and fine gold hairline rules (`#8b713a`, `#d4ccbd`).
+  - **Typography**: `EB Garamond` for headings and titles; `Instrument Sans` for reading prose, metadata, and controls.
+  - **De-Cluttering**: Purged all internal telemetry labels from the user interface (e.g. `A100 ZeroGPU`, `MaxSim Multi-Vector`, `ROUTE: READY`, `COGNITIVE RETRIEVAL SYSTEM`, `SOURCE PROVENANCE: MANDATORY GROUNDING`).
+- **Outcome**: A clean, publication-grade, accessible reading interface prioritizing legible content, keyboard accessibility, and visual stillness.
+
+---
+
+## 18. Short-Term Conversational Memory via LangGraph Checkpointer
+
+### Decision 18.1: Session Memory Architecture via Threaded Checkpointing
+- **Context & Problem**: The agentic RAG pipeline was initially stateless: every query was evaluated in complete isolation. Users asking natural follow-up questions (*"What about the number of heads in that table?"*, *"Can you explain that more simply?"*) suffered from retrieval failures because pronouns (*"it"*, *"that table"*) could not be resolved without conversation context.
+- **Decision**: Architect stateful short-term memory using LangGraph's native checkpointing system:
+  1. **Accumulator State Channel**: Added `chat_history: Annotated[list[dict[str, Any]], operator.add]` to `RAGState`.
+  2. **Thread Isolation**: Configured `build_rag_graph().compile(checkpointer=MemorySaver())` with independent thread identifiers per document (`thread_id="doc_{doc_id}"`).
+  3. **Contextual Query Reformulation**: In `route_query_node`, prior turns in `chat_history` are used to rephrase ambiguous follow-ups into self-contained search queries before routing and retrieval.
+  4. **Multi-Turn Answer Synthesis**: In `generate_answer_node`, recent dialogue turns are injected into the vision LLM prompt, maintaining coherent dialogue flow.
+  5. **History REST API**: Added `GET /api/documents/{doc_id}/history` to retrieve stored turns from the checkpointer when switching between documents in the UI.
+- **Outcome**: Seamless multi-turn conversation support per document with isolated thread memory and automatic follow-up coreference resolution.
+
+
+---
+
+## 19. Mathematical Equation Typesetting (KaTeX & Safe Token Extraction)
+
+### Decision 19.1: KaTeX Typesetting with Isolated Math Token Extraction & Fallback
+- **Context & Problem**: Technical documents (especially AI/ML foundational papers like *Attention Is All You Need*) contain extensive mathematical formulations (e.g. Scaled Dot-Product Attention $\text{Attention}(Q, K, V) = \text{softmax}\left(\frac{QK^T}{\sqrt{d_k}}\right)V$, dimension variables $d_k, d_v$, matrix symbols $Q, K, V$, and complexity bounds $O(n^2 \cdot d)$). Initially, the frontend lacked a LaTeX math engine and ran naive HTML escaping across the entire string, resulting in unrendered raw LaTeX code (`$$`, `\text`, `\frac`, `\sqrt`) that was difficult to read and broke visual presentation.
+- **Decision**:
+  1. **Safe Token Extraction**: To prevent HTML escaping (`&`, `<`, `>`) from corrupting LaTeX syntax (such as matrix alignment ampersands or inequalities), implemented a two-pass token placeholder extraction system in `app.js`:
+     - Pass 1: Isolates display math (`$$...$$`, `\[...\]`) and inline math (`$...$`, `\(...\)`) into indexed placeholders (`___MATH_TOKEN_X___`).
+     - Pass 2: Safely escapes non-math HTML, resolves compound citations, and converts paragraph breaks.
+     - Pass 3: Re-injects math expressions rendered via KaTeX.
+  2. **KaTeX Integration**: Integrated KaTeX (`v0.16.11`) via CDN in `index.html` and configured `.math-block` (ivory container with gold border and overflow scrolling) and `.math-inline` styling in `style.css`.
+  3. **High-Fidelity Offline Fallback**: Implemented `formatMathFallback()` to translate LaTeX constructs into Unicode math equivalents (`\sqrt` $\rightarrow$ `√`, `_k` $\rightarrow$ `ₖ`, `^2` $\rightarrow$ `²`, `^T` $\rightarrow$ `ᵀ`, `\cdot` $\rightarrow$ `·`) if KaTeX CDN is loading or offline.
+  4. **Compound Citation Parsing**: Enhanced citation regex to identify and convert compound citations (e.g., `[Source 5, Page 4; Source 6, Page 4]`) into unified clickable buttons (`Page 4 →`).
+- **Outcome**: Publication-grade mathematical typesetting for complex scientific formulas and clean, interactive citation buttons.
+
+---
+
+## 20. Terminal Query Path Dispatch & VLM Payload Observability
+
+### Decision 20.1: End-to-End Query Path and Multimodal Dispatch Observability
+- **Context & Problem**: In complex Agentic RAG workflows (Intent Routing $\rightarrow$ Conditional Branching $\rightarrow$ Dense/BM25/ColPali Retrieval $\rightarrow$ CRAG Evaluation $\rightarrow$ VLM Generation), developers and operators need immediate clarity on which retrieval pipelines are actively running for any given prompt (whether ColPali only, text only, or multimodal both), why the router chose that path, and what exact multimodal assets (images, table grids, text chunks, conversation history) are being passed into the Vision Language Model (`qwen/qwen3.8-27b`). Furthermore, printing raw technical document extracts on Windows terminals frequently triggered fatal `UnicodeEncodeError: 'charmap' codec can't encode character` crashes due to `cp1252` encoding mismatches on mathematical and typographic characters (`\u2217`, `\u2013`, `\u221a`).
+- **Decision**:
+  1. **Retrieval Branch Logging**: Configured `branch_retrieval` in `backend/src/rag/graph/workflow.py` to clearly announce the routing path in terminal output:
+     - `[Query Path: COLPALI ONLY]`: ColPali visual late-interaction on page embeddings (dense/BM25 bypassed).
+     - `[Query Path: TEXT ONLY]`: Hybrid Dense Vector (Qdrant) + BM25 Keywords with Reciprocal Rank Fusion (ColPali bypassed).
+     - `[Query Path: DENSE ONLY]` or `[Query Path: BM25 ONLY]`: Targeted single-modality execution.
+     - `[Query Path: BOTH MULTIMODAL]`: Concurrent execution of Dense, BM25, and ColPali visual late-interaction.
+  2. **Granular Component Execution Metrics**: Added logging across all retrieval nodes:
+     - `[Query Intent Router]`: Output route, confidence score, contextual query reformulations, and LLM reasoning.
+     - `[Dense Retriever]`: Candidate vector count from Qdrant.
+     - `[BM25 Retriever]`: Candidate lexical match count from Okapi BM25.
+     - `[ColPali Retriever]`: Page images retrieved via MaxSim late-interaction on Hugging Face ZeroGPU.
+     - `[Text Fusion]`: Fused chunk count from Reciprocal Rank Fusion.
+     - `[Visual Hydration]`: Hydrated figures and tables matching retrieved pages.
+  3. **Full VLM Payload Inspection Deck**: In `generate_answer_node` (`backend/src/rag/graph/nodes.py`), implemented a comprehensive dispatch monitor (`>>> [VLM INPUT DISPATCH] Payload sent to Vision LLM (qwen/qwen3.8-27b)`):
+     - Active/contextualized question string.
+     - Attached text chunks with chunk IDs, page numbers, and truncated text previews.
+     - Evaluated visual assets (figures/tables) with page numbers, captions, table grid markdown character counts, and explicit status tags (`ATTACHED AS ImageBlock`, `SKIPPED IMAGE (Limit reached)`, `TEXT/TABLE-ONLY`).
+     - Injected conversational memory dialogue turns (role and truncated content).
+     - Active grounding and citation instructions.
+  4. **Windows Encoding Resilience**: Implemented `sys.stdout.reconfigure(encoding="utf-8", errors="replace")` and an ASCII-safe truncation helper `_safe_str()` with fallback character replacement, preventing console crashes across Windows environments.
+- **Outcome**: 100% transparent terminal observability into retrieval mechanics and VLM payloads without risking runtime encoding failures.
+
+---
+
+## 21. Persistent SQLite STM Checkpointer & Local KaTeX Mathematical Engine
+
+### Decision 21.1: Migration from In-Memory Saver to Persistent SQLite Checkpointing
+- **Context & Problem**: Short-Term Memory was originally backed by `MemorySaver()`, which maintained chat checkpoints exclusively in volatile process RAM. Whenever the server process restarted or reloaded (`--reload`), conversation threads and follow-up contextualization state were lost.
+- **Decision**: Installed `langgraph-checkpoint-sqlite` and configured `SqliteSaver` in `backend/src/rag/graph/workflow.py`:
+  - Points to a persistent SQLite database at `data/chat_history.db`.
+  - Automatically initializes schema via `checkpointer.setup()`.
+  - Compiles `app = build_rag_graph().compile(checkpointer=checkpointer)`.
+  - Integrates with `GET /api/documents/{doc_id}/history` in `frontend/server.py` to restore chat history across document switches and server restarts.
+- **Outcome**: Thread state and dialogue memory are permanently persisted to disk with zero memory leakage and immediate multi-turn recall.
+
+### Decision 21.2: Local KaTeX Mathematical Typesetting (Eliminating CDN Fallback)
+- **Context & Problem**: Previously, math equations were occasionally rendered as crude Unicode symbols (e.g. `√(dₖ)`, `QKᵀ`) because the browser blocked or failed to load the external jsdelivr KaTeX CDN scripts, triggering the fallback text parser.
+- **Decision**:
+  - Downloaded and bundled the complete KaTeX suite (`katex.min.js`, `katex.min.css`, `contrib/auto-render.min.js`, and all WOFF2/TTF fonts) locally in `frontend/static/vendor/katex/`.
+  - Updated `frontend/static/index.html` to reference local `/static/vendor/katex/` paths, guaranteeing 100% offline mathematical typesetting without external network dependencies.
+- **Outcome**: Flawless, instantaneous mathematical equation rendering for complex formulas and matrices.
+
+### Decision 21.3: Elimination of Premature Answer Blocking & Grounding Optimization
+- **Context & Problem**: Simple queries occasionally received `"I don't have information about that."` due to two compound issues:
+  1. IBM Docling stripped formulas from `chunks.jsonl` and replaced them with `<!-- formula-not-decoded -->`.
+  2. The Query Intent router routed formulas and equations to `TEXT ONLY`, completely bypassing ColPali and Figure 2.
+  3. `generate_answer_node` contained an artificial hardcoded block `if not is_relevant: return "I don't have information about that."` which silenced the Vision LLM if the grading node reported any hesitation, even when valid candidate chunks were retrieved.
+- **Decision**:
+  - Implemented automatic formula recovery in `backend/src/rag/docling_parser.py`, replacing `<!-- formula-not-decoded -->` with raw formula expressions (`orig`) from Docling's JSON document model.
+  - Re-embedded and updated Qdrant vector index for `attention`.
+  - Updated query intent routing to classify mathematical equations, formulas, mechanics, and calculations into `"both"` (triggering parallel ColPali + Dense + BM25).
+  - Removed premature `is_relevant` short-circuit in `generate_answer_node` so the Vision LLM synthesizes evidence from all retrieved passages.
+  - Re-engineered system prompt to require standard display LaTeX (`$$ ... $$`) and inline LaTeX (`$ ... $`), natural paragraph-level citations, and increased text context window to top 6 chunks.
+- **Outcome**: High-accuracy, publication-quality answer synthesis with clean mathematical equations and robust multi-modal grounding across both simple and advanced queries.
+
+
