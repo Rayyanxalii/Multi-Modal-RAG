@@ -355,6 +355,26 @@ body {
   color: var(--dp-color-accent-ink);
 }
 
+/* Clear Conversation History Button */
+.btn-clear-chat {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--dp-color-ink-muted);
+  transition: all var(--dp-motion-interaction);
+}
+
+.btn-clear-chat:hover {
+  color: #9c2727;
+  border-color: #dca8a8;
+  background-color: #fdf5f5;
+}
+
+.btn-clear-icon {
+  font-size: 13px;
+  opacity: 0.8;
+}
+
 /* Directional Arrow Mark */
 .btn-arrow {
   font-family: var(--dp-typography-display);

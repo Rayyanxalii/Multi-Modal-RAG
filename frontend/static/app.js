@@ -189,18 +189,29 @@ function initClearChatButton() {
   if (!btn) return;
 
   btn.addEventListener("click", async () => {
-    const confirmed = confirm(`Are you sure you want to clear conversation history for "${currentDocId}.pdf"?`);
+    const confirmed = confirm(
+      `Clear chat history for "${currentDocId}.pdf"?\n\nThis will permanently delete all saved messages for this document from the database.`
+    );
     if (!confirmed) return;
+
+    btn.disabled = true;
+    const originalHtml = btn.innerHTML;
+    btn.innerHTML = `<span class="btn-clear-icon" aria-hidden="true">⏳</span><span>Clearing...</span>`;
 
     try {
       const res = await fetch(`/api/documents/${currentDocId}/history`, { method: "DELETE" });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.detail || `Server error: ${res.status}`);
+      }
       delete chatHistories[currentDocId];
       renderInitialGreeting(currentDocId);
     } catch (err) {
       console.error("Failed to clear chat history:", err);
-      delete chatHistories[currentDocId];
-      renderInitialGreeting(currentDocId);
+      alert(`Could not clear chat history: ${err.message || err}`);
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = originalHtml;
     }
   });
 }
