@@ -2,7 +2,7 @@
 
 A production-grade, document-agnostic **Multi-Modal Agentic Retrieval-Augmented Generation (RAG)** system engineered to answer complex questions over any technical document containing written text, mathematical formulas, system architectures, flowcharts, diagrams, and tables (demonstrated on [*Attention Is All You Need*](data/raw/attention.pdf)).
 
-Powered by **LangGraph**, this system orchestrates an adaptive, self-correcting state graph that intelligently routes queries, evaluates document relevance via **Corrective RAG (CRAG)**, reformulates queries when context is insufficient, and synthesizes grounded answers with verifiable page-level citations.
+Powered by **LangGraph**, this system orchestrates an adaptive, self-correcting state graph that executes parallel dense and lexical retrieval, late-interaction visual page discovery via **ColPali**, evaluates relevance via **Corrective RAG (CRAG)**, and synthesizes grounded answers with verifiable page-level citations—all delivered through an interactive, distraction-free **Laboratory Notebook Web Workspace**.
 
 ---
 
@@ -20,17 +20,17 @@ graph TD;
     index_vectors --> route_query
 
     %% Fast Path for Ingested Document
-    check_doc_status -.->|"Already Ingested"| route_query[3. route_query_node<br/>Intent Router: 'text', 'visual', or 'both']
+    check_doc_status -.->|"Already Ingested"| route_query[3. route_query_node<br/>Fixed Parallel Multimodal Dispatch]
 
     %% Parallel Multi-Modal Retrieval Branches
-    route_query -.->|"text or both"| dense_retriever[4a. dense_retriever_node<br/>Qdrant nomic-embed-text]
-    route_query -.->|"text or both"| bm25_retriever[4b. bm25_retriever_node<br/>Heading BM25 Keyword Search]
-    route_query -.->|"visual or both"| colpali_retriever[4c. colpali_retriever_node<br/>ColPali MaxSim on Page Embeddings]
+    route_query --> dense_retriever[4a. dense_retriever_node<br/>Qdrant nomic-embed-text: 5 Chunks]
+    route_query --> bm25_retriever[4b. bm25_retriever_node<br/>Heading Okapi BM25: 5 Chunks]
+    route_query --> colpali_retriever[4c. colpali_retriever_node<br/>ColPali MaxSim on Page Embeddings]
 
     %% Fusion & Asset Hydration
-    dense_retriever --> text_fusion[5a. text_fusion_node<br/>Reciprocal Rank Fusion RRF]
+    dense_retriever --> text_fusion[5a. text_fusion_node<br/>Reciprocal Rank Fusion RRF: Top 5 Chunks]
     bm25_retriever --> text_fusion
-    colpali_retriever --> visual_hydration[5b. visual_hydration_node<br/>Map Pages to Cropped Figures & Tables]
+    colpali_retriever --> visual_hydration[5b. visual_hydration_node<br/>Hydrate Up to 10 Figures & Tables]
 
     %% Context Assembly
     text_fusion --> format_context[6. format_context_node<br/>Assemble Text Chunks & Visual Assets]
@@ -42,7 +42,7 @@ graph TD;
     rewrite_query --> route_query
 
     %% Grounded Answer Synthesis
-    grade_context -.->|"Relevant or Max Retries"| generate_answer[9. generate_answer_node<br/>Multimodal Vision Synthesis with Citations]
+    grade_context -.->|"Relevant or Max Retries"| generate_answer[9. generate_answer_node<br/>Multimodal Vision Synthesis & Guardrails]
     generate_answer --> __end__([__end__])
 ```
 
@@ -51,27 +51,56 @@ graph TD;
 ## Key Capabilities
 
 1. **Document-Agnostic Design**:
-   - Works on **any PDF document** containing text and diagrams.
-   - Dynamic document naming, automatic coordinate transformations, and generalized system prompts.
-2. **LangGraph Agentic State Machine**:
-   - **Typed State (`RAGState`)**: Maintains the active query, classification routes, candidate pools, retry counters, and verification flags.
-   - **LLM-Based Structured Intent Routing**: Employs an LLM with structured Pydantic schema (`QueryIntent`) to infer semantic intent (text, visual, or hybrid) along with transparent reasoning, bypassing heavy vision models on conceptual text questions without relying on brittle keyword heuristics.
-3. **Corrective RAG (CRAG) Without Web Search**:
-   - **Evaluator / Grader Node**: Assesses whether retrieved multimodal passages genuinely contain information relevant to answering the query.
-   - **Corrective Query Transformation**: If context is insufficient or irrelevant, CRAG triggers query reformulation into formal technical terms and retries retrieval.
-   - **Zero Web Hallucination**: Remains strictly bounded to the local document corpus to eliminate external noise and preserve verified page-level provenance.
-4. **True Visual Retrieval via ColPali (Option A)**:
-   - Vision-language late-interaction multi-vector search (`pages_embeddings.pt`) discovers flowcharts, attention diagrams, and heatmaps directly from pixels.
-   - Automatically maps top-ranked pages to cropped figures and structured Markdown tables.
-5. **Single Qdrant Collection**:
-   - Only one Qdrant collection (`research_papers` / `text_chunks`) is needed, simplifying deployment and vector storage.
-6. **Resilient Hybrid Fusion (RRF Fault Tolerance)**:
-   - Reciprocal Rank Fusion (`reciprocal_rank_fusion` & `text_fusion_node`) seamlessly handles single-retriever execution (dense-only or BM25-only).
-   - If either dense vector search or BM25 keyword matching returns 0 results or encounters an error, RRF automatically ranks and outputs the available results without pipeline failure.
-7. **Direct Multimodal Vision Generation (`llm_vision`)**:
-   - Answer generation is powered by a dedicated vision-language model (`qwen/qwen3.8-27b`).
-   - Retrieves text chunks, structured markdown tables, captions, and passes the actual cropped PNG image files directly into the vision model together in a single multimodal message block.
-   - Text LLM (`openai/gpt-oss-20b`) is reserved for low-latency routing, reflection, and grading, keeping the pipeline performant and resilient.
+   - Ingests and queries **any PDF document** containing text, mathematical proofs, diagrams, and tables.
+   - Dynamic document namespacing, automated coordinate mapping, and generalized multimodal context formatting.
+
+2. **Balanced Multimodal Retrieval (Calibrated Depth)**:
+   - **Dense Retrieval**: Retrieves **5 candidate text chunks** using Qdrant and `nomic-embed-text`.
+   - **Lexical Retrieval**: Retrieves **5 candidate heading chunks** using Okapi BM25.
+   - **Reciprocal Rank Fusion (RRF)**: Fuses both candidate streams ($k=60$) to select the **top 5 text chunks**.
+   - **Visual Asset Discovery**: ColPali multi-vector late-interaction MaxSim discovers top visual pages, hydrating **up to 10 visual assets** (cropped figures and structured Markdown tables) with full caption metadata.
+
+3. **Deterministic Unanswerable Guardrails**:
+   - If a question falls outside the document corpus (e.g. *"what is random forest?"* on an attention paper), the system prompt and deterministic server-side classifier enforce an immediate, clean response:
+     ```
+     I don't have information about that in the document.
+     ```
+   - **Zero Meta-Clutter**: Completely eliminates verbose explanations (*"The provided text chunks exclusively discuss..."*).
+   - **Source Purging**: Automatically clears context sources (`sources = []`) so no irrelevant figure mounts or citation bars appear.
+
+4. **Corrective RAG (CRAG) Without Web Hallucination**:
+   - **Evaluator Grader Node**: Assesses whether retrieved multimodal passages contain facts or formulas useful to answer the query.
+   - **Corrective Query Transformation**: If context is insufficient, reformulates the query into formal technical vocabulary and retries retrieval.
+   - Strictly bounded to document ground truth—eliminates external web hallucination.
+
+5. **Direct Multimodal Vision Generation (`llm_vision`)**:
+   - Powered by `qwen/qwen3.8-27b` on Groq.
+   - Passes text chunks, structured Markdown tables, and cropped figure PNGs directly into the vision model.
+   - Includes **self-healing token protection**: automatically truncates oversized table grids and retries with pure text/table markdown if vision token ceilings are encountered.
+
+6. **Interactive Laboratory Notebook Web Workspace**:
+   - **Monochrome Sketchy Aesthetic**: Clean, high-contrast research atmosphere with ruled borders, `Source Serif 4` prose, and `EB Garamond` headers.
+   - **Side-by-Side Inspection**: Split-view document viewer with high-res page rendering, zoom controls, thumbnail strip, and native PDF toggle.
+   - **Progressive Typewriter Streaming**: Word-by-word streaming animation with a blinking cursor.
+   - **Local KaTeX Typesetting**: 100% offline mathematical formula rendering (`$$...$$` blocks and `$...$` inlines).
+   - **Consolidated Provenance Bar**: Interactive `Sources: Page 10, 12, 15...` pills that open the viewer and jump to the exact page.
+   - **Persistent Conversational Memory**: LangGraph `SqliteSaver` checkpoints in `data/chat_history.db` preserve dialogues across reloads.
+   - **Granular Session Control**: One-click **"Clear Chat"** button permanently resets the SQLite conversation state for the active document.
+   - **Self-Healing Visual Assets**: Canonical asset URL resolution (`/data/figures/...`, `/data/tables/...`) with automatic client-side fallback.
+   - **Real-Time Ingestion Progress Bar**: Multi-stage animated loading bar with live percentage, stage telemetry (page rendering, Docling layout parsing, visual cropping, vector indexing), and a persistent top-strip progress banner.
+
+---
+
+## Retrieval Calibration Reference
+
+| Retrieval Stage | Default Count | Purpose & Mechanism |
+| :--- | :--- | :--- |
+| **Dense Search** | **5 chunks** | Semantic vector search via Qdrant (`nomic-embed-text`) |
+| **BM25 Search** | **5 chunks** | Lexical keyword search over chunk section headings |
+| **RRF Fusion** | **5 chunks** | Reciprocal Rank Fusion ($k=60$) combining Dense + BM25 |
+| **ColPali Pages** | **5 pages** | Late-interaction MaxSim discovery on rendered page embeddings |
+| **Figures + Tables** | **Up to 10 assets** | Cropped figures (PNGs) and tables (Markdown grids) from top pages |
+| **Total Context** | **Up to 15 assets** | Grounded multimodal evidence delivered to the VLM |
 
 ---
 
@@ -83,32 +112,34 @@ RAG/
 │   └── src/
 │       ├── rag/                          # Core RAG package
 │       │   ├── __init__.py
-│       │   ├── config.py                 # Single source of truth for paths, models, & credentials
+│       │   ├── config.py                 # Single source of truth for paths, models, & retrieval limits
 │       │   ├── doc_loader.py             # PyMuPDF page rendering pipeline
-│       │   ├── docling_parser.py         # IBM Docling layout parsing & hybrid chunking
-│       │   ├── ingest.py                 # Unified multi-stage ingestion CLI pipeline
-│       │   ├── main.py                   # Main application CLI entrypoint
+│       │   ├── docling_parser.py         # IBM Docling layout parsing & hierarchical chunking
+│       │   ├── document_manager.py       # Multi-document listing and deletion utilities
+│       │   ├── ingest.py                 # Multi-stage automated ingestion CLI pipeline
+│       │   ├── main.py                   # Interactive CLI chat assistant
 │       │   │
 │       │   ├── graph/                    # LangGraph Agentic RAG Subpackage
-│       │   │   ├── __init__.py           # Exports app, build_rag_graph, run_agentic_rag, save_graph_artifacts
-│       │   │   ├── state.py              # Typed RAGState dictionary
-│       │   │   ├── nodes.py              # Modular nodes (ingestion, routing, dense, bm25, colpali, rrf, hydration, CRAG, generate)
-│       │   │   ├── workflow.py           # StateGraph compilation & conditional edge routing
-│       │   │   └── visualize.py          # Graph artifact generation (data/graph.png & data/graph.mmd)
+│       │   │   ├── __init__.py           # Exports app, build_rag_graph, run_agentic_rag
+│       │   │   ├── state.py              # Typed RAGState dictionary definition
+│       │   │   ├── nodes.py              # Ingestion, retrieval, RRF, hydration, CRAG, VLM synthesis & guardrails
+│       │   │   ├── workflow.py           # StateGraph compilation, SQLite checkpointer, & conditional edges
+│       │   │   └── visualize.py          # StateGraph Mermaid visualization exporter
 │       │   │
 │       │   ├── text_retrieval/           # Text retrieval modules
-│       │   │   ├── bm25_retriever.py     # Heading-aware Okapi BM25
+│       │   │   ├── bm25_retriever.py     # Heading-aware Okapi BM25 retriever
 │       │   │   ├── search_chunks.py      # Qdrant dense vector search
-│       │   │   ├── index_chunks.py       # Text chunk indexer for Qdrant
+│       │   │   ├── index_chunks.py       # Text chunk indexing pipeline for Qdrant
 │       │   │   └── hybrid_retriever.py   # Dense + BM25 Reciprocal Rank Fusion (RRF)
 │       │   │
 │       │   └── visual_retrieval/         # Visual & tabular retrieval modules
-│       │       ├── colpali_model.py      # ColPali MultiVectorEncoder loader & MaxSim search
+│       │       ├── colpali_client.py     # ColPali Hugging Face ZeroGPU API client
+│       │       ├── colpali_model.py      # ColPali multi-vector retriever loader
 │       │       ├── preprocess/
-│       │       │   ├── figure_extractor.py   # Extract figures & tables from Docling
-│       │       │   ├── figure_cropper.py     # Crop figure regions from page images
-│       │       │   ├── table_cropper.py      # Crop table regions from page images
-│       │       │   └── caption_processor.py  # Caption cleaning, multi-panel grouping & filtering
+│       │       │   ├── figure_extractor.py   # Extract figure/table bounding boxes from Docling
+│       │       │   ├── figure_cropper.py     # Crop figure regions into PNG images
+│       │       │   ├── table_cropper.py      # Crop table regions into PNG images
+│       │       │   └── caption_processor.py  # Caption cleaning & panel grouping
 │       │       └── search/
 │       │           └── colpali_retriever.py  # ColPali visual retriever & asset hydration
 │       │
@@ -116,23 +147,27 @@ RAG/
 │           ├── __init__.py
 │           └── llm_service.py            # Groq LLM & VLM providers (Qwen 3.8 27B / GPT-OSS-20B)
 │
-├── frontend/                             # Frontend application directory (ready for UI implementation)
+├── frontend/                             # Full-Stack Web Application
+│   ├── server.py                         # FastAPI web server, REST endpoints, & asset URL resolver
+│   └── static/                           # Monochrome / Sketchy web client
+│       ├── index.html                    # Clean research canvas & side-by-side inspector
+│       ├── style.css                     # Monochrome design system tokens, typography & layout
+│       ├── app.js                        # Client state, streaming typewriter, KaTeX rendering, & viewer
+│       └── vendor/
+│           └── katex/                    # 100% offline local KaTeX mathematical engine
 │
-├── data/                                 # All persistent data assets
-│   ├── graph.png                         # High-res offline visual diagram of LangGraph workflow
-│   ├── graph.mmd                         # Mermaid graph definition exported from LangGraph
-│   ├── raw/                              # Original source documents (e.g. attention.pdf)
+├── data/                                 # Persistent data assets
+│   ├── chat_history.db                   # SQLite database storing multi-document conversation checkpoints
+│   ├── raw/                              # Original source PDF documents (e.g. attention.pdf)
 │   ├── rendered_pages/                   # High-res 2x PNG page images (page_0001.png - page_0015.png)
-│   ├── chunks/                           # JSONL text chunks, parsed documents, and metadata
+│   ├── chunks/                           # JSONL text chunks, parsed documents, and table/figure metadata
 │   ├── figures/                          # Cropped figure PNG images
 │   ├── tables/                           # Cropped table PNG images
 │   ├── embeddings/                       # ColPali multi-vector PyTorch embeddings (pages_embeddings.pt)
-│   └── retrieval_runs/                   # Query run traces & diagnostic logs
+│   ├── graph.png                         # High-res visual diagram of compiled LangGraph workflow
+│   └── graph.mmd                         # Mermaid graph definition exported from LangGraph
 │
-├── notebooks/                            # Exploratory Jupyter notebooks
-│   └── colpali_visual_retrieval.ipynb    # GPU ColPali embedding generation notebook
-│
-├── Decision.md                           # Architectural Decisions Record (ADR)
+├── Decision.md                           # Architectural Decisions Record (ADR: Decisions 1–32)
 ├── pyproject.toml                        # Central project metadata & dependencies (managed by uv)
 ├── uv.lock                               # Deterministic dependency lockfile
 └── README.md                             # Central project documentation
@@ -146,12 +181,12 @@ RAG/
 
 - **Python**: `>=3.14` (or `>=3.13` compatible environment)
 - **Package Manager**: [`uv`](https://github.com/astral-sh/uv) (recommended)
-- **Ollama**: Local Ollama instance running with `nomic-embed-text`:
+- **Ollama**: Running instance with `nomic-embed-text`:
   ```bash
   ollama pull nomic-embed-text
   ```
 - **Qdrant**: Running Qdrant cluster (Cloud or local container)
-- **Groq API**: An active Groq API key for LLM answer generation
+- **Groq API**: An active Groq API key for LLM and VLM inference
 
 ---
 
@@ -175,24 +210,40 @@ RAG/
 
 ## How to Run
 
-### 1. Interactive LangGraph Assistant (Continuous Session)
+### 1. Interactive Web Research Workspace (Recommended)
 
-Run the main application:
+Start the FastAPI application:
+```bash
+python frontend/server.py
+```
+*(or via uvicorn directly: `uvicorn frontend.server:app --reload --port 8000`)*
+
+Open your browser to:
+👉 **`http://localhost:8000`**
+
+**Features**:
+* **Side-by-Side Document Inspection**: Read answers while inspecting original document pages, diagrams, and native PDFs.
+* **Progressive Typewriter Streaming**: Word-by-word streaming effect with interactive instant-skip on click.
+* **Mathematical Typography**: Rendered offline via KaTeX with standard LaTeX formatting.
+* **Multi-Document Memory**: Switch seamlessly between documents with isolated conversation history restored automatically from SQLite.
+* **Clear Chat**: Reset dialogue checkpoints for the active document with a single click.
+
+---
+
+### 2. Interactive CLI Assistant (Continuous Terminal Session)
+
+To chat directly in the terminal:
 ```bash
 python -m rag.main
 ```
 *(or simply: `uv run rag`)*
-
-**Features**:
-* **Persistent in-memory caching**: The ColPali model stays loaded in RAM across queries, answering subsequent questions in **~1–2 seconds**.
-* **CRAG diagnostics**: Displays the classified intent (`ROUTE: Text / Visual / Both`) and any corrective query reformulation performed.
 
 *Example interaction:*
 ```text
 Ask a question: Show me the diagram of scaled dot product attention
 
 =======================================================
-ROUTE: Visual | CRAG RETRIES: 0
+ROUTE: Both | CRAG RETRIES: 0
 =======================================================
 ANSWER:
 Figure 2 (left) presents the Scaled Dot-Product Attention architecture [Source 1, Page 4].
@@ -206,40 +257,42 @@ Source 2 [Figure] | ID: attention_fig_003 | Pages: 4
 
 ---
 
-### 2. Visualize LangGraph Workflow Diagram
+### 3. Ingest Any Technical PDF
 
-To generate and export the state machine graph visualization:
+To ingest a new PDF document (automated Docling parsing, chunking, visual asset cropping, and Qdrant indexing):
+
+```bash
+python -m rag.ingest --pdf path/to/your_document.pdf
+```
+
+Optional ingestion flags:
+- `--skip-rendering`: Skip rendering PDF pages if images already exist.
+- `--skip-parsing`: Skip Docling layout parsing if chunks already exist.
+- `--skip-cropping`: Skip visual figure and table image cropping.
+- `--only-indexing`: Run only Qdrant vector indexing.
+
+*(Documents can also be uploaded directly via the **"+ Upload Document"** button in the Web UI).*
+
+---
+
+### 4. Visualize LangGraph Workflow Diagram
+
+To export an updated visualization of the state machine graph:
 
 ```bash
 python -m rag.main --visualize
 ```
 *(or run directly: `python -m rag.graph.visualize`)*
 
-This inspects the compiled `StateGraph` and generates:
-* **`graph.png`** / **`data/graph.png`**: Native LangGraph workflow PNG rendered via `get_graph().draw_mermaid_png()`.
-* **`data/graph.mmd`**: Pure Mermaid syntax exported via `get_graph().draw_mermaid()` for documentation and Mermaid live viewers.
+Generates:
+* **`data/graph.png`**: High-resolution workflow PNG diagram.
+* **`data/graph.mmd`**: Pure Mermaid flowchart definition.
 
 ---
 
-### 3. Ingest Any Technical Document
+### 5. Pure Retrieval Diagnostics (Without Calling LLM)
 
-To ingest any PDF document containing text and diagrams:
-
-```bash
-python -m rag.ingest --pdf path/to/your_document.pdf
-```
-
-Optional flags:
-- `--skip-rendering`: Skip rendering PDF pages if already extracted.
-- `--skip-parsing`: Skip Docling layout parsing if chunks already exist.
-- `--skip-cropping`: Skip visual figure and table image cropping.
-- `--only-indexing`: Run only Qdrant vector indexing.
-
----
-
-### 4. Pure Retrieval Diagnostics (Without Calling LLM)
-
-To inspect retrieval rankings directly:
+To evaluate retrieval rankings independently:
 
 * **ColPali Visual Search**:
   ```bash
@@ -254,7 +307,7 @@ To inspect retrieval rankings directly:
 
 ## Architectural Decision Records (ADR)
 
-For detailed documentation on every architectural, algorithmic, and engineering decision, refer to:
+For detailed documentation on every architectural, algorithmic, and engineering decision (Decisions 1 through 32), refer to:
 👉 **[`Decision.md`](Decision.md)**
 
 ---

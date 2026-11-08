@@ -230,66 +230,104 @@ class QueryIntent(BaseModel):
 
 
 
+def is_overview_query(query: str) -> bool:
+    """Detect whether user query asks for a high-level summary or overview of the entire document."""
+    q = query.lower().strip()
+    patterns = [
+        r"\bwhat is (?:this|the) (?:document|paper|report|pdf|file)\b",
+        r"\bsummarize (?:this|the)?\s*(?:document|paper|report|pdf|file|core topic)?\b",
+        r"\b(?:overview|summary) of (?:this|the)?\s*(?:document|paper|report|pdf)?\b",
+        r"\bwhat does (?:this|the)?\s*(?:document|paper|report|pdf)?\s*(?:cover|describe|talk about|discuss)\b",
+        r"\btell me about (?:this|the)?\s*(?:document|paper|report|pdf)\b",
+        r"\bcore topic\b",
+    ]
+    return any(re.search(pat, q) for pat in patterns)
+
+
 def contextualize_query(question: str, history: list[dict[str, Any]] | None) -> str:
-    """Reformulate a follow-up query using conversation history into a standalone search query."""
+    """Reformulate a follow-up query using conversation history into a standalone search query.
+
+    Bypasses LLM rewriting if the query is already self-contained or contains no coreference pronouns.
+    """
     if not history:
         return question
 
-    recent = history[-4:]
-    formatted_history = []
-    for turn in recent:
+    clean_q = question.strip()
+
+    # Rule 1: Check if the question contains anaphoric pronouns or relative references
+    coref_pattern = r"\b(it|its|they|them|their|theirs|this|that|these|those|the former|the latter|above|previous|earlier|same|another|also|too|again)\b"
+    elliptical_pattern = r"^(what about|how about|why\b|and for|explain more)\b"
+    has_coref = bool(re.search(coref_pattern, clean_q, re.IGNORECASE) or re.search(elliptical_pattern, clean_q, re.IGNORECASE))
+
+    # If the question does not contain coreference markers, it is self-contained. Keep it verbatim!
+    if not has_coref:
+        return clean_q
+
+    # Rule 2: Filter out uninformative or error responses from history
+    meaningful_turns = []
+    for turn in history[-6:]:
         role = "User" if turn.get("role") == "user" else "Assistant"
         content = str(turn.get("content", "")).strip()
+        # Skip unanswerable boilerplate or error responses
+        if "I don't have information about that in the document" in content:
+            continue
         if len(content) > 300:
             content = content[:300] + "..."
         if content:
-            formatted_history.append(f"{role}: {content}")
+            meaningful_turns.append(f"{role}: {content}")
 
-    if not formatted_history:
-        return question
+    if not meaningful_turns:
+        return clean_q
 
-    history_str = "\n".join(formatted_history)
+    history_str = "\n".join(meaningful_turns)
 
-    prompt = f"""Given the following conversation history and a follow-up question, rephrase the follow-up question into a clear, standalone search query that contains all necessary entities, subject names, and context from previous turns.
-If the question is already complete, self-contained, or does not refer to previous messages, return the question unchanged. Do not answer the question; output ONLY the reformulated standalone question text.
+    prompt = f"""You are an expert conversational assistant. The user asked a follow-up question that contains pronouns or references to earlier messages.
+Rephrase ONLY the ambiguous pronouns or references in the follow-up question into specific entities mentioned in the conversation history.
+
+STRICT INSTRUCTIONS:
+1. DO NOT invent entities, benchmark datasets, model architectures, or topics (such as ResNet, ImageNet, COCO) not explicitly present in the conversation history.
+2. If the question is already clear, return it unchanged.
+3. Output ONLY the standalone question text without quotes or explanations.
 
 Conversation History:
 {history_str}
 
-Follow-up Question: {question}
+Follow-up Question: {clean_q}
 
 Standalone Question:"""
 
     try:
         reformulated = llm.complete(prompt).text.strip()
         reformulated = reformulated.strip('"').strip("'").strip()
+        # Prevent repeating old questions if the user asked something new
+        prev_user_questions = [
+            str(t.get("content", "")).strip().lower()
+            for t in history
+            if t.get("role") == "user"
+        ]
+        if reformulated.lower() in prev_user_questions and clean_q.lower() not in prev_user_questions:
+            return clean_q
         if reformulated and len(reformulated) >= 3:
             return reformulated
     except Exception as exc:
         print(f"[Warning] Contextual query reformulation fallback: {exc}")
-    return question
+    return clean_q
 
 
 def route_query_node(state: RAGState) -> dict[str, Any]:
-    """Classify user query intent into 'text', 'visual', or 'both' using LLM structured output.
+    """Classify user query intent into 'text', 'visual', or 'both'.
 
-    If conversation history is present, first contextualizes follow-up questions to resolve coreferences.
+    If conversation history is present and query contains coreferences, resolves references using short-term memory.
     """
     original_q = state.get("original_question") or state["question"].strip()
+    retry_count = state.get("retry_count", 0)
     history = state.get("chat_history", [])
 
-    # Resolve follow-up references using short-term conversational memory
-    active_question = contextualize_query(original_q, history)
-
-    # -------------------------------------------------------------------------
-    # Routing code commented out per user instruction: always invoke 'both'
-    # (ColPali figures & tables + Dense retrieval + BM25)
-    # -------------------------------------------------------------------------
-    # routing_prompt = f"""You are an expert query router in an advanced multimodal RAG system..."""
-    # try:
-    #     response = llm.complete(routing_prompt).text.strip()
-    #     ...
-    # -------------------------------------------------------------------------
+    # If this is a retry within the CRAG loop, do NOT re-contextualize the original question!
+    if retry_count > 0:
+        active_question = state["question"].strip()
+    else:
+        active_question = contextualize_query(original_q, history)
 
     print("\n" + "=" * 65)
     print("[Query Intent Router] Routing bypassed: Always invoking BOTH (Dense + BM25 + ColPali)")
@@ -343,14 +381,38 @@ def text_fusion_node(state: RAGState) -> dict[str, Any]:
     bm25_matches = state.get("bm25_matches") or []
 
     if not dense_matches and not bm25_matches:
-        return {"text_results": []}
+        fused = []
+    else:
+        try:
+            fused = reciprocal_rank_fusion(dense_matches, bm25_matches, top_k=5)
+            print(f"  [Text Fusion] Reciprocal Rank Fusion fused into top {len(fused)} text chunks.")
+        except Exception as exc:
+            print(f"[Warning] Text fusion error: {exc}")
+            fused = (dense_matches or bm25_matches or [])[:5]
 
-    try:
-        fused = reciprocal_rank_fusion(dense_matches, bm25_matches, top_k=5)
-        print(f"  [Text Fusion] Reciprocal Rank Fusion fused into top {len(fused)} text chunks.")
-    except Exception as exc:
-        print(f"[Warning] Text fusion error: {exc}")
-        fused = dense_matches or bm25_matches or []
+    # If the user is asking for a document overview or summary, inject introductory chunks
+    q_to_check = state.get("original_question") or state.get("question", "")
+    if is_overview_query(q_to_check):
+        pdf_path = Path(state.get("pdf_path") or DEFAULT_PDF_PATH)
+        doc_paths = get_document_paths(pdf_path)
+        chunks_file = doc_paths.get("chunks_path")
+        if chunks_file and chunks_file.exists():
+            try:
+                intro_chunks = []
+                with chunks_file.open("r", encoding="utf-8") as f:
+                    for line in f:
+                        if line.strip():
+                            intro_chunks.append(json.loads(line))
+                        if len(intro_chunks) >= 3:
+                            break
+                # Prepend intro chunks if not already in fused
+                existing_ids = {c.get("chunk_id") for c in fused}
+                prepends = [c for c in intro_chunks if c.get("chunk_id") not in existing_ids]
+                if prepends:
+                    print(f"  [Text Fusion] Injected {len(prepends)} introductory document chunk(s) for overview query.")
+                    fused = (prepends + fused)[:5]
+            except Exception as e_intro:
+                print(f"[Warning] Failed injecting intro chunks: {e_intro}")
 
     return {"text_results": fused}
 
@@ -375,13 +437,14 @@ def colpali_retriever_node(state: RAGState) -> dict[str, Any]:
 
 
 def visual_hydration_node(state: RAGState) -> dict[str, Any]:
-    """Map top ColPali pages to their cropped figures and structured Markdown tables."""
+    """Map top ColPali pages and targeted table/figure requests to cropped figures and structured Markdown tables."""
     page_results = state.get("colpali_top_pages", [])
-    if not page_results:
-        return {"figure_table_results": []}
-
     pdf_path = Path(state.get("pdf_path") or DEFAULT_PDF_PATH)
     doc_paths = get_document_paths(pdf_path)
+
+    query = state.get("original_question") or state.get("question", "")
+    target_table_nums = [int(m) for m in re.findall(r"\btable\s*(\d+)\b", query, re.IGNORECASE)]
+    target_fig_nums = [int(m) for m in re.findall(r"\b(?:fig|figure)\.?\s*(\d+)\b", query, re.IGNORECASE)]
 
     page_rankings: dict[int, dict[str, Any]] = {}
     for res in page_results:
@@ -396,9 +459,73 @@ def visual_hydration_node(state: RAGState) -> dict[str, Any]:
     tables = load_jsonl(doc_paths["tables_jsonl"]) if doc_paths["tables_jsonl"].exists() else []
 
     matched_assets: list[dict[str, Any]] = []
+    seen_ids: set[str] = set()
 
-    # Match figures
+    # Priority 1: Explicit Table targeting (e.g. "what is table 1 shows?")
+    if target_table_nums:
+        for tab in tables:
+            t_id = tab.get("table_id", "")
+            cap = str(tab.get("caption") or "").lower()
+            is_target = any(
+                t_id.endswith(f"_{n:03d}") or t_id.endswith(f"_{n}") or f"table {n}" in cap or f"table_{n}" in t_id
+                for n in target_table_nums
+            )
+            if is_target and t_id not in seen_ids:
+                p = tab.get("page_number")
+                if p is None:
+                    pages = tab.get("page_numbers") or []
+                    p = pages[0] if pages else 1
+                matched_assets.append({
+                    "record_type": "table",
+                    "record_id": t_id,
+                    "table_id": t_id,
+                    "page": p,
+                    "colpali_rank": 0,
+                    "colpali_score": 99.0,
+                    "caption": tab.get("caption") or "",
+                    "table_markdown": tab.get("table_markdown") or tab.get("text") or "",
+                    "image_path": tab.get("image_path", ""),
+                    "item_type": tab.get("item_type", "TableItem"),
+                })
+                seen_ids.add(t_id)
+
+    # Priority 2: Explicit Figure targeting (e.g. "what is the figure 5 about?")
+    if target_fig_nums:
+        for fig in figures:
+            f_id = fig.get("figure_id", "")
+            cap = str(fig.get("caption") or "").lower()
+            parent = str(fig.get("parent_figure") or "").lower()
+            is_target = any(
+                f_id.endswith(f"_{n:03d}") or f_id.endswith(f"_{n}") or f"figure {n}" in cap or f"fig {n}" in cap or f"figure {n}" in parent or f"fig_{n}" in f_id
+                for n in target_fig_nums
+            )
+            if is_target and f_id not in seen_ids:
+                p = fig.get("page_number")
+                if p is None:
+                    pages = fig.get("page_numbers") or []
+                    p = pages[0] if pages else 1
+                matched_assets.append({
+                    "record_type": "figure",
+                    "record_id": f_id,
+                    "figure_id": f_id,
+                    "parent_figure": fig.get("parent_figure") or "",
+                    "panel": fig.get("panel") or "",
+                    "panel_caption": fig.get("panel_caption") or "",
+                    "shared_caption": fig.get("shared_caption") or "",
+                    "page": p,
+                    "colpali_rank": 0,
+                    "colpali_score": 99.0,
+                    "caption": fig.get("caption") or "",
+                    "image_path": fig.get("image_path", ""),
+                    "item_type": fig.get("item_type", "PictureItem"),
+                })
+                seen_ids.add(f_id)
+
+    # Priority 3: Match assets from top ColPali late-interaction pages
     for fig in figures:
+        f_id = fig.get("figure_id", "unknown_fig")
+        if f_id in seen_ids:
+            continue
         p = fig.get("page_number")
         if p is None:
             pages = fig.get("page_numbers") or []
@@ -408,8 +535,8 @@ def visual_hydration_node(state: RAGState) -> dict[str, Any]:
             p_info = page_rankings[p]
             matched_assets.append({
                 "record_type": "figure",
-                "record_id": fig.get("figure_id", "unknown_fig"),
-                "figure_id": fig.get("figure_id", "unknown_fig"),
+                "record_id": f_id,
+                "figure_id": f_id,
                 "parent_figure": fig.get("parent_figure") or "",
                 "panel": fig.get("panel") or "",
                 "panel_caption": fig.get("panel_caption") or "",
@@ -421,9 +548,12 @@ def visual_hydration_node(state: RAGState) -> dict[str, Any]:
                 "image_path": fig.get("image_path", ""),
                 "item_type": fig.get("item_type", "PictureItem"),
             })
+            seen_ids.add(f_id)
 
-    # Match tables
     for tab in tables:
+        t_id = tab.get("table_id", "unknown_tab")
+        if t_id in seen_ids:
+            continue
         p = tab.get("page_number")
         if p is None:
             pages = tab.get("page_numbers") or []
@@ -433,8 +563,8 @@ def visual_hydration_node(state: RAGState) -> dict[str, Any]:
             p_info = page_rankings[p]
             matched_assets.append({
                 "record_type": "table",
-                "record_id": tab.get("table_id", "unknown_tab"),
-                "table_id": tab.get("table_id", "unknown_tab"),
+                "record_id": t_id,
+                "table_id": t_id,
                 "page": p,
                 "colpali_rank": p_info.get("rank", 99),
                 "colpali_score": p_info.get("score", 0.0),
@@ -443,11 +573,32 @@ def visual_hydration_node(state: RAGState) -> dict[str, Any]:
                 "image_path": tab.get("image_path", ""),
                 "item_type": tab.get("item_type", "TableItem"),
             })
+            seen_ids.add(t_id)
+
+    # Priority 4: Overview queries fallback
+    if is_overview_query(query) and len(matched_assets) < 3:
+        for tab in tables:
+            t_id = tab.get("table_id", "")
+            p = tab.get("page_number") or (tab.get("page_numbers") or [99])[0]
+            if p in (1, 2) and t_id not in seen_ids:
+                matched_assets.append({
+                    "record_type": "table",
+                    "record_id": t_id,
+                    "table_id": t_id,
+                    "page": p,
+                    "colpali_rank": 5,
+                    "colpali_score": 10.0,
+                    "caption": tab.get("caption") or "",
+                    "table_markdown": tab.get("table_markdown") or tab.get("text") or "",
+                    "image_path": tab.get("image_path", ""),
+                    "item_type": tab.get("item_type", "TableItem"),
+                })
+                seen_ids.add(t_id)
 
     matched_assets.sort(
         key=lambda item: (item.get("colpali_rank", 999), -float(item.get("colpali_score", 0.0)))
     )
-    print(f"  [Visual Hydration] Hydrated {len(matched_assets)} figures/tables from top ColPali pages.")
+    print(f"  [Visual Hydration] Hydrated {len(matched_assets)} figures/tables from top ColPali pages and targeted queries.")
 
     return {"figure_table_results": matched_assets[:10]}
 
@@ -571,20 +722,56 @@ Your verdict (YES/NO):"""
 
 
 def rewrite_query_node(state: RAGState) -> dict[str, Any]:
-    """Corrective RAG (CRAG): Reformulate question into formal technical vocabulary."""
+    """Corrective RAG (CRAG): Reformulate question into document-grounded search keywords."""
     original_query = state.get("original_question") or state["question"]
     current_retry = state.get("retry_count", 0)
+    pdf_path = Path(state.get("pdf_path") or DEFAULT_PDF_PATH)
+    doc_paths = get_document_paths(pdf_path)
+    doc_name = doc_paths["doc_name"]
 
-    rewrite_prompt = f"""You are an expert AI search optimizer for technical documentation and scientific papers.
-The previous search query returned insufficient or irrelevant passages.
-Rewrite the query to use specific technical terminology, key concepts, formulas, or architecture names likely present in the document.
+    # Rule 1: Overview questions
+    if is_overview_query(original_query):
+        rewritten = f"Executive summary introduction abstract core overview {doc_name}"
+        print(f"\n[CRAG] Overview query reformulated: '{original_query}' -> '{rewritten}'")
+        return {
+            "question": rewritten,
+            "rewritten_query": rewritten,
+            "retry_count": current_retry + 1,
+        }
+
+    # Rule 2: Specific Table questions
+    table_m = re.search(r"\btable\s*(\d+)\b", original_query, re.IGNORECASE)
+    if table_m:
+        rewritten = f"Table {table_m.group(1)} financial statements data results {doc_name}"
+        print(f"\n[CRAG] Table query reformulated: '{original_query}' -> '{rewritten}'")
+        return {
+            "question": rewritten,
+            "rewritten_query": rewritten,
+            "retry_count": current_retry + 1,
+        }
+
+    # Rule 3: Specific Figure questions
+    fig_m = re.search(r"\b(?:fig|figure)\.?\s*(\d+)\b", original_query, re.IGNORECASE)
+    if fig_m:
+        rewritten = f"Figure {fig_m.group(1)} visual diagram plot {doc_name}"
+        print(f"\n[CRAG] Figure query reformulated: '{original_query}' -> '{rewritten}'")
+        return {
+            "question": rewritten,
+            "rewritten_query": rewritten,
+            "retry_count": current_retry + 1,
+        }
+
+    # Rule 4: General query reformulation with document grounding
+    rewrite_prompt = f"""You are an expert AI search optimizer for documents and technical reports.
+The previous search query returned insufficient passages for the document '{doc_name}'.
+Rewrite the query to use specific keywords and search phrases likely to be found in '{doc_name}' that match the user's intent.
 
 Original Query: {original_query}
 
 Requirements:
 - Return ONLY the rewritten query string.
-- Do not provide preamble, explanation, or quotes.
-- Optimize for both keyword (BM25) and vision-language (ColPali) search.
+- Do NOT invent external benchmark datasets or machine learning architectures (such as ResNet, ImageNet, COCO) unless specifically requested by the user.
+- Keep the vocabulary strictly grounded in '{doc_name}' and the user's query topic.
 
 Rewritten Query:"""
 
@@ -664,6 +851,108 @@ def _is_unanswerable_response(text: str) -> bool:
     return False
 
 
+def filter_relevant_sources(response: str, sources: list[dict[str, Any]], question: str = "") -> list[dict[str, Any]]:
+    """Filter candidate retrieval sources so only genuinely relevant text and visual assets are presented to the user.
+
+    Eliminates redundant figures/tables by:
+    1. Retaining visual assets specifically targeted by the user query (e.g. Table 1, Figure 5).
+    2. Retaining visual assets explicitly cited in the answer (e.g. [Source N], [Page P]).
+    3. Retaining visual assets explicitly mentioned by name or ID in the answer prose.
+    4. Capping any visual deck to at most 2 relevant items.
+    5. Omitting visual assets completely if the answer is purely textual or unanswerable.
+    """
+    if not sources:
+        return []
+
+    if _is_unanswerable_response(response):
+        return []
+
+    text_sources = [s for s in sources if s.get("type") == "text"]
+    visual_sources = [s for s in sources if s.get("type") in ("figure", "table", "visual")]
+
+    # 1. Parse cited source indices from LLM response (e.g. [Source 1, Page 2], [Source 3])
+    cited_source_indices = set()
+    for m in re.finditer(r"\[Source\s*(\d+)", response, re.IGNORECASE):
+        try:
+            cited_source_indices.add(int(m.group(1)))
+        except ValueError:
+            pass
+
+    # 2. Check if the question explicitly requested specific figures or tables
+    target_table_nums = [int(m) for m in re.findall(r"\btable\s*(\d+)\b", question, re.IGNORECASE)]
+    target_fig_nums = [int(m) for m in re.findall(r"\b(?:fig|figure)\.?\s*(\d+)\b", question, re.IGNORECASE)]
+
+    relevant_visuals: list[dict[str, Any]] = []
+    seen_ids: set[str] = set()
+
+    # Priority A: Targeted visual assets explicitly requested in the query
+    if target_table_nums or target_fig_nums:
+        for v in visual_sources:
+            v_id = str(v.get("id", "")).lower()
+            v_cap = str(v.get("caption", "")).lower()
+            v_type = (v.get("type") or "").lower()
+
+            is_match = False
+            if v_type == "table" and target_table_nums:
+                is_match = any(
+                    v_id.endswith(f"_{n:03d}") or v_id.endswith(f"_{n}") or f"table_{n}" in v_id or f"table {n}" in v_cap
+                    for n in target_table_nums
+                )
+            elif v_type == "figure" and target_fig_nums:
+                is_match = any(
+                    v_id.endswith(f"_{n:03d}") or v_id.endswith(f"_{n}") or f"fig_{n}" in v_id or f"figure {n}" in v_cap or f"fig {n}" in v_cap
+                    for n in target_fig_nums
+                )
+
+            if is_match and v.get("id") not in seen_ids:
+                relevant_visuals.append(v)
+                seen_ids.add(v.get("id"))
+
+    # Priority B: Visual assets that are explicitly cited by [Source N] in the answer
+    for v in visual_sources:
+        if v.get("source") in cited_source_indices and v.get("id") not in seen_ids:
+            relevant_visuals.append(v)
+            seen_ids.add(v.get("id"))
+
+    # Priority C: Visual assets mentioned by name/number in the answer prose (e.g. "Figure 1", "Table 2")
+    resp_lower = response.lower()
+    for v in visual_sources:
+        v_id = str(v.get("id", "")).lower()
+        v_type = (v.get("type") or "").lower()
+        id_num_match = re.search(r"_(\d+)$", v_id)
+        if id_num_match:
+            num = int(id_num_match.group(1))
+            name_pattern = rf"\b{v_type}\s*{num}\b"
+            if re.search(name_pattern, resp_lower) and v.get("id") not in seen_ids:
+                relevant_visuals.append(v)
+                seen_ids.add(v.get("id"))
+
+    # Priority D: If the query is an explicit visual query, and nothing was matched yet,
+    # include AT MOST the single highest-scoring visual asset
+    q_lower = question.lower()
+    has_visual_keyword = any(k in q_lower for k in ["figure", "fig", "table", "diagram", "chart", "plot", "image", "visual", "architecture", "flowchart"])
+    if not relevant_visuals and visual_sources and has_visual_keyword:
+        relevant_visuals.append(visual_sources[0])
+        seen_ids.add(visual_sources[0].get("id"))
+
+    # Priority E: If the user is asking a broad overview/summary without requesting figures/tables,
+    # suppress visual mounts so the response remains a clean, focused summary.
+    if is_overview_query(question) and not has_visual_keyword and not (target_table_nums or target_fig_nums):
+        relevant_visuals = []
+
+    # Strictly cap relevant visual sources to at most 2 to avoid visual clutter
+    relevant_visuals = relevant_visuals[:2]
+
+    # Filter text sources: keep cited text sources, or top 3 if citations are unindexed
+    relevant_text = [t for t in text_sources if t.get("source") in cited_source_indices]
+    if not relevant_text:
+        relevant_text = text_sources[:3]
+
+    combined = relevant_text + relevant_visuals
+    print(f"  [Sources Filter] Filtered {len(sources)} candidate sources -> {len(combined)} presented ({len(relevant_visuals)} visual).")
+    return combined
+
+
 def generate_answer_node(state: RAGState) -> dict[str, Any]:
     """Synthesize a grounded answer using the multimodal vision LLM (llm_vision) passing text, figures, tables, and conversation history."""
     question = state.get("original_question") or state["question"]
@@ -673,11 +962,12 @@ def generate_answer_node(state: RAGState) -> dict[str, Any]:
     chat_history = state.get("chat_history") or []
 
     if not text_results and not fig_tab_results:
-        ans = "I don't have information about that."
+        ans = "I don't have information about that in the document."
+        user_dialogue_question = state.get("original_question") or question
         return {
             "answer": ans,
             "chat_history": [
-                {"role": "user", "content": question},
+                {"role": "user", "content": user_dialogue_question},
                 {"role": "assistant", "content": ans, "sources": []},
             ],
         }
@@ -873,14 +1163,16 @@ def generate_answer_node(state: RAGState) -> dict[str, Any]:
             response = f"An error occurred while generating the answer: {exc}"
 
     # If response indicates unanswerable topic, enforce clean single-sentence response and purge sources
+    user_dialogue_question = state.get("original_question") or question
     if _is_unanswerable_response(response):
         response = "I don't have information about that in the document."
         sources = []
     else:
-        sources = state.get("sources", [])
+        raw_sources = state.get("sources", [])
+        sources = filter_relevant_sources(response, raw_sources, question=user_dialogue_question)
 
     new_turn = [
-        {"role": "user", "content": question},
+        {"role": "user", "content": user_dialogue_question},
         {"role": "assistant", "content": response, "sources": sources},
     ]
 

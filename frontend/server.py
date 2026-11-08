@@ -10,7 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from rag.config import DATA_DIR, RAW_DATA_DIR, DEFAULT_PDF_PATH, FIGURES_DIR, TABLES_DIR, get_document_paths
-from rag.graph import app as rag_app, run_agentic_rag
+from rag.graph import app as rag_app, run_agentic_rag, ingest_document
 from rag.document_manager import list_all_documents, delete_document
 
 app = FastAPI(title="Multimodal Agentic RAG - Sketch Interface")
@@ -309,18 +309,13 @@ async def upload_document(file: UploadFile = File(...)) -> dict[str, Any]:
 
     print(f"[Upload] Saved '{file.filename}' to '{target_pdf}' (doc_id={doc_id})")
 
-    # Run ingestion check / first pass
+    # Run automated document ingestion without generating premature answers or polluting conversational memory
     try:
-        # Trigger ingestion graph with a priming status check
-        ingest_result = run_agentic_rag(
-            question="Summarize the core topic of this document.",
-            pdf_path=target_pdf,
-        )
+        ingest_result = ingest_document(target_pdf)
         return {
             "status": "success",
             "doc_id": doc_id,
             "filename": file.filename,
-            "summary_answer": ingest_result.get("answer", ""),
         }
     except Exception as exc:
         print(f"[Error during ingestion]: {exc}")

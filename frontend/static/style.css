@@ -1370,3 +1370,114 @@ body {
   font-size: 1.08em;
   color: var(--dp-color-ink);
 }
+
+/* --------------------------------------------------------------------------
+   Ingestion Loading Bar & Progress Indicators (Sketchy Aesthetic)
+   -------------------------------------------------------------------------- */
+.progress-box-sketch {
+  margin: 16px 0;
+  padding: 14px 16px;
+  border: var(--dp-border-rule-thin) solid var(--dp-color-ink);
+  background-color: #fafafa;
+}
+
+.progress-meta-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-family: var(--dp-typography-mono);
+  font-size: 11.5px;
+  margin-bottom: 8px;
+  color: var(--dp-color-ink);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.progress-stage-text {
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.progress-percent {
+  font-weight: 700;
+  font-family: var(--dp-typography-mono);
+}
+
+.progress-track-sketch {
+  width: 100%;
+  height: 12px;
+  background-color: var(--dp-color-paper);
+  border: var(--dp-border-rule-thin) solid var(--dp-color-ink);
+  position: relative;
+  overflow: hidden;
+}
+
+.progress-fill-sketch {
+  height: 100%;
+  width: 0%;
+  background-color: var(--dp-color-ink);
+  transition: width 0.25s ease-out !important;
+}
+
+.progress-fill-sketch.animated {
+  background: repeating-linear-gradient(
+    45deg,
+    #000000,
+    #000000 10px,
+    #2a2a2a 10px,
+    #2a2a2a 20px
+  );
+}
+
+.progress-subnote {
+  margin-top: 8px;
+  font-family: var(--dp-typography-mono);
+  font-size: 10.5px;
+  color: var(--dp-color-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* Global Ingestion Strip below header */
+.global-ingest-strip {
+  width: 100%;
+  background-color: #fafafa;
+  border: var(--dp-border-rule-thin) solid var(--dp-color-ink);
+  padding: 8px 16px;
+  margin-bottom: 16px;
+  font-family: var(--dp-typography-mono);
+  font-size: 11.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.global-ingest-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ingest-pulse-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  background-color: var(--dp-color-ink);
+  border-radius: 50% !important;
+  animation: pulseDot 0.8s infinite alternate !important;
+}
+
+@keyframes pulseDot {
+  0% { opacity: 0.25; transform: scale(0.85); }
+  100% { opacity: 1; transform: scale(1.15); }
+}
+
+.global-ingest-right {
+  font-weight: 700;
+  font-family: var(--dp-typography-mono);
+}

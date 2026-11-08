@@ -207,6 +207,7 @@ def run_agentic_rag(
     initial_state: RAGState = {
         "question": question,
         "original_question": question,
+        "original_query": question,
         "pdf_path": target_pdf,
         "retry_count": 0,
     }
@@ -226,3 +227,30 @@ def run_agentic_rag(
         "thread_id": active_thread,
         "history_length": len(final_state.get("chat_history", [])),
     }
+
+
+def ingest_document(pdf_path: str | Path) -> dict[str, Any]:
+    """Execute the multi-stage document ingestion pipeline without invoking Q&A or polluting chat memory.
+
+    Runs page rendering, layout parsing, visual cropping, Qdrant vector indexing, and ColPali cloud indexing.
+    """
+    target_pdf = str(pdf_path)
+    state: RAGState = {
+        "pdf_path": target_pdf,
+        "question": "",
+        "original_question": "",
+        "retry_count": 0,
+    }
+
+    render_pages_node(state)
+    parse_document_node(state)
+    extract_and_crop_node(state)
+    index_vectors_node(state)
+    index_colpali_node(state)
+
+    return {
+        "status": "success",
+        "pdf_path": target_pdf,
+        "is_ingested": True,
+    }
+

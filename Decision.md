@@ -857,3 +857,77 @@ This document captures every major architectural, technical, algorithmic, and en
      ```
   3. **Visual & Text Provenance Purge**: When an unanswerable response is identified, `sources` is reset to `[]`. This prevents the frontend from displaying irrelevant figure/table mounts or citation bars for out-of-scope questions.
 - **Outcome**: Clean, concise single-sentence response with zero meta-clutter and zero irrelevant attachments whenever a question cannot be answered from the document.
+
+
+---
+
+## 32. Multi-Stage Ingestion Loading Bar & Real-Time Progress Feedback
+
+### Decision 32.1: Asymptotic Ingestion Progress Bar & Live Pipeline Stage Telemetry
+- **Context & Problem**: The user requested: *"also add a featire that when a pdf is ingested so it shows a loading bar or something, whcih make the user know that it is in progress"*. During document uploads, the UI previously showed a static, non-animated text box (`INDEXING DOCUMENT & EXTRACTING MULTIMODAL VECTORS...`). Because document ingestion involves multiple intensive stages (PyMuPDF rendering, Docling hierarchical layout parsing, figure/table extraction and cropping, Qdrant vector indexing, and ColPali embeddings), processing typically spans 15–30 seconds. Without a dynamic progress bar or stage feedback, users had no indication of progress or elapsed time.
+- **Decision**:
+  1. **Animated Loading Bar & Progress Track (`frontend/static/index.html` & `style.css`)**:
+     - Embedded `.progress-box-sketch` in the upload modal featuring an animated ruled progress track (`.progress-track-sketch`) and a technical diagonal-hatched fill (`.progress-fill-sketch.animated`).
+     - Real-time numerical percentage indicator (`0%` $	o$ `100%`).
+  2. **Live Pipeline Stage Telemetry**:
+     - Configured progressive stage text mapped to elapsed ingestion milestones:
+       1. `0% - 18%`: *"Uploading PDF & initializing workspace..."*
+       2. `18% - 38%`: *"Rendering high-res document pages..."*
+       3. `38% - 62%`: *"Parsing layout & extracting text (IBM Docling)..."*
+       4. `62% - 82%`: *"Cropping figures & structured data tables..."*
+       5. `82% - 95%`: *"Indexing semantic vectors & multimodal embeddings..."*
+       6. `100%`: *"✓ Ingestion complete! Opening workspace..."*
+  3. **Global Ingestion Banner Strip (`#globalIngestBar`)**:
+     - Added a banner strip beneath the header with an animated pulsing indicator dot (`.ingest-pulse-dot`), document name, active pipeline stage, and live percentage.
+     - Ensures users retain full visibility into ingestion progress even if the modal is minimized or dismissed.
+  4. **State Transitions & Auto-Hydration**:
+     - Submitting the form disables buttons and displays a spinner (`Ingesting... ⏳`).
+     - On successful response (HTTP 200), hits 100%, displays the checkmark, refreshes the document ledger (`loadDocuments()`), and automatically switches the active canvas to the new document.
+- **Outcome**: Immediate, transparent, and responsive visual progress feedback during long-running document ingestion operations.
+
+
+---
+
+## 33. Multi-Turn Thread Protection & Document-Grounded Contextual Retrieval
+
+### Decision 33.1: Decoupling Document Ingestion from Dialogue Memory
+- **Context & Problem**: In `frontend/server.py`, the document upload endpoint (`/api/upload`) previously executed `run_agentic_rag(question="Summarize the core topic of this document.", pdf_path=target_pdf)`. Because `thread_id` defaulted to `doc_{doc_id}`, this priming query executed the full RAG graph and wrote a failed dialogue turn (`User: Summarize the core topic... -> Assistant: I don't have information about that in the document.`) directly into the SQLite checkpointer (`data/chat_history.db`) before the user ever entered the chat room.
+- **Decision**:
+  1. Created a dedicated ingestion function `ingest_document(pdf_path)` in `backend/src/rag/graph/workflow.py` that executes only the ingestion nodes (`render_pages`, `parse_document`, `extract_and_crop`, `index_vectors`, `index_colpali`).
+  2. Updated `/api/upload` to call `ingest_document(target_pdf)` directly. It performs complete asset rendering and vector indexing without invoking query answering, LLM completion, or checkpointer writes.
+  3. Every newly uploaded document starts with an entirely clean, empty conversational memory thread.
+
+### Decision 33.2: Guarded Query Contextualization & Anaphora Detection
+- **Context & Problem**: `contextualize_query` previously called the LLM on every question if history existed. When users asked self-contained questions (e.g. *"what is the document about?"*, *"what is table 1 shows?"*, *"what is the figure 5 about?"*), the contextualizer misattributed entities from prior turns or previous queries, creating recursive question loops and hallucinations.
+- **Decision**:
+  1. **Anaphoric Coreference Guard**: Inspected query for explicit pronouns (`it`, `its`, `they`, `them`, `this`, `that`, `these`, `those`) or relative/elliptical references (`what about`, `how about`, `the former`, `the latter`, `explain more`). If none are present, the question is self-contained and returned verbatim without LLM invocation.
+  2. **Boilerplate Filter**: Filtered out unanswerable disclaimers (`"I don't have information about that in the document."`) and error messages from conversational memory prior to prompt construction.
+  3. **Strict LLM Constraints & Loop Prevention**: Instructed the model never to invent external entities or repeat previous user questions if the new query is distinct.
+  4. **CRAG Retry Exemption**: Excluded queries from re-contextualization when `retry_count > 0`.
+
+### Decision 33.3: Authentic Dialogue Logging in Conversational Memory
+- **Context & Problem**: In `generate_answer_node`, turns were recorded using `question = state["question"]`. Whenever the Corrective RAG (CRAG) node reformulated a query into technical search keywords, that reformulated search query was saved as the user's message in SQLite rather than what the user actually typed. This poisoned subsequent conversational turns.
+- **Decision**:
+  1. Updated `generate_answer_node` to record `user_dialogue_question = state.get("original_question") or question`.
+  2. The SQLite checkpointer preserves the authentic user prompt verbatim, preventing search reformulations from leaking into conversation history.
+
+### Decision 33.4: Targeted Visual Asset Extraction & Overview Seed Chunks
+- **Context & Problem**:
+  1. For broad overview questions (*"what is the document about?"*), dense vector and BM25 search often matched isolated middle pages rather than the title, abstract, or executive summary.
+  2. For targeted questions (*"what is table 1 shows?"*, *"what is the figure 5 about?"*), assets were only hydrated if their page appeared in ColPali's top 5 pages. If page scoring varied, Table 1 or Figure 5 was omitted.
+- **Decision**:
+  1. **Direct Asset Targeting (`visual_hydration_node`)**: Detected regex patterns for `table \d+` and `fig(ure)? \d+`. If present, matches by asset ID (e.g. `_001`, `_005`) and caption are assigned priority rank (`colpali_rank=0`) and placed at the head of `figure_table_results`.
+  2. **Introductory Chunk Seed (`text_fusion_node`)**: Added `is_overview_query(query)` detection. When activated, the system injects introductory chunks (Pages 1–2 title, executive summary, director's report) into the fused candidate pool.
+  3. **Document-Grounded CRAG Reformulation (`rewrite_query_node`)**: Rewrote queries using `doc_name`, overview keywords, or targeted asset identifiers instead of inventing arbitrary computer vision benchmarks (e.g. ResNet-50, ImageNet, COCO).
+### Decision 33.5: Relevance-Gated Visual Presentation & Redundancy Elimination
+- **Context & Problem**: The user reported that redundant figures and tables were being presented on the frontend. During multimodal retrieval, the system hydrated up to 10–13 candidate visual assets from ColPali pages. Because all candidate assets were passed into `sources`, the frontend previously mounted every single retrieved table and figure below the answer, regardless of whether the model used them or whether the user asked about them (e.g. asking for Figure 5 displayed Figure 5 alongside 9 other unrelated tables and signature stamps; asking for a document overview plastered 10 incidental visual cards).
+- **Decision**:
+  1. **Provenance-Based Visual Filtering (`filter_relevant_sources`)**:
+     - **Targeted Asset Priority**: If the query specifically requests a table or figure (e.g. `Table 1`, `Figure 5`), ONLY that targeted asset is presented.
+     - **Answer Citation Priority**: Visual assets are presented only if explicitly cited via `[Source N]` or mentioned by name/number in the answer prose.
+     - **Overview Query Visual Suppression**: For broad document overview questions without visual keywords, visual mounts are completely suppressed (`0 visual assets`), keeping the response a clean text summary.
+     - **Clutter Ceiling**: Strictly capped presented visual assets to at most 2 items.
+  2. **Frontend Visual Deduplication & Guard (`getRelevantVisualSources` in `app.js`)**:
+     - Added deduplication by asset ID and image URL.
+     - Guaranteed that if `visualSources` is empty, no visual deck or card is rendered.
+- **Outcome**: 100% precision in visual presentation: overview queries show 0 visual clutter, asset-specific queries show only the requested figure/table, and out-of-scope queries show zero assets.

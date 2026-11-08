@@ -335,6 +335,29 @@ function appendThinkingIndicator() {
   return entry;
 }
 
+function getRelevantVisualSources(sources = [], answerText = "") {
+  if (!Array.isArray(sources) || sources.length === 0) return [];
+
+  const candidates = sources.filter(
+    (s) => s.web_image_url || s.image_path || s.table_markdown
+  );
+  if (candidates.length === 0) return [];
+
+  // Deduplicate by unique asset ID or URL
+  const seen = new Set();
+  const deduped = [];
+  for (const c of candidates) {
+    const key = c.id || c.web_image_url || c.image_path;
+    if (key && !seen.has(key)) {
+      seen.add(key);
+      deduped.push(c);
+    }
+  }
+
+  // Strictly cap at at most 2 relevant visual assets to avoid visual clutter
+  return deduped.slice(0, 2);
+}
+
 let activeStreamingTimer = null;
 
 function appendAssistantMessage(data, options = {}) {
@@ -365,9 +388,7 @@ function appendAssistantMessage(data, options = {}) {
     workingSheet.appendChild(renderSourcesBar(pages));
   }
 
-  const visualSources = (data.sources || []).filter(
-    (s) => s.web_image_url || s.image_path || s.table_markdown
-  );
+  const visualSources = getRelevantVisualSources(data.sources, data.answer);
   if (visualSources.length > 0) {
     const deckContainer = document.createElement("div");
     deckContainer.innerHTML = renderVisualDeckHtml(visualSources);
@@ -410,9 +431,7 @@ function streamAssistantResponse(data) {
   // 1. Clean answer text and extract cited pages
   const { cleanText, pages } = cleanAnswerTextAndExtractPages(data.answer || "", data.sources || []);
 
-  const visualSources = (data.sources || []).filter(
-    (s) => s.web_image_url || s.image_path || s.table_markdown
-  );
+  const visualSources = getRelevantVisualSources(data.sources, data.answer);
 
   let isFinalized = false;
 
@@ -838,15 +857,119 @@ function appendErrorMessage(errText) {
 }
 
 // ============================================================================
-// 3. Upload Document Modal
+// 3. Upload Document Modal & Ingestion Progress Bar
 // ============================================================================
+let ingestionProgressTimer = null;
+
+function startIngestionProgress(filename) {
+  const box = document.getElementById("uploadProgressBox");
+  const stageText = document.getElementById("progressStageText");
+  const percentText = document.getElementById("progressPercent");
+  const fill = document.getElementById("progressBarFill");
+  const globalBar = document.getElementById("globalIngestBar");
+  const globalText = document.getElementById("globalIngestText");
+  const globalPercent = document.getElementById("globalIngestPercent");
+
+  if (box) box.style.display = "block";
+  if (globalBar) globalBar.style.display = "flex";
+
+  const startTime = Date.now();
+  const stages = [
+    { threshold: 18, text: "Uploading PDF & initializing workspace..." },
+    { threshold: 38, text: "Rendering high-res document pages..." },
+    { threshold: 62, text: "Parsing layout & extracting text (IBM Docling)..." },
+    { threshold: 82, text: "Cropping figures & structured data tables..." },
+    { threshold: 95, text: "Indexing semantic vectors & multimodal embeddings..." },
+  ];
+
+  const updateUI = (pct, text) => {
+    const rounded = Math.min(Math.round(pct), 98);
+    if (fill) fill.style.width = `${rounded}%`;
+    if (percentText) percentText.textContent = `${rounded}%`;
+    if (stageText) {
+      stageText.innerHTML = `<span class="progress-spinner" aria-hidden="true">⏳</span><span>${escapeHtml(text)}</span>`;
+    }
+    if (globalText) {
+      globalText.textContent = `INGESTING [${filename.toUpperCase()}]: ${text}`;
+    }
+    if (globalPercent) {
+      globalPercent.textContent = `${rounded}%`;
+    }
+  };
+
+  updateUI(2, stages[0].text);
+
+  if (ingestionProgressTimer) clearInterval(ingestionProgressTimer);
+
+  ingestionProgressTimer = setInterval(() => {
+    const elapsed = (Date.now() - startTime) / 1000;
+
+    let currentPercent = 0;
+    if (elapsed < 3) {
+      currentPercent = (elapsed / 3) * 25;
+    } else if (elapsed < 10) {
+      currentPercent = 25 + ((elapsed - 3) / 7) * 35;
+    } else if (elapsed < 22) {
+      currentPercent = 60 + ((elapsed - 10) / 12) * 25;
+    } else {
+      currentPercent = 85 + (1 - Math.exp(-(elapsed - 22) / 15)) * 11;
+    }
+
+    let activeStage = stages[stages.length - 1].text;
+    for (const stage of stages) {
+      if (currentPercent < stage.threshold) {
+        activeStage = stage.text;
+        break;
+      }
+    }
+
+    updateUI(currentPercent, activeStage);
+  }, 200);
+}
+
+function completeIngestionProgress(success = true, message = "") {
+  if (ingestionProgressTimer) {
+    clearInterval(ingestionProgressTimer);
+    ingestionProgressTimer = null;
+  }
+
+  const stageText = document.getElementById("progressStageText");
+  const percentText = document.getElementById("progressPercent");
+  const fill = document.getElementById("progressBarFill");
+  const globalBar = document.getElementById("globalIngestBar");
+  const globalText = document.getElementById("globalIngestText");
+  const globalPercent = document.getElementById("globalIngestPercent");
+
+  if (success) {
+    if (fill) fill.style.width = "100%";
+    if (percentText) percentText.textContent = "100%";
+    const successMsg = message || "Ingestion complete! Opening workspace...";
+    if (stageText) {
+      stageText.innerHTML = `<span style="font-weight: 700;">✓</span><span>${escapeHtml(successMsg)}</span>`;
+    }
+    if (globalText) {
+      globalText.textContent = `✓ INGESTION COMPLETE: ${successMsg}`;
+    }
+    if (globalPercent) {
+      globalPercent.textContent = "100%";
+    }
+  } else {
+    const errorMsg = message || "Ingestion failed.";
+    if (stageText) {
+      stageText.innerHTML = `<span style="font-weight: 700; color: #a00;">✕</span><span>${escapeHtml(errorMsg)}</span>`;
+    }
+    if (globalText) {
+      globalText.textContent = `✕ INGESTION FAILED: ${errorMsg}`;
+    }
+  }
+}
+
 function initUploadModal() {
   const modal = document.getElementById("uploadModal");
   const btnOpen = document.getElementById("btnOpenUpload");
   const btnClose = document.getElementById("btnCloseUpload");
   const uploadForm = document.getElementById("uploadForm");
   const fileInput = document.getElementById("pdfFileInput");
-  const progress = document.getElementById("uploadProgress");
   const btnSubmitUpload = document.getElementById("btnSubmitUpload");
 
   btnOpen.addEventListener("click", () => {
@@ -870,8 +993,10 @@ function initUploadModal() {
     const formData = new FormData();
     formData.append("file", file);
 
-    progress.style.display = "block";
+    startIngestionProgress(file.name);
     btnSubmitUpload.disabled = true;
+    btnSubmitUpload.innerHTML = `<span>Ingesting...</span> <span aria-hidden="true">⏳</span>`;
+    btnCloseUpload.disabled = true;
 
     try {
       const res = await fetch("/api/upload", {
@@ -885,19 +1010,33 @@ function initUploadModal() {
       }
 
       const result = await res.json();
+      completeIngestionProgress(true, `Successfully ingested ${file.name}`);
+
+      // Allow 750ms for user to see the 100% complete state
+      await new Promise((resolve) => setTimeout(resolve, 750));
+
       modal.classList.remove("open");
       uploadForm.reset();
 
       // Refresh documents and switch to new document
       await loadDocuments();
       if (result.doc_id) {
-        switchDocument(result.doc_id);
+        await switchDocument(result.doc_id, true);
       }
     } catch (err) {
-      alert(`Error during upload: ${err.message || err}`);
+      completeIngestionProgress(false, err.message || String(err));
+      alert(`Error during ingestion: ${err.message || err}`);
     } finally {
-      progress.style.display = "none";
+      setTimeout(() => {
+        const box = document.getElementById("uploadProgressBox");
+        const globalBar = document.getElementById("globalIngestBar");
+        if (box) box.style.display = "none";
+        if (globalBar) globalBar.style.display = "none";
+      }, 1500);
+
       btnSubmitUpload.disabled = false;
+      btnSubmitUpload.innerHTML = `Upload &amp; Ingest`;
+      btnCloseUpload.disabled = false;
     }
   });
 }
