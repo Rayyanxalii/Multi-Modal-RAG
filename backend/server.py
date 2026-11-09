@@ -15,15 +15,22 @@ for p in (str(PROJECT_ROOT), str(BACKEND_DIR), str(BACKEND_SRC)):
 
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+import json
 
 from rag.config import DATA_DIR, RAW_DATA_DIR, DEFAULT_PDF_PATH, FIGURES_DIR, TABLES_DIR, get_document_paths
-from rag.graph import app as rag_app, run_agentic_rag, ingest_document
+from rag.graph import (
+    app as rag_app,
+    run_agentic_rag,
+    stream_agentic_rag,
+    ingest_document,
+    stream_ingest_document,
+)
 from rag.document_manager import list_all_documents, delete_document
 
-app = FastAPI(title="Multimodal Agentic RAG - Sketch Interface")
+app = FastAPI(title="Omni Retrieve")
 
 # Enable CORS
 app.add_middleware(
@@ -297,9 +304,51 @@ def submit_question(payload: ChatRequest) -> dict[str, Any]:
         raise HTTPException(status_code=500, detail=str(exc))
 
 
+@app.post("/api/chat/stream")
+def stream_chat_question(payload: ChatRequest):
+    """Execute question answering with real-time SSE token and pipeline status streaming."""
+    question = (payload.question or "").strip()
+    if not question:
+        raise HTTPException(status_code=400, detail="Question cannot be empty.")
+
+    doc_id = (payload.doc_id or "attention").strip().lower()
+    thread_id = payload.thread_id or f"doc_{doc_id}"
+    pdf_path = RAW_DATA_DIR / f"{doc_id}.pdf"
+    if not pdf_path.exists():
+        if doc_id == "attention":
+            pdf_path = DEFAULT_PDF_PATH
+        else:
+            matches = list(RAW_DATA_DIR.glob(f"{doc_id}*.pdf"))
+            pdf_path = matches[0] if matches else DEFAULT_PDF_PATH
+
+    def event_stream():
+        for event in stream_agentic_rag(question=question, pdf_path=pdf_path, thread_id=thread_id):
+            if event.get("type") == "metadata":
+                for src in event.get("sources", []):
+                    img = src.get("image_path")
+                    rec_type = src.get("type", "figure")
+                    resolved = resolve_asset_url(img, doc_id=doc_id, record_type=rec_type)
+                    if resolved:
+                        src["web_image_url"] = resolved
+            yield f"data: {json.dumps(event)}\n\n"
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
 @app.post("/api/upload")
-async def upload_document(file: UploadFile = File(...)) -> dict[str, Any]:
-    """Upload a new PDF file and initiate automated ingestion."""
+async def upload_document(
+    file: UploadFile = File(...),
+    stream: bool = False,
+):
+    """Upload a new PDF file and initiate automated ingestion with optional live SSE progress."""
     if not file.filename.lower().endswith(".pdf"):
         raise HTTPException(status_code=400, detail="Only PDF files are accepted.")
 
@@ -317,7 +366,26 @@ async def upload_document(file: UploadFile = File(...)) -> dict[str, Any]:
 
     print(f"[Upload] Saved '{file.filename}' to '{target_pdf}' (doc_id={doc_id})")
 
-    # Run automated document ingestion without generating premature answers or polluting conversational memory
+    if stream:
+        def progress_stream():
+            yield f"data: {json.dumps({'stage': 'uploaded', 'progress': 5, 'message': f'Uploaded {file.filename}'})}\n\n"
+            try:
+                for event in stream_ingest_document(target_pdf):
+                    yield f"data: {json.dumps(event)}\n\n"
+            except Exception as exc:
+                yield f"data: {json.dumps({'stage': 'error', 'progress': 100, 'message': str(exc)})}\n\n"
+
+        return StreamingResponse(
+            progress_stream(),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "X-Accel-Buffering": "no",
+            },
+        )
+
+    # Non-streaming fallback
     try:
         ingest_result = ingest_document(target_pdf)
         return {

@@ -7,10 +7,12 @@ query reformulation, and grounded answer synthesis.
 
 import sqlite3
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, Generator
 from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.graph import StateGraph, START, END
+from llama_index.core.llms import ChatMessage, MessageRole, ImageBlock
 
+from services.llm_service import llm_vision
 from rag.config import DEFAULT_PDF_PATH
 from rag.graph.state import RAGState
 from rag.graph.nodes import (
@@ -30,6 +32,9 @@ from rag.graph.nodes import (
     grade_context_node,
     rewrite_query_node,
     generate_answer_node,
+    build_vlm_messages,
+    _is_unanswerable_response,
+    filter_relevant_sources,
 )
 
 
@@ -229,12 +234,10 @@ def run_agentic_rag(
     }
 
 
-def ingest_document(pdf_path: str | Path) -> dict[str, Any]:
-    """Execute the multi-stage document ingestion pipeline without invoking Q&A or polluting chat memory.
-
-    Runs page rendering, layout parsing, visual cropping, Qdrant vector indexing, and ColPali cloud indexing.
-    """
+def stream_ingest_document(pdf_path: str | Path) -> Generator[dict[str, Any], None, None]:
+    """Execute the multi-stage document ingestion pipeline yielding live progress events for real-time UI bars."""
     target_pdf = str(pdf_path)
+    clean_id = Path(target_pdf).stem.lower()
     state: RAGState = {
         "pdf_path": target_pdf,
         "question": "",
@@ -242,15 +245,200 @@ def ingest_document(pdf_path: str | Path) -> dict[str, Any]:
         "retry_count": 0,
     }
 
+    # Stage 1: Render pages
+    yield {"stage": "rendering", "progress": 15, "message": "Rendering high-resolution document pages..."}
     render_pages_node(state)
+
+    # Stage 2: Layout parsing & hierarchical chunks with IBM Docling
+    yield {"stage": "parsing", "progress": 40, "message": "Parsing document layout & tables with IBM Docling..."}
     parse_document_node(state)
+
+    # Stage 3: Figure & table extraction and cropping
+    yield {"stage": "cropping", "progress": 65, "message": "Extracting and cropping figures & data tables..."}
     extract_and_crop_node(state)
+
+    # Stage 4: Dense vector indexing into Qdrant
+    yield {"stage": "vectors", "progress": 82, "message": "Indexing text chunks into Qdrant vector database..."}
     index_vectors_node(state)
+
+    # Stage 5: ColPali visual late-interaction indexing
+    yield {"stage": "colpali", "progress": 92, "message": "Registering visual embeddings with ColPali ZeroGPU Space..."}
     index_colpali_node(state)
+
+    yield {
+        "stage": "complete",
+        "progress": 100,
+        "message": f"Successfully ingested {Path(target_pdf).name}!",
+        "doc_id": clean_id,
+        "pdf_path": target_pdf,
+    }
+
+
+def ingest_document(pdf_path: str | Path) -> dict[str, Any]:
+    """Execute the multi-stage document ingestion pipeline synchronously without invoking Q&A or polluting chat memory."""
+    target_pdf = str(pdf_path)
+    clean_id = Path(target_pdf).stem.lower()
+    for _ in stream_ingest_document(pdf_path):
+        pass
 
     return {
         "status": "success",
         "pdf_path": target_pdf,
+        "doc_id": clean_id,
         "is_ingested": True,
     }
+
+
+def stream_agentic_rag(
+    question: str,
+    pdf_path: str | Path | None = None,
+    thread_id: str | None = None,
+) -> Generator[dict[str, Any], None, None]:
+    """Execute the agentic RAG workflow yielding real-time SSE progress events, status updates, and token deltas."""
+    question = question.strip()
+    if not question:
+        yield {"type": "error", "message": "No question provided."}
+        return
+
+    target_pdf = str(pdf_path) if pdf_path else str(DEFAULT_PDF_PATH)
+    clean_doc = Path(target_pdf).stem.lower()
+    active_thread = thread_id or f"doc_{clean_doc}"
+    config = {"configurable": {"thread_id": active_thread}}
+
+    # Retrieve existing checkpointer history for multi-turn dialogue
+    try:
+        checkpoint_state = app.get_state(config)
+        existing_history = (
+            checkpoint_state.values.get("chat_history", [])
+            if checkpoint_state and checkpoint_state.values
+            else []
+        )
+    except Exception:
+        existing_history = []
+
+    state: RAGState = {
+        "question": question,
+        "original_question": question,
+        "original_query": question,
+        "pdf_path": target_pdf,
+        "retry_count": 0,
+        "chat_history": existing_history,
+    }
+
+    # 1. Routing & Anaphora resolution
+    yield {"type": "status", "stage": "intent", "message": "Analyzing question & context..."}
+    state.update(route_query_node(state))
+
+    # 2. Parallel Tri-Hybrid Retrieval (Dense + BM25 + ColPali)
+    yield {"type": "status", "stage": "retrieval", "message": "Executing parallel Dense, BM25, and ColPali visual retrieval..."}
+    state.update(dense_retriever_node(state))
+    state.update(bm25_retriever_node(state))
+    state.update(colpali_retriever_node(state))
+
+    # 3. Text Fusion & Visual Hydration
+    yield {"type": "status", "stage": "fusion", "message": "Fusing multimodal candidates & hydrating assets..."}
+    state.update(text_fusion_node(state))
+    state.update(visual_hydration_node(state))
+    state.update(format_context_node(state))
+
+    # 4. Relevance Grading & CRAG Query Expansion
+    state.update(grade_context_node(state))
+
+    if not state.get("is_relevant", True) and state.get("retry_count", 0) < 1:
+        yield {"type": "status", "stage": "crag", "message": "Applying domain query expansion and retrying retrieval..."}
+        state.update(rewrite_query_node(state))
+        state.update(dense_retriever_node(state))
+        state.update(bm25_retriever_node(state))
+        state.update(colpali_retriever_node(state))
+        state.update(text_fusion_node(state))
+        state.update(visual_hydration_node(state))
+        state.update(format_context_node(state))
+
+    # 5. Build Vision LLM Payload
+    messages, user_blocks, system_prompt, user_dialogue_question, selected_text = build_vlm_messages(state)
+
+    if not messages:
+        yield {"type": "token", "delta": "I don't have information about that in the document."}
+        yield {
+            "type": "metadata",
+            "doc_id": clean_doc,
+            "thread_id": active_thread,
+            "question": user_dialogue_question,
+            "sources": [],
+            "route": state.get("route", "both"),
+            "full_answer": "I don't have information about that in the document.",
+        }
+        yield {"type": "done"}
+        return
+
+    # 6. Stream Answer Generation
+    yield {"type": "status", "stage": "generating", "message": "Synthesizing answer..."}
+    full_answer = ""
+    try:
+        stream_res = llm_vision.stream_chat(messages)
+        for chunk in stream_res:
+            delta = chunk.delta or ""
+            if delta:
+                full_answer += delta
+                yield {"type": "token", "delta": delta}
+    except Exception as exc:
+        err_str = str(exc)
+        if "413" in err_str or "rate_limit_exceeded" in err_str or "tokens" in err_str.lower():
+            yield {"type": "status", "stage": "self_healing", "message": "Adapting token payload..."}
+            lean_blocks = [b for b in user_blocks if not isinstance(b, ImageBlock)]
+            lean_messages = [
+                ChatMessage(role=MessageRole.SYSTEM, content=system_prompt),
+                ChatMessage(role=MessageRole.USER, blocks=lean_blocks),
+            ]
+            try:
+                stream_res = llm_vision.stream_chat(lean_messages)
+                for chunk in stream_res:
+                    delta = chunk.delta or ""
+                    if delta:
+                        full_answer += delta
+                        yield {"type": "token", "delta": delta}
+            except Exception as retry_exc:
+                err_msg = f"An error occurred: {retry_exc}"
+                full_answer = err_msg
+                yield {"type": "token", "delta": err_msg}
+        else:
+            err_msg = f"An error occurred: {exc}"
+            full_answer = err_msg
+            yield {"type": "token", "delta": err_msg}
+
+    # 7. Grounding filter & checkpointer update
+    if _is_unanswerable_response(full_answer):
+        full_answer = "I don't have information about that in the document."
+        sources = []
+    else:
+        raw_sources = state.get("sources", [])
+        sources = filter_relevant_sources(full_answer, raw_sources, question=user_dialogue_question)
+
+    new_turn = [
+        {"role": "user", "content": user_dialogue_question},
+        {"role": "assistant", "content": full_answer, "sources": sources},
+    ]
+
+    try:
+        app.update_state(config, {
+            "answer": full_answer,
+            "sources": sources,
+            "chat_history": new_turn,
+        })
+    except Exception as exc:
+        print(f"[Warning] Failed updating checkpointer in streaming mode: {exc}")
+
+    yield {
+        "type": "metadata",
+        "doc_id": clean_doc,
+        "thread_id": active_thread,
+        "question": user_dialogue_question,
+        "rewritten_query": state.get("rewritten_query"),
+        "route": state.get("route", "both"),
+        "routing_reasoning": state.get("routing_reasoning", ""),
+        "sources": sources,
+        "full_answer": full_answer,
+        "retry_count": state.get("retry_count", 0),
+    }
+    yield {"type": "done"}
 

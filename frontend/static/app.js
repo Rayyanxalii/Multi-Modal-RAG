@@ -275,35 +275,135 @@ function initChatForm() {
     btnSubmit.disabled = true;
 
     appendUserMessage(query);
-    const thinkingEl = appendThinkingIndicator();
-
-    try {
-      const res = await fetch("/api/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          question: query,
-          doc_id: currentDocId,
-          thread_id: `doc_${currentDocId}`,
-        }),
-      });
-
-      if (!res.ok) {
-        const errorData = await res.json().catch(() => ({}));
-        throw new Error(errorData.detail || `Server error: ${res.status}`);
-      }
-
-      const result = await res.json();
-      thinkingEl.remove();
-      appendAssistantMessage(result);
-    } catch (err) {
-      thinkingEl.remove();
-      appendErrorMessage(err.message || String(err));
-    } finally {
-      btnSubmit.disabled = false;
-      questionInput.focus();
-    }
+    await handleStreamingChat(query);
+    btnSubmit.disabled = false;
+    questionInput.focus();
   });
+}
+
+/**
+ * Real-time SSE Token Streaming & Status Pipeline Handler
+ */
+async function handleStreamingChat(query) {
+  const stream = document.getElementById("chatStream");
+
+  const entry = document.createElement("article");
+  entry.className = "message-entry assistant";
+
+  const workingSheet = document.createElement("div");
+  workingSheet.className = "assistant-working-sheet";
+
+  const statusDiv = document.createElement("div");
+  statusDiv.className = "streaming-status-indicator";
+  statusDiv.style.color = "var(--dp-color-secondary)";
+  statusDiv.style.fontStyle = "italic";
+  statusDiv.style.fontSize = "0.95rem";
+  statusDiv.style.marginBottom = "8px";
+  statusDiv.innerHTML = `<span class="progress-spinner" aria-hidden="true">⏳</span> Searching document...`;
+  workingSheet.appendChild(statusDiv);
+
+  const answerBody = document.createElement("div");
+  answerBody.className = "answer-body";
+  workingSheet.appendChild(answerBody);
+
+  entry.appendChild(workingSheet);
+  stream.appendChild(entry);
+  stream.scrollTop = stream.scrollHeight;
+
+  let rawAnswer = "";
+  let metadata = null;
+  let hasStartedTokens = false;
+
+  try {
+    const res = await fetch("/api/chat/stream", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        question: query,
+        doc_id: currentDocId,
+        thread_id: `doc_${currentDocId}`,
+      }),
+    });
+
+    if (!res.ok) {
+      const errJson = await res.json().catch(() => ({}));
+      throw new Error(errJson.detail || `Server error: ${res.status}`);
+    }
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop();
+
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (trimmed.startsWith("data: ")) {
+          try {
+            const data = JSON.parse(trimmed.slice(6));
+            if (data.type === "status") {
+              if (!hasStartedTokens) {
+                statusDiv.innerHTML = `<span class="progress-spinner" aria-hidden="true">⏳</span> ${escapeHtml(data.message)}`;
+              }
+            } else if (data.type === "token") {
+              if (!hasStartedTokens) {
+                hasStartedTokens = true;
+                statusDiv.remove();
+              }
+              rawAnswer += data.delta;
+              answerBody.innerHTML = `<span class="streaming-text">${escapeHtml(rawAnswer)}</span><span class="streaming-cursor"></span>`;
+              stream.scrollTop = stream.scrollHeight;
+            } else if (data.type === "metadata") {
+              metadata = data;
+            } else if (data.type === "error") {
+              throw new Error(data.message || "Streaming error");
+            }
+          } catch (pErr) {
+            console.warn("Error parsing chat SSE chunk:", pErr);
+          }
+        }
+      }
+    }
+
+    if (statusDiv.parentNode) statusDiv.remove();
+
+    const fullAnswerText = (metadata && metadata.full_answer) || rawAnswer;
+    const sources = (metadata && metadata.sources) || [];
+
+    const { cleanText, pages } = cleanAnswerTextAndExtractPages(fullAnswerText, sources);
+    answerBody.innerHTML = parseMarkdownToHtml(cleanText);
+    renderMathInElementSafely(answerBody);
+
+    if (pages.length > 0) {
+      workingSheet.appendChild(renderSourcesBar(pages));
+    }
+
+    const visualSources = getRelevantVisualSources(sources, fullAnswerText);
+    if (visualSources.length > 0) {
+      const deckContainer = document.createElement("div");
+      deckContainer.innerHTML = renderVisualDeckHtml(visualSources);
+      if (deckContainer.firstElementChild) {
+        workingSheet.appendChild(deckContainer.firstElementChild);
+      }
+    }
+
+    const routeBadge = document.getElementById("routeBadge");
+    if (routeBadge && metadata && metadata.route) {
+      routeBadge.textContent = `ROUTE: ${metadata.route.toUpperCase()}`;
+    }
+
+    stream.scrollTop = stream.scrollHeight;
+
+  } catch (err) {
+    if (statusDiv.parentNode) statusDiv.remove();
+    answerBody.innerHTML = `<span style="color: #a00;">✕ Error: ${escapeHtml(err.message || String(err))}</span>`;
+  }
 }
 
 function appendUserMessage(text) {
@@ -859,9 +959,7 @@ function appendErrorMessage(errText) {
 // ============================================================================
 // 3. Upload Document Modal & Ingestion Progress Bar
 // ============================================================================
-let ingestionProgressTimer = null;
-
-function startIngestionProgress(filename) {
+function updateIngestionUI(pct, text, filename) {
   const box = document.getElementById("uploadProgressBox");
   const stageText = document.getElementById("progressStageText");
   const percentText = document.getElementById("progressPercent");
@@ -873,66 +971,25 @@ function startIngestionProgress(filename) {
   if (box) box.style.display = "block";
   if (globalBar) globalBar.style.display = "flex";
 
-  const startTime = Date.now();
-  const stages = [
-    { threshold: 18, text: "Uploading PDF & initializing workspace..." },
-    { threshold: 38, text: "Rendering high-res document pages..." },
-    { threshold: 62, text: "Parsing layout & extracting text (IBM Docling)..." },
-    { threshold: 82, text: "Cropping figures & structured data tables..." },
-    { threshold: 95, text: "Indexing semantic vectors & multimodal embeddings..." },
-  ];
+  const rounded = Math.min(Math.round(pct), 100);
+  if (fill) fill.style.width = `${rounded}%`;
+  if (percentText) percentText.textContent = `${rounded}%`;
+  if (stageText) {
+    stageText.innerHTML = `<span class="progress-spinner" aria-hidden="true">⏳</span><span>${escapeHtml(text)}</span>`;
+  }
+  if (globalText) {
+    globalText.textContent = `INGESTING [${(filename || "").toUpperCase()}]: ${text}`;
+  }
+  if (globalPercent) {
+    globalPercent.textContent = `${rounded}%`;
+  }
+}
 
-  const updateUI = (pct, text) => {
-    const rounded = Math.min(Math.round(pct), 98);
-    if (fill) fill.style.width = `${rounded}%`;
-    if (percentText) percentText.textContent = `${rounded}%`;
-    if (stageText) {
-      stageText.innerHTML = `<span class="progress-spinner" aria-hidden="true">⏳</span><span>${escapeHtml(text)}</span>`;
-    }
-    if (globalText) {
-      globalText.textContent = `INGESTING [${filename.toUpperCase()}]: ${text}`;
-    }
-    if (globalPercent) {
-      globalPercent.textContent = `${rounded}%`;
-    }
-  };
-
-  updateUI(2, stages[0].text);
-
-  if (ingestionProgressTimer) clearInterval(ingestionProgressTimer);
-
-  ingestionProgressTimer = setInterval(() => {
-    const elapsed = (Date.now() - startTime) / 1000;
-
-    let currentPercent = 0;
-    if (elapsed < 3) {
-      currentPercent = (elapsed / 3) * 25;
-    } else if (elapsed < 10) {
-      currentPercent = 25 + ((elapsed - 3) / 7) * 35;
-    } else if (elapsed < 22) {
-      currentPercent = 60 + ((elapsed - 10) / 12) * 25;
-    } else {
-      currentPercent = 85 + (1 - Math.exp(-(elapsed - 22) / 15)) * 11;
-    }
-
-    let activeStage = stages[stages.length - 1].text;
-    for (const stage of stages) {
-      if (currentPercent < stage.threshold) {
-        activeStage = stage.text;
-        break;
-      }
-    }
-
-    updateUI(currentPercent, activeStage);
-  }, 200);
+function startIngestionProgress(filename) {
+  updateIngestionUI(2, "Uploading PDF & initializing workspace...", filename);
 }
 
 function completeIngestionProgress(success = true, message = "") {
-  if (ingestionProgressTimer) {
-    clearInterval(ingestionProgressTimer);
-    ingestionProgressTimer = null;
-  }
-
   const stageText = document.getElementById("progressStageText");
   const percentText = document.getElementById("progressPercent");
   const fill = document.getElementById("progressBarFill");
@@ -999,7 +1056,8 @@ function initUploadModal() {
     btnCloseUpload.disabled = true;
 
     try {
-      const res = await fetch("/api/upload", {
+      // Connect to SSE-streamed upload endpoint for live backend progress
+      const res = await fetch("/api/upload?stream=true", {
         method: "POST",
         body: formData,
       });
@@ -1009,19 +1067,72 @@ function initUploadModal() {
         throw new Error(errorData.detail || `Upload failed: ${res.status}`);
       }
 
-      const result = await res.json();
-      completeIngestionProgress(true, `Successfully ingested ${file.name}`);
+      let finalDocId = null;
+      let finalMessage = "";
 
-      // Allow 750ms for user to see the 100% complete state
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop(); // Retain incomplete line
+
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed.startsWith("data:")) continue;
+
+          const jsonStr = trimmed.slice(5).trim();
+          if (!jsonStr) continue;
+
+          try {
+            const data = JSON.parse(jsonStr);
+            if (data.stage === "error") {
+              throw new Error(data.message || "Ingestion error encountered on backend.");
+            }
+            if (data.progress !== undefined) {
+              updateIngestionUI(data.progress, data.message || "Processing...", file.name);
+            }
+            if (data.stage === "complete") {
+              finalDocId = data.doc_id;
+              finalMessage = data.message;
+            }
+          } catch (itemErr) {
+            if (itemErr.message && itemErr.message.includes("Ingestion error")) {
+              throw itemErr;
+            }
+            console.warn("Failed to parse ingestion event:", itemErr);
+          }
+        }
+      }
+
+      // Check remaining buffer
+      if (buffer.trim().startsWith("data:")) {
+        try {
+          const data = JSON.parse(buffer.trim().slice(5).trim());
+          if (data.stage === "complete") {
+            finalDocId = data.doc_id;
+            finalMessage = data.message;
+          }
+        } catch (_) {}
+      }
+
+      completeIngestionProgress(true, finalMessage || `Successfully ingested ${file.name}`);
+
+      // Allow 750ms for user to observe the 100% complete state
       await new Promise((resolve) => setTimeout(resolve, 750));
 
       modal.classList.remove("open");
       uploadForm.reset();
 
-      // Refresh documents and switch to new document
+      // Refresh documents and switch to newly ingested document
       await loadDocuments();
-      if (result.doc_id) {
-        await switchDocument(result.doc_id, true);
+      if (finalDocId) {
+        await switchDocument(finalDocId, true);
       }
     } catch (err) {
       completeIngestionProgress(false, err.message || String(err));

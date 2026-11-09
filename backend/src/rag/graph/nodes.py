@@ -722,69 +722,76 @@ Your verdict (YES/NO):"""
 
 
 def rewrite_query_node(state: RAGState) -> dict[str, Any]:
-    """Corrective RAG (CRAG): Reformulate question into document-grounded search keywords."""
+    """Corrective RAG (CRAG): Classical Query Expansion with domain terms and technical synonyms."""
     original_query = state.get("original_question") or state["question"]
     current_retry = state.get("retry_count", 0)
     pdf_path = Path(state.get("pdf_path") or DEFAULT_PDF_PATH)
     doc_paths = get_document_paths(pdf_path)
     doc_name = doc_paths["doc_name"]
 
-    # Rule 1: Overview questions
+    # Rule 1: Overview questions -> Expand with executive summary, abstract, and core topic domain terms
     if is_overview_query(original_query):
-        rewritten = f"Executive summary introduction abstract core overview {doc_name}"
-        print(f"\n[CRAG] Overview query reformulated: '{original_query}' -> '{rewritten}'")
+        expanded = f"{original_query} executive summary introduction abstract core overview background findings {doc_name}"
+        print(f"\n[CRAG Query Expansion] Overview query expanded: '{original_query}' -> '{expanded}'")
         return {
-            "question": rewritten,
-            "rewritten_query": rewritten,
+            "question": expanded,
+            "rewritten_query": expanded,
             "retry_count": current_retry + 1,
         }
 
-    # Rule 2: Specific Table questions
+    # Rule 2: Specific Table questions -> Expand with data, rows, columns, and grid terminology
     table_m = re.search(r"\btable\s*(\d+)\b", original_query, re.IGNORECASE)
     if table_m:
-        rewritten = f"Table {table_m.group(1)} financial statements data results {doc_name}"
-        print(f"\n[CRAG] Table query reformulated: '{original_query}' -> '{rewritten}'")
+        table_num = table_m.group(1)
+        expanded = f"{original_query} Table {table_num} data grid rows columns values results breakdown {doc_name}"
+        print(f"\n[CRAG Query Expansion] Table query expanded: '{original_query}' -> '{expanded}'")
         return {
-            "question": rewritten,
-            "rewritten_query": rewritten,
+            "question": expanded,
+            "rewritten_query": expanded,
             "retry_count": current_retry + 1,
         }
 
-    # Rule 3: Specific Figure questions
+    # Rule 3: Specific Figure questions -> Expand with visual, chart, diagram, and plot terminology
     fig_m = re.search(r"\b(?:fig|figure)\.?\s*(\d+)\b", original_query, re.IGNORECASE)
     if fig_m:
-        rewritten = f"Figure {fig_m.group(1)} visual diagram plot {doc_name}"
-        print(f"\n[CRAG] Figure query reformulated: '{original_query}' -> '{rewritten}'")
+        fig_num = fig_m.group(1)
+        expanded = f"{original_query} Figure {fig_num} visual chart diagram plot image illustration graph structure {doc_name}"
+        print(f"\n[CRAG Query Expansion] Figure query expanded: '{original_query}' -> '{expanded}'")
         return {
-            "question": rewritten,
-            "rewritten_query": rewritten,
+            "question": expanded,
+            "rewritten_query": expanded,
             "retry_count": current_retry + 1,
         }
 
-    # Rule 4: General query reformulation with document grounding
-    rewrite_prompt = f"""You are an expert AI search optimizer for documents and technical reports.
-The previous search query returned insufficient passages for the document '{doc_name}'.
-Rewrite the query to use specific keywords and search phrases likely to be found in '{doc_name}' that match the user's intent.
+    # Rule 4: General domain query expansion with LLM (completely document-agnostic)
+    expansion_prompt = f"""You are an expert search specialist and information retrieval engineer.
+The initial search for the query below in the document '{doc_name}' returned insufficient passages.
+Perform CLASSICAL PRODUCTION QUERY EXPANSION: expand the query by appending domain-specific technical terms, authoritative synonyms, and related vocabulary likely found in '{doc_name}' without altering the user's intent.
 
 Original Query: {original_query}
+Document: {doc_name}
 
-Requirements:
-- Return ONLY the rewritten query string.
-- Do NOT invent external benchmark datasets or machine learning architectures (such as ResNet, ImageNet, COCO) unless specifically requested by the user.
-- Keep the vocabulary strictly grounded in '{doc_name}' and the user's query topic.
+STRICT REQUIREMENTS:
+1. Retain the user's original query intact at the beginning as the semantic anchor.
+2. Append 4 to 8 highly relevant domain-specific technical terms, author terminology, or official domain synonyms that document authors use for this subject in '{doc_name}'.
+3. Do NOT invent external benchmark datasets or machine learning architectures (such as ResNet, ImageNet, COCO) unless specifically requested by the user.
+4. Output ONLY the expanded query string combining the original query with the appended domain terms.
 
-Rewritten Query:"""
+Expanded Query:"""
 
     try:
-        rewritten = llm.complete(rewrite_prompt).text.strip().strip('"').strip("'")
-        print(f"\n[CRAG] Query reformulated: '{original_query}' -> '{rewritten}'")
+        expanded = llm.complete(expansion_prompt).text.strip().strip('"').strip("'")
+        # Ensure original query is retained at the start
+        if original_query.lower() not in expanded.lower():
+            expanded = f"{original_query} {expanded}"
+        print(f"\n[CRAG Query Expansion] Query expanded: '{original_query}' -> '{expanded}'")
     except Exception as exc:
-        print(f"[Warning] Query rewriting failed ({exc}). Retaining original query.")
-        rewritten = original_query
+        print(f"[Warning] Query expansion failed ({exc}). Retaining original query.")
+        expanded = original_query
 
     return {
-        "question": rewritten,
-        "rewritten_query": rewritten,
+        "question": expanded,
+        "rewritten_query": expanded,
         "retry_count": current_retry + 1,
     }
 
@@ -953,26 +960,16 @@ def filter_relevant_sources(response: str, sources: list[dict[str, Any]], questi
     return combined
 
 
-def generate_answer_node(state: RAGState) -> dict[str, Any]:
-    """Synthesize a grounded answer using the multimodal vision LLM (llm_vision) passing text, figures, tables, and conversation history."""
+def build_vlm_messages(state: RAGState) -> tuple[list[ChatMessage], list[Any], str, str, list[dict[str, Any]]]:
+    """Prepare multimodal ChatMessages, user blocks, system prompt, dialogue question, and text results."""
     question = state.get("original_question") or state["question"]
     text_results = state.get("text_results", [])
     fig_tab_results = state.get("figure_table_results", [])
-    is_relevant = state.get("is_relevant", True)
     chat_history = state.get("chat_history") or []
+    user_dialogue_question = state.get("original_question") or question
 
     if not text_results and not fig_tab_results:
-        ans = "I don't have information about that in the document."
-        user_dialogue_question = state.get("original_question") or question
-        return {
-            "answer": ans,
-            "chat_history": [
-                {"role": "user", "content": user_dialogue_question},
-                {"role": "assistant", "content": ans, "sources": []},
-            ],
-        }
-
-# Removed premature is_relevant blocker; model synthesizes with all available evidence
+        return [], [], "", user_dialogue_question, []
 
     system_prompt = (
         "You are an expert scientific, financial, and technical AI assistant answering questions based on the provided document context.\n"
@@ -982,6 +979,7 @@ def generate_answer_node(state: RAGState) -> dict[str, Any]:
         "3. Document Summaries & Overviews: When asked to summarize the whole document, provide an overview, or explain what the document is about:\n"
         "   - Synthesize a comprehensive, well-structured executive summary based on the provided document excerpts (such as title, abstract, introduction, key findings, and results).\n"
         "   - Organize your summary with clear markdown sections or bullet points (e.g. **Core Objective / Subject**, **Key Highlights & Methodology**, **Major Results / Financial Highlights**, and **Conclusion**).\n"
+        "   - Keep your summary focused and concise (around 250-350 words) to present the key findings clearly within output token budgets.\n"
         "   - NEVER refuse or state you lack information when asked for a summary or overview of the document; utilize the available document context to represent the document's central theme and main contributions.\n"
         "4. Mathematical Equations: When expressing formulas, equations, or variables, ALWAYS use standard LaTeX syntax:\n"
         "   - Use display math blocks '$$ ... $$' on their own separate lines for primary equations (e.g. $$ \\text{Attention}(Q, K, V) = \\text{softmax}\\left(\\frac{QK^T}{\\sqrt{d_k}}\\right)V $$).\n"
@@ -995,7 +993,7 @@ def generate_answer_node(state: RAGState) -> dict[str, Any]:
 
     user_blocks: list[Any] = []
     source_idx = 1
-    max_images = 2
+    max_images = 1
     attached_images = 0
 
     # 1. Text Chunks (stay comfortably within Groq's 7,000 ITPM rate limit)
@@ -1016,7 +1014,6 @@ def generate_answer_node(state: RAGState) -> dict[str, Any]:
         user_blocks.append(TextBlock(text="\n\n".join(text_parts)))
 
     # 2. Visual Assets (Figures and Tables with cropped images)
-    max_images = 1  # 1 image keeps total payload safely under Groq's 7,000 ITPM limit
     if fig_tab_results:
         for item in fig_tab_results:
             rec_type = item.get("record_type", "visual")
@@ -1028,7 +1025,7 @@ def generate_answer_node(state: RAGState) -> dict[str, Any]:
 
             if rec_type == "table":
                 table_md = str(item.get("table_markdown", "")).strip()
-                # Truncate giant table markdown to 800 chars to prevent rate limit spikes
+                # Truncate giant table markdown to 850 chars to prevent rate limit spikes
                 if len(table_md) > 850:
                     table_md = table_md[:850] + "\n... [table truncated for token budget]"
                 lines = [f"[Source {source_idx} | Table {rec_id} | Page: {page}]"]
@@ -1067,7 +1064,7 @@ def generate_answer_node(state: RAGState) -> dict[str, Any]:
     if is_overview_query(q_to_eval):
         prompt_instruction = (
             f"Question: {question}\n\n"
-            "Please synthesize a clear, comprehensive, and well-structured executive summary of the document based on the provided context, citing relevant sources."
+            "Please synthesize a clear, concise (around 250-350 words), and well-structured executive summary of the document based on the provided context, citing relevant sources."
         )
     else:
         prompt_instruction = (
@@ -1090,68 +1087,30 @@ def generate_answer_node(state: RAGState) -> dict[str, Any]:
 
     messages.append(ChatMessage(role=MessageRole.USER, blocks=user_blocks))
 
-    # -------------------------------------------------------------------------
     # Terminal Logging: Complete VLM Payload Inspection
-    # -------------------------------------------------------------------------
     print("\n" + "=" * 75)
     print(">>> [VLM INPUT DISPATCH] Payload sent to Vision LLM (qwen/qwen3.8-27b):")
     print(f"  * Question: '{_safe_str(question, 120)}'")
-
-    print(f"  * Retrieved Text Chunks ({len(selected_text_results)} attached):")
-    for idx, c in enumerate(selected_text_results, 1):
-        cid = c.get("chunk_id", "Unknown")
-        pages = c.get("page_numbers") or ["?"]
-        raw_t = c.get("text") or c.get("contextualized_text") or ""
-        print(f"    [{idx}] Chunk {cid} (Page {pages}): \"{_safe_str(raw_t, 85)}\"")
-
-    v_count = len(fig_tab_results or [])
-    print(f"  * Visual Assets ({v_count} candidates evaluated, max {max_images} attached as PNG ImageBlock):")
-    v_img_count = 0
-    for idx, v in enumerate(fig_tab_results or [], 1):
-        rtype = v.get("record_type", "visual")
-        rid = v.get("record_id", v.get("figure_id", v.get("table_id", "Unknown")))
-        page = v.get("page", "?")
-        cap = _safe_str(v.get("caption") or v.get("panel_caption") or "No caption", 75)
-        raw_img = v.get("image_path", "")
-        resolved = _resolve_image_path(raw_img, rtype)
-        is_attached = resolved and v_img_count < max_images
-        if is_attached:
-            v_img_count += 1
-            v_status = f"ATTACHED AS ImageBlock ({resolved.name})"
-        elif resolved:
-            v_status = "SKIPPED IMAGE (Limit reached; caption/table kept in text)"
-        else:
-            v_status = "TEXT/TABLE-ONLY (No cropped image path)"
-
-        parent_fig = v.get("parent_figure")
-        panel = v.get("panel")
-        panel_cap = v.get("panel_caption")
-        meta_sub = []
-        if parent_fig:
-            meta_sub.append(f"Parent: {parent_fig}")
-        if panel:
-            meta_sub.append(f"Panel: {panel}")
-        meta_str = f" [{', '.join(meta_sub)}]" if meta_sub else ""
-
-        print(f"    [{idx}] {rtype.upper()} {rid} (Page {page}){meta_str}: \"{cap}\"")
-        if panel_cap and panel_cap != cap:
-            print(f"        |-- Panel Caption: \"{_safe_str(panel_cap, 70)}\"")
-        if v.get("table_markdown"):
-            md_prev = _safe_str(v["table_markdown"], 60)
-            print(f"        |-- Table Grid Markdown: \"{md_prev}\" ({len(v['table_markdown'])} chars)")
-        print(f"        |-- Vision Status: [{v_status}]")
-
-    if chat_history:
-        print(f"  * Conversational Memory ({len(chat_history[-4:])} recent message(s) included):")
-        for h in chat_history[-4:]:
-            role = h.get("role", "unknown")
-            snippet = _safe_str(h.get("content", ""), 65)
-            print(f"    [{role.upper()}]: {snippet}")
-    else:
-        print("  * Conversational Memory: None (first turn)")
-
-    print(f"  * System Prompt: Citation grounding [Source N, Page P] enforced.")
+    print(f"  * Retrieved Text Chunks ({len(selected_text_results)} attached)")
+    print(f"  * Attached Visual Images: {attached_images}")
     print("=" * 75 + "\n")
+
+    return messages, user_blocks, system_prompt, user_dialogue_question, selected_text_results
+
+
+def generate_answer_node(state: RAGState) -> dict[str, Any]:
+    """Synthesize a grounded answer using the multimodal vision LLM (llm_vision) passing text, figures, tables, and conversation history."""
+    messages, user_blocks, system_prompt, user_dialogue_question, selected_text_results = build_vlm_messages(state)
+
+    if not messages:
+        ans = "I don't have information about that in the document."
+        return {
+            "answer": ans,
+            "chat_history": [
+                {"role": "user", "content": user_dialogue_question},
+                {"role": "assistant", "content": ans, "sources": []},
+            ],
+        }
 
     try:
         response = llm_vision.chat(messages).message.content.strip()
@@ -1159,7 +1118,6 @@ def generate_answer_node(state: RAGState) -> dict[str, Any]:
         err_str = str(exc)
         if "413" in err_str or "rate_limit_exceeded" in err_str or "tokens" in err_str.lower():
             print(f"\n[Self-Healing] Groq rate-limit/token ceiling encountered ({err_str[:70]}). Retrying with lean text payload...")
-            # Strip heavy ImageBlocks and retry with pure text/table markdown
             lean_blocks = [b for b in user_blocks if not isinstance(b, ImageBlock)]
             lean_messages = [
                 ChatMessage(role=MessageRole.SYSTEM, content=system_prompt),
@@ -1174,7 +1132,6 @@ def generate_answer_node(state: RAGState) -> dict[str, Any]:
             response = f"An error occurred while generating the answer: {exc}"
 
     # If response indicates unanswerable topic, enforce clean single-sentence response and purge sources
-    user_dialogue_question = state.get("original_question") or question
     if _is_unanswerable_response(response):
         response = "I don't have information about that in the document."
         sources = []

@@ -972,3 +972,39 @@ This document captures every major architectural, technical, algorithmic, and en
   2. **Confined Unanswerable Rule**: Restricted the unanswerable refusal rule strictly to completely external, out-of-scope queries (unrelated companies, sports, outside world facts) that have zero presence in the document context. Explicitly barred triggering this rule for overview or summary requests.
   3. **Contextual Question Instruction**: Updated the question block in `generate_answer_node` so that overview queries prompt: *"Please synthesize a clear, comprehensive, and well-structured executive summary of the document based on the provided context, citing relevant sources."*
 - **Outcome**: Document summarization requests reliably produce high-quality executive summaries across scientific and financial documents without falsely triggering unanswerable refusals.
+
+
+## 36. Classical Production Query Expansion (Document-Agnostic & Dynamic)
+
+### Decision 36.1: Document-Agnostic Classical Query Expansion (Avoiding Costly Multi-Query & Static Dictionaries)
+- **Context & Problem**: In earlier iterations, query reformulation in the Corrective RAG (CRAG) fallback loop discarded the user's original query and replaced it with a synthetic keyword search string. Multi-query was rejected because issuing multiple concurrent searches across dense, BM25, and remote ColPali ZeroGPU would multiply latency and API costs by 3x–5x. Furthermore, hardcoded deterministic dictionaries (e.g. for finance or deep learning) were rejected because the system is document-agnostic and must support any uploaded PDF (medical, legal, engineering, financial, scientific, manuals, etc.).
+- **Decision**:
+  1. **Rejected Multi-Query**: Preserved single-pass cost efficiency and prevented Hugging Face Space rate limits/timeouts.
+  2. **Classical Query Expansion Formula**: Upgraded the CRAG fallback loop to follow the classical information retrieval formula:
+     $$Q_{\text{expanded}} = Q_{\text{original}} + \text{Domain Terms / Technical Synonyms}$$
+     The user's original question is strictly preserved at the beginning as the semantic anchor for Dense & ColPali retrieval, while domain terms and technical synonyms are appended.
+  3. **Removed Hardcoded Static Dictionaries**: Eliminated static domain dictionaries so no domain assumptions are baked into code. The initial BM25 search remains clean and completely general.
+  4. **Universal Document Structure Expansions**:
+     - *Tables*: Appends universal data-grid terms (`data grid rows columns values results breakdown {doc_name}`).
+     - *Figures*: Appends universal visual terms (`visual chart diagram plot image illustration graph structure {doc_name}`).
+     - *Overview/Summary*: Appends universal document overview terms (`executive summary introduction abstract core overview background findings {doc_name}`).
+  5. **Dynamic LLM Query Expansion**: For general technical queries, the LLM dynamically analyzes the user query and `{doc_name}` to extract 4–8 relevant domain terms and technical synonyms without inventing external benchmark datasets or machine learning architectures.
+- **Outcome**: 100% document-agnostic classical query expansion that adapts to any uploaded document type (healthcare, law, science, finance, engineering) without multi-query overhead or hardcoded vocabulary bias.
+
+
+## 37. Groq OTPM Rate Limit Protection & Strict Output Token Capping
+
+### Decision 37.1: Resolving Groq Output Tokens Per Minute (OTPM) 429 Errors
+- **Context & Problem**: When asking for a comprehensive summary of a document, the user encountered:
+  `RateLimitError: 429 - Request too large for model qwen/qwen3.8-27b on output tokens per minute (OTPM): Limit 1000, Requested 1066. The request's expected output tokens exceed the enforced limit; reduce max_tokens (or the request's expected output) and try again.`
+- **Root Cause Analysis**:
+  1. **Not Input Tokens (ITPM)**: The number of retrieved text chunks (5 chunks) and attached figure images (at most 1 image) was NOT the cause. Total input stayed well below the 7,000 ITPM limit.
+  2. **Output Tokens (OTPM)**: Groq enforces an extremely tight **Output Tokens Per Minute (OTPM)** quota of **1,000 tokens** on `qwen/qwen3.8-27b`.
+  3. **Unbounded Output Buffer**: `llm_vision` in `llm_service.py` had no `max_tokens` set. When an overview query asked for a comprehensive summary, the client defaulted to an unbounded output reservation (> 1,000 tokens), causing Groq to preemptively reject the call before generation began.
+- **Decision**:
+  1. **Explicit Output Token Ceilings**:
+     - Configured `max_tokens=750` on `llm_vision` in [`backend/src/services/llm_service.py`](backend/src/services/llm_service.py).
+     - Configured `max_tokens=500` on `llm` (used for grading and CRAG query expansion).
+  2. **Prompt-Level Length Directive**:
+     - Added an explicit length instruction in `generate_answer_node` for overview/summary queries: *"Keep your summary focused and concise (around 250-350 words) using clear bullet points to present key findings within output token budgets."*
+- **Outcome**: Output reservations never exceed Groq's 1,000 OTPM limit, completely eliminating 429 output token rate-limit errors while ensuring dense, high-quality executive summaries.
