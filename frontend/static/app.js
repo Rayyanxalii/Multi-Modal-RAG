@@ -299,7 +299,7 @@ async function handleStreamingChat(query) {
   statusDiv.style.fontStyle = "italic";
   statusDiv.style.fontSize = "0.95rem";
   statusDiv.style.marginBottom = "8px";
-  statusDiv.innerHTML = `<span class="progress-spinner" aria-hidden="true">⏳</span> Searching document...`;
+  statusDiv.innerHTML = `<span class="progress-spinner" aria-hidden="true">⏳</span> Looking into document...`;
   workingSheet.appendChild(statusDiv);
 
   const answerBody = document.createElement("div");

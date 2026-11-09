@@ -326,17 +326,17 @@ def stream_agentic_rag(
     }
 
     # 1. Routing & Anaphora resolution
-    yield {"type": "status", "stage": "intent", "message": "Analyzing question & context..."}
+    yield {"type": "status", "stage": "intent", "message": "Looking into document..."}
     state.update(route_query_node(state))
 
     # 2. Parallel Tri-Hybrid Retrieval (Dense + BM25 + ColPali)
-    yield {"type": "status", "stage": "retrieval", "message": "Executing parallel Dense, BM25, and ColPali visual retrieval..."}
+    yield {"type": "status", "stage": "retrieval", "message": "Searching document..."}
     state.update(dense_retriever_node(state))
     state.update(bm25_retriever_node(state))
     state.update(colpali_retriever_node(state))
 
     # 3. Text Fusion & Visual Hydration
-    yield {"type": "status", "stage": "fusion", "message": "Fusing multimodal candidates & hydrating assets..."}
+    yield {"type": "status", "stage": "fusion", "message": "Combining results..."}
     state.update(text_fusion_node(state))
     state.update(visual_hydration_node(state))
     state.update(format_context_node(state))
@@ -345,7 +345,7 @@ def stream_agentic_rag(
     state.update(grade_context_node(state))
 
     if not state.get("is_relevant", True) and state.get("retry_count", 0) < 1:
-        yield {"type": "status", "stage": "crag", "message": "Applying domain query expansion and retrying retrieval..."}
+        yield {"type": "status", "stage": "crag", "message": "Refining search..."}
         state.update(rewrite_query_node(state))
         state.update(dense_retriever_node(state))
         state.update(bm25_retriever_node(state))

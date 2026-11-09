@@ -1008,3 +1008,36 @@ This document captures every major architectural, technical, algorithmic, and en
   2. **Prompt-Level Length Directive**:
      - Added an explicit length instruction in `generate_answer_node` for overview/summary queries: *"Keep your summary focused and concise (around 250-350 words) using clear bullet points to present key findings within output token budgets."*
 - **Outcome**: Output reservations never exceed Groq's 1,000 OTPM limit, completely eliminating 429 output token rate-limit errors while ensuring dense, high-quality executive summaries.
+
+
+## 38. Real-Time Document Ingestion Streaming & True Backend Token Streaming via SSE
+
+### Decision 38.1: Authentic Backend Ingestion Progress via Server-Sent Events
+- **Context & Problem**: Previously, document ingestion in the frontend modal used a simulated JavaScript `setInterval` timer with an artificial mathematical curve that guessed progress stages. If document rendering or Docling layout parsing took longer, the progress bar stalled at 95%; if ingestion finished faster, the bar jumped abruptly.
+- **Decision**:
+  1. **Backend Pipeline Generator**: Implemented `stream_ingest_document(pdf_path)` in `backend/src/rag/graph/workflow.py` as a Python generator yielding structured progress events:
+     - `stage: rendering` (15%) - Document page rendering.
+     - `stage: parsing` (40%) - Docling layout & table extraction.
+     - `stage: cropping` (65%) - Figure & table cropping.
+     - `stage: vectors` (82%) - Qdrant vector indexing.
+     - `stage: colpali` (92%) - ColPali ZeroGPU registration.
+     - `stage: complete` (100%) - Ingestion completion with target `doc_id`.
+  2. **SSE Upload Endpoint**: Added streaming support to `POST /api/upload?stream=true` in `backend/server.py` returning `StreamingResponse(..., media_type="text/event-stream")`.
+  3. **Frontend Event-Driven Progress**: Updated `frontend/static/app.js` (`initUploadModal`) to read the stream using `res.body.getReader()`, dynamically updating the progress bar width, percentage, and label in real time as each backend step finishes.
+- **Outcome**: 100% authentic, transparent ingestion feedback reflecting the exact backend execution stage, completely eliminating simulated timers.
+
+### Decision 38.2: True Backend Token Streaming & User-Friendly Status Pills
+- **Context & Problem**: Previously, chat answers waited for the complete LLM response to finish before displaying text in the UI (or using a frontend-only simulated typewriter effect). Furthermore, status messages emitted during retrieval displayed internal engineering terminology (`"Fusing multimodal candidates & hydrating assets..."`, `"Executing parallel Dense, BM25, and ColPali visual retrieval..."`) which degraded end-user experience.
+- **Decision**:
+  1. **True VLM Token Streaming**: Implemented `stream_agentic_rag(question, pdf_path, thread_id)` in `backend/src/rag/graph/workflow.py` leveraging Groq's native `llm_vision.stream_chat(messages)` with `chunk.delta`.
+  2. **FastAPI SSE Chat Route**: Added `POST /api/chat/stream` delivering Server-Sent Events for status pills (`type: "status"`), raw token deltas (`type: "token"`), and post-generation metadata (`type: "metadata"`).
+  3. **User-Centric Status Messaging**: Simplified status messages to clear, non-technical natural language:
+     - Stage 1 (Intent & History): `"Looking into document..."`
+     - Stage 2 (Retrieval): `"Searching document..."`
+     - Stage 3 (Fusion & Hydration): `"Combining results..."`
+     - Stage 4 (CRAG Query Expansion): `"Refining search..."`
+  4. **State Persistence & KaTeX Math Rendering**:
+     - Preserved LangGraph SQLite checkpointer (`chat_history.db`) state updates using `app.update_state(config, {"answer": full_answer, "sources": sources, "chat_history": new_turn})`.
+     - Upon stream completion, the frontend dynamically replaces raw streamed tokens with full KaTeX math evaluation, semantic Markdown typography, and clickable page source badges.
+- **Outcome**: Sub-second Time-to-First-Token (TTFT), real-time streaming feedback, intuitive status messages, and seamless mathematical and visual asset rendering.
+
