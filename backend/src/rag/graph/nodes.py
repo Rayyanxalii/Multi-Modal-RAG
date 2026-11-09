@@ -975,20 +975,22 @@ def generate_answer_node(state: RAGState) -> dict[str, Any]:
 # Removed premature is_relevant blocker; model synthesizes with all available evidence
 
     system_prompt = (
-        "You are an expert scientific and technical AI assistant answering questions based strictly on the provided technical document context.\n"
+        "You are an expert scientific, financial, and technical AI assistant answering questions based on the provided document context.\n"
         "Guidelines:\n"
-        "1. Style & Tone: Write in clear, authoritative, fluent prose with clean markdown formatting. Use **bold** for key terms and concepts. When presenting lists, ensure each item starts on a new line. Directly address the user's question using facts from the document.\n"
-        "2. Grounding: Answer strictly using the retrieved text chunks, tables, and figures. Synthesize explanations accurately without speculating or hallucinating unmentioned facts.\n"
-        "3. Mathematical Equations: When expressing formulas, equations, or variables, ALWAYS use standard LaTeX syntax:\n"
+        "1. Style & Tone: Write in clear, authoritative, fluent prose with clean markdown formatting. Use **bold** for key terms, metrics, and concepts. When presenting lists, ensure each item starts on a new line. Directly address the user's question using facts from the document.\n"
+        "2. Grounding & Synthesis: Answer using facts, data, findings, and numbers present in the retrieved text chunks, tables, and figures. Synthesize explanations accurately without speculating or inventing unmentioned facts.\n"
+        "3. Document Summaries & Overviews: When asked to summarize the whole document, provide an overview, or explain what the document is about:\n"
+        "   - Synthesize a comprehensive, well-structured executive summary based on the provided document excerpts (such as title, abstract, introduction, key findings, and results).\n"
+        "   - Organize your summary with clear markdown sections or bullet points (e.g. **Core Objective / Subject**, **Key Highlights & Methodology**, **Major Results / Financial Highlights**, and **Conclusion**).\n"
+        "   - NEVER refuse or state you lack information when asked for a summary or overview of the document; utilize the available document context to represent the document's central theme and main contributions.\n"
+        "4. Mathematical Equations: When expressing formulas, equations, or variables, ALWAYS use standard LaTeX syntax:\n"
         "   - Use display math blocks '$$ ... $$' on their own separate lines for primary equations (e.g. $$ \\text{Attention}(Q, K, V) = \\text{softmax}\\left(\\frac{QK^T}{\\sqrt{d_k}}\\right)V $$).\n"
         "   - Use inline math '$...$' for variables, dimensions, and short expressions (e.g. '$d_k$', '$d_v$', '$Q$', '$K$', '$V$', '$\\sqrt{d_k}$', '$O(n^2 \\cdot d)$').\n"
-        "4. Citations: Ground your statements with concise source citations [Source N, Page P] placed at the end of sentences where facts are introduced. Do not interrupt formulas or insert citations between words.\n"
-        "5. Visual References: When referencing figures or tables, explicitly mention them (e.g. 'as illustrated in Figure 2 [Source N, Page P]').\n"
-        "6. Unanswerable Questions: If the document contains genuinely no information to answer the question, respond ONLY with: 'I don't have information about that in the document.'\n"
-        "   - Do NOT add any extra explanation, summary, or commentary.\n"
-        "   - Do NOT mention 'The provided text chunks...' or 'The provided context...'.\n"
-        "   - Do NOT list or describe what topics, formulas, or architectures ARE in the document.\n"
-        "   - Stop immediately after stating that you do not have information about it."
+        "5. Citations: Ground your statements with concise source citations [Source N, Page P] placed at the end of sentences where facts are introduced. Do not interrupt formulas or insert citations between words.\n"
+        "6. Visual References: When referencing figures or tables, explicitly mention them (e.g. 'as illustrated in Figure 2 [Source N, Page P]' or 'detailed in Table 1 [Source N, Page P]').\n"
+        "7. Unanswerable Questions: ONLY if the user asks about an external, unrelated topic or specific fact that has genuinely zero basis or mention in the document (e.g. an unrelated company, external person, or topic completely outside the document), respond ONLY with: 'I don't have information about that in the document.'\n"
+        "   - Do NOT trigger this for document summaries, overviews, or high-level explanations of the document itself.\n"
+        "   - When triggered, stop immediately without extra commentary or explanation."
     )
 
     user_blocks: list[Any] = []
@@ -1061,9 +1063,18 @@ def generate_answer_node(state: RAGState) -> dict[str, Any]:
             source_idx += 1
 
     # 3. Question Prompt
-    user_blocks.append(
-        TextBlock(text=f"Question: {question}\n\nPlease provide a clear, detailed, grounded explanation citing relevant sources.")
-    )
+    q_to_eval = state.get("original_question") or question
+    if is_overview_query(q_to_eval):
+        prompt_instruction = (
+            f"Question: {question}\n\n"
+            "Please synthesize a clear, comprehensive, and well-structured executive summary of the document based on the provided context, citing relevant sources."
+        )
+    else:
+        prompt_instruction = (
+            f"Question: {question}\n\n"
+            "Please provide a clear, detailed, grounded explanation citing relevant sources."
+        )
+    user_blocks.append(TextBlock(text=prompt_instruction))
 
     messages = [
         ChatMessage(role=MessageRole.SYSTEM, content=system_prompt),

@@ -109,6 +109,7 @@ graph TD;
 ```
 RAG/
 ├── backend/                              # Backend application service
+│   ├── server.py                         # FastAPI web server, REST endpoints, & asset URL resolver
 │   └── src/
 │       ├── rag/                          # Core RAG package
 │       │   ├── __init__.py
@@ -147,8 +148,7 @@ RAG/
 │           ├── __init__.py
 │           └── llm_service.py            # Groq LLM & VLM providers (Qwen 3.8 27B / GPT-OSS-20B)
 │
-├── frontend/                             # Full-Stack Web Application
-│   ├── server.py                         # FastAPI web server, REST endpoints, & asset URL resolver
+├── frontend/                             # Client Web Application (Presentation Layer)
 │   └── static/                           # Monochrome / Sketchy web client
 │       ├── index.html                    # Clean research canvas & side-by-side inspector
 │       ├── style.css                     # Monochrome design system tokens, typography & layout
@@ -214,9 +214,9 @@ RAG/
 
 Start the FastAPI application:
 ```bash
-python frontend/server.py
+python backend/server.py
 ```
-*(or via uvicorn directly: `uvicorn frontend.server:app --reload --port 8000`)*
+*(or via uvicorn directly: `uvicorn backend.server:app --reload --port 8000`)*
 
 Open your browser to:
 👉 **`http://localhost:8000`**

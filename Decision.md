@@ -931,3 +931,44 @@ This document captures every major architectural, technical, algorithmic, and en
      - Added deduplication by asset ID and image URL.
      - Guaranteed that if `visualSources` is empty, no visual deck or card is rendered.
 - **Outcome**: 100% precision in visual presentation: overview queries show 0 visual clutter, asset-specific queries show only the requested figure/table, and out-of-scope queries show zero assets.
+
+
+## 34. Architectural Separation: Relocation of `server.py` to Backend
+
+### Decision 34.1: Moving `server.py` from `frontend/` to `backend/`
+- **Context & Problem**:
+  `server.py` was originally placed in `frontend/` when the web interface was first introduced as a lightweight static asset server (`StaticFiles`) for `index.html`. As the application evolved, `server.py` became the primary API server containing:
+  - Document ingestion endpoints (`/api/upload`)
+  - Multi-turn conversation and session endpoints (`/api/chat`, `/api/documents/{doc_id}/history`)
+  - Asset routing and resolution (`/api/documents/{doc_id}/pdf`, `/api/documents/{doc_id}/pages`)
+  - Checkpointer thread pruning (`DELETE /api/documents/{doc_id}/history`)
+  Having the application backend inside `frontend/` violated the separation of concerns and created architectural confusion.
+- **Decision**:
+  1. Relocated `server.py` to `backend/server.py`.
+  2. Maintained clean separation of concerns:
+     - `frontend/`: Presentation layer only (`static/index.html`, `static/style.css`, `static/app.js`, `static/vendor/`).
+     - `backend/`: Server & business logic (`server.py`, `src/rag/`, `src/services/`).
+  3. Configured `PROJECT_ROOT` and `STATIC_DIR` resolution in `backend/server.py` so that:
+     - Static assets mount from `PROJECT_ROOT / "frontend" / "static"`.
+     - Data assets mount from `PROJECT_ROOT / "data"`.
+     - `PROJECT_ROOT` and `backend/src` are safely registered in `sys.path`.
+  4. Updated runner command to `python backend/server.py` and `uvicorn backend.server:app --reload --port 8000`.
+- **Outcome**: Clean repository architecture, unambiguous boundary between backend server logic and frontend client assets, and reliable import path resolution across CLI, Uvicorn, and containerized executions.
+
+
+## 35. Robust Whole-Document Summarization Prompting & Anti-Refusal Guard
+
+### Decision 35.1: Overhauling Answer Generation System Prompt for Document Summaries
+- **Context & Problem**: When users asked for a summary of the whole document (e.g., *"summarize the whole document"*, *"what is this report about?"*, *"give me an overview"*), the LLM frequently refused with *"I don't have information about that in the document."*
+  This failure occurred because:
+  1. The prompt previously strictly commanded: *"Answer strictly using the retrieved text chunks... without speculating or hallucinating unmentioned facts"*.
+  2. The prompt had an overzealous Unanswerable rule: *"If the document contains genuinely no information to answer the question, respond ONLY with: 'I don't have information about that in the document.'"*
+  3. Because the VLM only receives the top retrieved excerpts (5 chunks), the model reasoned that it lacked the complete, exhaustive text of the entire document and therefore falsely deemed a "whole document summary" unanswerable.
+- **Decision**:
+  1. **Dedicated Document Summary Guideline**: Added explicit instructions instructing the assistant how to handle whole-document summaries and overviews:
+     - Synthesize a comprehensive, well-structured executive summary based on the provided document excerpts (title, abstract, introduction, key findings, and results).
+     - Structure the summary with clean markdown sections (**Core Objective / Subject**, **Key Highlights & Methodology**, **Major Results / Financial Highlights**, and **Conclusion**).
+     - Explicitly commanded: *"NEVER refuse or state you lack information when asked for a summary or overview of the document; utilize the available document context to represent the document's central theme and main contributions."*
+  2. **Confined Unanswerable Rule**: Restricted the unanswerable refusal rule strictly to completely external, out-of-scope queries (unrelated companies, sports, outside world facts) that have zero presence in the document context. Explicitly barred triggering this rule for overview or summary requests.
+  3. **Contextual Question Instruction**: Updated the question block in `generate_answer_node` so that overview queries prompt: *"Please synthesize a clear, comprehensive, and well-structured executive summary of the document based on the provided context, citing relevant sources."*
+- **Outcome**: Document summarization requests reliably produce high-quality executive summaries across scientific and financial documents without falsely triggering unanswerable refusals.
