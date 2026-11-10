@@ -1,8 +1,10 @@
-# Generalized Multi-Modal Agentic RAG System (LangGraph)
+# Universal Multi-Modal Agentic RAG System (LangGraph)
 
-A production-grade, document-agnostic **Multi-Modal Agentic Retrieval-Augmented Generation (RAG)** system engineered to answer complex questions over any technical document containing written text, mathematical formulas, system architectures, flowcharts, diagrams, and tables (demonstrated on [*Attention Is All You Need*](data/raw/attention.pdf)).
+A production-grade, document-agnostic **Multi-Modal Agentic Retrieval-Augmented Generation (RAG)** system engineered to ingest, index, and answer complex questions over **any document containing heterogeneous multi-modal data**—including body text, mathematical formulas, system architectures, flowcharts, diagrams, high-resolution figures, balance sheets, and nested financial or technical tables.
 
-Powered by **LangGraph**, this system orchestrates an adaptive, self-correcting state graph that executes parallel dense and lexical retrieval, late-interaction visual page discovery via **ColPali**, evaluates relevance via **Corrective RAG (CRAG)**, and synthesizes grounded answers with verifiable page-level citations—all delivered through an interactive, distraction-free **Laboratory Notebook Web Workspace**.
+Whether working with **enterprise financial disclosures, scientific research papers, engineering specifications, legal agreements, medical documentation, or slide decks**, the system dynamically adapts to the document's structure without manual template adjustments or document-specific hardcoding.
+
+Powered by **LangGraph**, the system orchestrates an adaptive, self-correcting state graph that executes parallel dense and lexical retrieval, late-interaction visual page discovery via **ColPali**, evaluates relevance via **Corrective RAG (CRAG)**, and synthesizes grounded answers with verifiable page-level citations—all delivered through an interactive, distraction-free **Laboratory Notebook Web Workspace**.
 
 ---
 
@@ -50,9 +52,10 @@ graph TD;
 
 ## Key Capabilities
 
-1. **Document-Agnostic Design**:
-   - Ingests and queries **any PDF document** containing text, mathematical proofs, diagrams, and tables.
-   - Dynamic document namespacing, automated coordinate mapping, and generalized multimodal context formatting.
+1. **Universal Multi-Modal & Document-Agnostic Design**:
+   - Ingests and processes **any PDF document** containing mixed modalities: prose text, mathematical proofs, diagrams, architectural charts, flowcharts, photographs, and complex multi-column tabular data.
+   - Dynamic document namespacing isolates vector collections, BM25 indices, page renderings, cropped figures, and tables per document—allowing multiple different PDFs to be managed and queried independently.
+   - Preserves spatial layout coordinates and table hierarchies across ingestion and retrieval.
 
 2. **Balanced Multimodal Retrieval (Calibrated Depth)**:
    - **Dense Retrieval**: Retrieves **5 candidate text chunks** using Qdrant and `nomic-embed-text`.
@@ -61,7 +64,7 @@ graph TD;
    - **Visual Asset Discovery**: ColPali multi-vector late-interaction MaxSim discovers top visual pages, hydrating **up to 10 visual assets** (cropped figures and structured Markdown tables) with full caption metadata.
 
 3. **Deterministic Unanswerable Guardrails**:
-   - If a question falls outside the document corpus (e.g. *"what is random forest?"* on an attention paper), the system prompt and deterministic server-side classifier enforce an immediate, clean response:
+   - If a question falls outside the active document corpus (e.g. asking about unrelated topics not discussed in the document), the system prompt and deterministic server-side classifier enforce an immediate, clean response:
      ```
      I don't have information about that in the document.
      ```
@@ -158,12 +161,12 @@ RAG/
 │
 ├── data/                                 # Persistent data assets
 │   ├── chat_history.db                   # SQLite database storing multi-document conversation checkpoints
-│   ├── raw/                              # Original source PDF documents (e.g. attention.pdf)
-│   ├── rendered_pages/                   # High-res 2x PNG page images (page_0001.png - page_0015.png)
-│   ├── chunks/                           # JSONL text chunks, parsed documents, and table/figure metadata
-│   ├── figures/                          # Cropped figure PNG images
-│   ├── tables/                           # Cropped table PNG images
-│   ├── embeddings/                       # ColPali multi-vector PyTorch embeddings (pages_embeddings.pt)
+│   ├── raw/                              # Source PDF documents (any uploaded multimodal PDF)
+│   ├── rendered_pages/                   # High-res 2x PNG page images organized per document
+│   ├── chunks/                           # JSONL text chunks, parsed document hierarchies, and metadata
+│   ├── figures/                          # Cropped figure PNG images extracted per document
+│   ├── tables/                           # Cropped table PNG images and Markdown grids per document
+│   ├── embeddings/                       # ColPali multi-vector page embeddings per document
 │   ├── graph.png                         # High-res visual diagram of compiled LangGraph workflow
 │   └── graph.mmd                         # Mermaid graph definition exported from LangGraph
 │
@@ -232,46 +235,69 @@ Open your browser to:
 
 ### 2. Interactive CLI Assistant (Continuous Terminal Session)
 
-To chat directly in the terminal:
+To chat directly in the terminal against any ingested document:
 ```bash
 python -m rag.main
 ```
 *(or simply: `uv run rag`)*
 
-*Example interaction:*
+*Example interaction across multimodal documents:*
+
 ```text
+Active Document: nestle_financial_report.pdf
+Ask a question: What were the total sales and gross profit for the period?
+
+=======================================================
+ROUTE: Both | CRAG RETRIES: 0
+=======================================================
+ANSWER:
+According to the Condensed Interim Statement of Profit or Loss [Source 1, Page 5],
+revenue from contracts with customers (net sales) for the period was PKR 160,260 million,
+generating a gross profit of PKR 51,757 million...
+
+--- Sources ---
+Source 1 [Table]  | ID: nestle_tbl_003  | Pages: 5
+Source 2 [Text]   | ID: nestle_chunk_014 | Pages: 5
+```
+
+```text
+Active Document: attention.pdf
 Ask a question: Show me the diagram of scaled dot product attention
 
 =======================================================
 ROUTE: Both | CRAG RETRIES: 0
 =======================================================
 ANSWER:
-Figure 2 (left) presents the Scaled Dot-Product Attention architecture [Source 1, Page 4].
-The mechanism operates by taking queries (Q) and keys (K) of dimension dk, computing dot products,
-scaling them by 1/sqrt(dk), and applying a softmax function to obtain attention weights for values (V)...
+Figure 2 presents the Scaled Dot-Product Attention architecture [Source 1, Page 4].
+The mechanism computes dot products of queries (Q) and keys (K), scales them by 1/sqrt(d_k),
+and applies softmax to yield weights for values (V)...
 
 --- Sources ---
 Source 1 [Figure] | ID: attention_fig_002 | Pages: 4
-Source 2 [Figure] | ID: attention_fig_003 | Pages: 4
 ```
 
 ---
 
-### 3. Ingest Any Technical PDF
+### 3. Ingest Any Multi-Modal Document (PDF)
 
-To ingest a new PDF document (automated Docling parsing, chunking, visual asset cropping, and Qdrant indexing):
+The ingestion engine is 100% document-agnostic. You can ingest **any technical PDF, corporate report, paper, or specification**:
 
 ```bash
+# Ingest any document via CLI:
 python -m rag.ingest --pdf path/to/your_document.pdf
+
+# Examples:
+python -m rag.ingest --pdf data/raw/nestle_financial_report.pdf
+python -m rag.ingest --pdf data/raw/attention.pdf
 ```
 
-Optional ingestion flags:
-- `--skip-rendering`: Skip rendering PDF pages if images already exist.
-- `--skip-parsing`: Skip Docling layout parsing if chunks already exist.
-- `--skip-cropping`: Skip visual figure and table image cropping.
-- `--only-indexing`: Run only Qdrant vector indexing.
+The automated pipeline executes four unified stages for any ingested document:
+1. **PyMuPDF Page Rendering**: Generates 2x high-resolution page images for inspection and visual embeddings.
+2. **IBM Docling Layout Parsing**: Extracts structural hierarchies, section headings, body paragraphs, and bounding boxes.
+3. **Visual Asset Extraction**: Automatically crops figures, diagrams, and plots as PNGs and formats tables into clean Markdown grids.
+4. **Multi-Modal Vector Indexing**: Indexes dense text embeddings (`nomic-embed-text`) into isolated Qdrant collections, builds BM25 heading search indices, and creates ColPali multi-vector page embeddings.
 
-*(Documents can also be uploaded directly via the **"+ Upload Document"** button in the Web UI).*
+*(Documents can also be uploaded and ingested directly via the **"+ Upload Document"** button in the Web Workspace).*
 
 ---
 
@@ -332,7 +358,11 @@ The system includes an automated evaluation pipeline ([`backend/evaluation/test_
 1. **Multimodal Discrepancy (Vision vs. Pure Text)**:
    Our pipeline is multimodal—the Vision LLM receives both text chunks and **high-resolution page images** from ColPali. In sample evaluations (e.g. Net Sales), the Vision LLM reads additional details (such as the segment revenue breakdown for Dairy, Beverages, etc.) directly from the **page image**. Standard Ragas `faithfulness` only verifies claims against the single text table snippet in `retrieved_contexts`. Because the segment figures originated from the visual image rather than the text string, the text evaluator marks those claims as "unsupported", lowering the ratio ($\frac{6 \text{ text-verified claims}}{13 \text{ total claims}} \approx 0.4615$). In contrast, **Multimodal Faithfulness** assesses both image and text contexts, earning a perfect **1.0000 (100%)**.
 2. **Voluntary Completeness (Over-Answering)**:
-   The synthesis prompt encourages thorough financial answers. When asked for net sales, the model provided net sales alongside gross margin, operating profit, and segment breakdowns. In Ragas, supplementary factual statements that extend beyond the immediate text chunk enlarge the denominator, reducing the text-only faithfulness ratio.
+   The synthesis prompt encourages thorough financial and technical answers. When asked for net sales, the model provided net sales alongside gross margin, operating profit, and segment breakdowns. In Ragas, supplementary factual statements that extend beyond the immediate text chunk enlarge the denominator, reducing the text-only faithfulness ratio.
+
+### Context Entities Recall Analysis (0.2333)
+
+`Context Entities Recall` measures exact tokenized named-entity overlap between ground-truth reference answers and retrieved context passages. In structured tables (e.g., condensed financial schedules or scientific metric tables), data rows are formatted compactly (`Net sales - PKR Million: 160,260`), whereas ground-truth references often write in natural prose (`"PKR 160.26 billion"`). Despite semantic `Context Recall` being **1.0000 (100%)**, strict entity parsing marks these surface-level format differences as missing entities. The underlying information is fully retrieved and correctly synthesized.
 
 ---
 
