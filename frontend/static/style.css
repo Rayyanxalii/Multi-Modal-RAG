@@ -441,6 +441,63 @@ body {
   padding: 10px 4px 24px 0;
 }
 
+/* Centered Hero Empty State */
+.chat-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  margin: auto;
+  max-width: 600px;
+  padding: 48px 24px;
+  animation: fadeIn 0.3s ease-out;
+}
+
+.chat-empty-state .empty-icon {
+  font-size: 42px;
+  margin-bottom: 16px;
+  line-height: 1;
+}
+
+.chat-empty-state .empty-title {
+  font-family: var(--dp-font-serif, "Source Serif 4", Georgia, serif);
+  font-size: 24px;
+  font-weight: 600;
+  color: var(--dp-color-ink);
+  margin: 0 0 12px 0;
+  line-height: 1.35;
+}
+
+.chat-empty-state .empty-title strong {
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+.chat-empty-state .empty-subtitle {
+  font-family: var(--dp-font-sans, system-ui, sans-serif);
+  font-size: 14px;
+  color: var(--dp-color-secondary, #666);
+  line-height: 1.6;
+  margin: 0 0 20px 0;
+  max-width: 500px;
+}
+
+.chat-empty-state .empty-doc-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 16px;
+  border: 1px solid var(--dp-color-ink);
+  background-color: var(--dp-color-surface-sunken, #f8f9fa);
+  font-family: var(--dp-font-mono, monospace);
+  font-size: 11px;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  font-weight: 600;
+}
+
 .message-entry {
   display: flex;
   flex-direction: column;

@@ -183,11 +183,14 @@ def index_vectors_node(state: RAGState) -> dict[str, Any]:
     doc_name = doc_paths["doc_name"]
 
     print(f"[Ingestion] Indexing text chunks into Qdrant: {TEXT_COLLECTION_NAME} (doc_id={doc_name})")
-    index_text_chunks(
-        chunks_file_path=doc_paths["chunks_path"],
-        collection_name=TEXT_COLLECTION_NAME,
-        doc_id=doc_name,
-    )
+    try:
+        index_text_chunks(
+            chunks_file_path=doc_paths["chunks_path"],
+            collection_name=TEXT_COLLECTION_NAME,
+            doc_id=doc_name,
+        )
+    except Exception as exc:
+        print(f"[Warning] Dense vector indexing skipped ({exc}). Document remains fully searchable via Okapi BM25 and ColPali visual embeddings.")
     return {}
 
 

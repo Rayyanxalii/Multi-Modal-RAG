@@ -60,11 +60,6 @@
           <button id="btnToggleDocViewer" class="btn-split-toggle" type="button" aria-expanded="false" title="Toggle document inspection beside conversation">
             <span id="btnToggleDocViewerText">Open Document Beside Chat</span>
           </button>
-
-          <div class="status-paper-strip">
-            <span class="status-indicator" id="statusDot" aria-hidden="true"></span>
-            <span id="activeDocBadge" class="mono-badge">DOC: ATTENTION</span>
-          </div>
         </div>
       </header>
 
@@ -87,14 +82,12 @@
           <!-- Chat History Stream -->
           <div id="chatStream" class="chat-stream-container" aria-live="polite">
             
-            <!-- Starter Assistant Thought -->
-            <article class="message-entry assistant">
-              <div class="assistant-working-sheet">
-                <div class="answer-body">
-                  Ask any question about this document's text, equations, figures, or tables.
-                </div>
-              </div>
-            </article>
+            <!-- Dynamic Centered Hero Prompt / Empty State -->
+            <div id="chatEmptyState" class="chat-empty-state">
+              <div class="empty-icon">📄</div>
+              <h2 class="empty-title">Welcome to Omni Retrieve</h2>
+              <p class="empty-subtitle">Upload any document (PDF) containing text, equations, figures, or tables using the <strong>+ Upload Document</strong> button to begin asking questions.</p>
+            </div>
 
           </div>
 
@@ -126,8 +119,8 @@
             <!-- Viewer Header with Controls -->
             <div class="viewer-header">
               <div class="viewer-title-group">
-                <h3 id="viewerDocTitle" class="viewer-doc-title">attention.pdf</h3>
-                <span id="viewerPageBadge" class="viewer-page-badge">PAGE 1 / 15</span>
+                <h3 id="viewerDocTitle" class="viewer-doc-title">Document Viewer</h3>
+                <span id="viewerPageBadge" class="viewer-page-badge">PAGE 1</span>
               </div>
               <div class="viewer-header-actions">
                 <div class="viewer-tab-switch" role="tablist">

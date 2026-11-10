@@ -24,6 +24,7 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
 COPY pyproject.toml /app/
 COPY backend /app/backend
 COPY frontend /app/frontend
+COPY data /app/data
 
 # Install dependencies into system Python
 RUN uv pip install --system -e .

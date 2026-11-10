@@ -4,7 +4,8 @@
  */
 
 const savedActiveDoc = typeof localStorage !== "undefined" ? localStorage.getItem("rag_active_doc_id") : null;
-let currentDocId = savedActiveDoc || "attention";
+let currentDocId = savedActiveDoc || null;
+let allDocuments = [];
 const chatHistories = {}; // doc_id -> in-memory HTML snapshot
 
 // Document Viewer State
@@ -56,15 +57,21 @@ async function loadDocuments() {
     const res = await fetch("/api/documents");
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const docs = await res.json();
+    allDocuments = docs || [];
 
     docList.innerHTML = "";
     if (!docs || docs.length === 0) {
       docList.innerHTML = `<li style="font-size: 13px; color: var(--dp-color-ink-muted); padding: 8px 4px;">No documents yet.</li>`;
+      currentDocId = null;
+      if (typeof localStorage !== "undefined") localStorage.removeItem("rag_active_doc_id");
+      updateInputPlaceholder();
+      updateActiveBadge();
+      renderInitialGreeting(null);
       return;
     }
 
     // Verify currentDocId exists among docs, otherwise fallback to first
-    const docExists = docs.some((d) => d.doc_id.toLowerCase() === currentDocId.toLowerCase());
+    const docExists = currentDocId ? docs.some((d) => d.doc_id.toLowerCase() === currentDocId.toLowerCase()) : false;
     if (!docExists && docs.length > 0) {
       currentDocId = docs[0].doc_id;
       if (typeof localStorage !== "undefined") localStorage.setItem("rag_active_doc_id", currentDocId);
@@ -72,7 +79,7 @@ async function loadDocuments() {
 
     docs.forEach((doc) => {
       const li = document.createElement("li");
-      const isSelected = doc.doc_id.toLowerCase() === currentDocId.toLowerCase();
+      const isSelected = currentDocId && doc.doc_id.toLowerCase() === currentDocId.toLowerCase();
       li.className = `doc-item-scrap ${isSelected ? "active" : ""}`;
       li.setAttribute("role", "option");
       li.setAttribute("aria-selected", isSelected ? "true" : "false");
@@ -82,17 +89,14 @@ async function loadDocuments() {
           <div class="doc-name">${escapeHtml(doc.title || doc.doc_id)}</div>
           <div class="doc-meta">${doc.pages || 0} pages</div>
         </div>
-        ${doc.doc_id !== "attention" ? `
-          <button class="btn-delete-scrap" title="Delete document" onclick="handleDeleteDoc(event, '${doc.doc_id}')" aria-label="Delete ${doc.doc_id}">
-            ✕
-          </button>
-        ` : `
-          <span style="font-size: 12px; color: var(--dp-color-accent-ink); opacity: 0.85; font-weight: 500;">Default</span>
-        `}
+        <button class="btn-delete-scrap" title="Delete document" onclick="handleDeleteDoc(event, '${doc.doc_id}')" aria-label="Delete ${doc.doc_id}">
+          ✕
+        </button>
       `;
       docList.appendChild(li);
     });
 
+    updateInputPlaceholder();
     updateActiveBadge();
   } catch (err) {
     console.error("Failed to load documents:", err);
@@ -106,11 +110,17 @@ async function loadDocumentHistory(docId) {
   const chatStream = document.getElementById("chatStream");
   if (!chatStream) return;
 
+  if (!docId) {
+    renderInitialGreeting(null);
+    return;
+  }
+
+  const displayName = getDocDisplayName(docId);
   chatStream.innerHTML = `
     <article class="message-entry assistant" id="historyLoader">
       <div class="assistant-working-sheet">
         <div class="answer-body" style="color: var(--dp-color-secondary); font-style: italic;">
-          Loading conversation history for <strong>${escapeHtml(docId)}.pdf</strong>...
+          Loading conversation history for <strong>${escapeHtml(displayName)}</strong>...
         </div>
       </div>
     </article>
@@ -145,6 +155,23 @@ async function loadDocumentHistory(docId) {
   chatStream.scrollTop = chatStream.scrollHeight;
 }
 
+function getDocDisplayName(docId) {
+  if (!docId) return "";
+  const found = allDocuments.find((d) => d.doc_id.toLowerCase() === docId.toLowerCase());
+  if (found && found.title) return found.title;
+  return docId.replace(/[_-]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function updateInputPlaceholder() {
+  const input = document.getElementById("questionInput");
+  if (!input) return;
+  if (currentDocId) {
+    input.placeholder = `Ask a question about ${getDocDisplayName(currentDocId)}...`;
+  } else {
+    input.placeholder = "Upload or select a document to start asking questions...";
+  }
+}
+
 async function switchDocument(docId, forceReload = false) {
   if (docId === currentDocId && !forceReload) return;
 
@@ -154,8 +181,12 @@ async function switchDocument(docId, forceReload = false) {
   }
 
   currentDocId = docId;
-  if (typeof localStorage !== "undefined") localStorage.setItem("rag_active_doc_id", docId);
+  if (typeof localStorage !== "undefined") {
+    if (docId) localStorage.setItem("rag_active_doc_id", docId);
+    else localStorage.removeItem("rag_active_doc_id");
+  }
   updateActiveBadge();
+  updateInputPlaceholder();
 
   if (chatHistories[docId] && !forceReload) {
     chatStream.innerHTML = chatHistories[docId];
@@ -167,19 +198,21 @@ async function switchDocument(docId, forceReload = false) {
   updateDocListHighlight();
 
   // If document viewer is currently open beside chat, update its content
-  if (isDocViewerOpen) {
-    loadDocumentPages(docId);
-  } else {
-    currentViewerDoc = docId;
-    currentPage = 1;
+  if (docId) {
+    if (isDocViewerOpen) {
+      loadDocumentPages(docId);
+    } else {
+      currentViewerDoc = docId;
+      currentPage = 1;
+    }
   }
 }
 
 function updateDocListHighlight() {
   document.querySelectorAll(".doc-item-scrap").forEach((el) => {
     const docName = el.querySelector(".doc-name")?.textContent.trim().toLowerCase();
-    const isTarget = docName === currentDocId.toLowerCase() || docName?.startsWith(currentDocId.toLowerCase());
-    el.classList.toggle("active", isTarget);
+    const isTarget = currentDocId && (docName === currentDocId.toLowerCase() || docName?.startsWith(currentDocId.toLowerCase()));
+    el.classList.toggle("active", Boolean(isTarget));
     el.setAttribute("aria-selected", isTarget ? "true" : "false");
   });
 }
@@ -189,8 +222,14 @@ function initClearChatButton() {
   if (!btn) return;
 
   btn.addEventListener("click", async () => {
+    if (!currentDocId) {
+      alert("No active document selected.");
+      return;
+    }
+
+    const displayName = getDocDisplayName(currentDocId);
     const confirmed = confirm(
-      `Clear chat history for "${currentDocId}.pdf"?\n\nThis will permanently delete all saved messages for this document from the database.`
+      `Clear chat history for "${displayName}"?\n\nThis will permanently delete all saved messages for this document from the database.`
     );
     if (!confirmed) return;
 
@@ -218,26 +257,48 @@ function initClearChatButton() {
 
 function renderInitialGreeting(docId) {
   const chatStream = document.getElementById("chatStream");
-  chatStream.innerHTML = `
-    <article class="message-entry assistant">
-      <div class="assistant-working-sheet">
-        <div class="answer-body">
-          Ask any question about <strong>${escapeHtml(docId)}.pdf</strong>'s text, equations, figures, or tables.
-        </div>
+  if (!chatStream) return;
+
+  if (!docId) {
+    chatStream.innerHTML = `
+      <div class="chat-empty-state">
+        <div class="empty-icon">📄</div>
+        <h2 class="empty-title">Welcome to Omni Retrieve</h2>
+        <p class="empty-subtitle">Upload any document (PDF) containing text, equations, figures, or tables using the <strong>+ Upload Document</strong> button on the left to begin asking questions.</p>
+        <button class="btn-sketch-action" type="button" onclick="document.getElementById('btnOpenUpload').click()" style="margin-top: 4px;">
+          <span>+ Upload Document</span>
+        </button>
       </div>
-    </article>
+    `;
+    return;
+  }
+
+  const displayName = getDocDisplayName(docId);
+  chatStream.innerHTML = `
+    <div class="chat-empty-state">
+      <div class="empty-icon">📖</div>
+      <h2 class="empty-title">Ask any question about <strong>${escapeHtml(displayName)}</strong></h2>
+      <p class="empty-subtitle">Explore text passages, mathematical equations, figures, diagrams, and tables with verifiable page citations.</p>
+      <div class="empty-doc-pill">
+        <span>📄 Active Document: ${escapeHtml(displayName)}</span>
+      </div>
+    </div>
   `;
   chatHistories[docId] = chatStream.innerHTML;
 }
 
 function updateActiveBadge() {
   const badge = document.getElementById("activeDocBadge");
-  if (badge) badge.textContent = `DOC: ${currentDocId.toUpperCase()}`;
+  if (badge) {
+    badge.textContent = currentDocId ? `DOC: ${currentDocId.toUpperCase()}` : "";
+    badge.style.display = currentDocId ? "inline-block" : "none";
+  }
 }
 
 async function handleDeleteDoc(event, docId) {
   event.stopPropagation();
-  const confirmed = confirm(`Are you sure you want to delete "${docId}"?`);
+  const displayName = getDocDisplayName(docId);
+  const confirmed = confirm(`Are you sure you want to delete "${displayName}"?`);
   if (!confirmed) return;
 
   try {
@@ -246,10 +307,15 @@ async function handleDeleteDoc(event, docId) {
     if (res.ok) {
       delete chatHistories[docId];
       if (currentDocId === docId) {
-        if (typeof localStorage !== "undefined") localStorage.setItem("rag_active_doc_id", "attention");
-        await switchDocument("attention", true);
+        currentDocId = null;
+        if (typeof localStorage !== "undefined") localStorage.removeItem("rag_active_doc_id");
       }
       await loadDocuments();
+      if (currentDocId) {
+        await switchDocument(currentDocId, true);
+      } else {
+        renderInitialGreeting(null);
+      }
     } else {
       alert(`Deletion notice: ${data.message || "Failed"}`);
     }
@@ -268,6 +334,22 @@ function initChatForm() {
 
   chatForm.addEventListener("submit", async (e) => {
     e.preventDefault();
+    if (!currentDocId) {
+      alert("Please upload or select a document from the left sidebar before asking questions.");
+      return;
+    }
+    const query = questionInput.value.trim();
+    if (!query) return;
+
+    questionInput.value = "";
+    btnSubmit.disabled = true;
+
+    appendUserMessage(query);
+    await handleStreamingChat(query);
+    btnSubmit.disabled = false;
+    questionInput.focus();
+  });
+}
     const query = questionInput.value.trim();
     if (!query) return;
 
@@ -408,6 +490,10 @@ async function handleStreamingChat(query) {
 
 function appendUserMessage(text) {
   const stream = document.getElementById("chatStream");
+  const emptyState = stream.querySelector(".chat-empty-state");
+  if (emptyState) {
+    emptyState.remove();
+  }
   const entry = document.createElement("article");
   entry.className = "message-entry user";
   entry.innerHTML = `

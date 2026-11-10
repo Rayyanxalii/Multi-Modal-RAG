@@ -10,13 +10,8 @@ __pycache__
 .vscode
 .idea
 
-# Do not bake secrets or local databases into the image
+# Do not bake secrets, local databases or debug logs into the image
 .env
 data/chat_history.db*
-data/rendered_pages/*
-data/figures/*
-data/tables/*
-data/chunks/*
-data/embeddings/*
 data/retrieval_runs/*
 data/experiments/*
