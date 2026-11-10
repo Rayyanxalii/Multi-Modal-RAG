@@ -350,18 +350,6 @@ function initChatForm() {
     questionInput.focus();
   });
 }
-    const query = questionInput.value.trim();
-    if (!query) return;
-
-    questionInput.value = "";
-    btnSubmit.disabled = true;
-
-    appendUserMessage(query);
-    await handleStreamingChat(query);
-    btnSubmit.disabled = false;
-    questionInput.focus();
-  });
-}
 
 /**
  * Real-time SSE Token Streaming & Status Pipeline Handler

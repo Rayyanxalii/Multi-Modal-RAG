@@ -29,17 +29,20 @@ COPY data /app/data
 # Install dependencies into system Python
 RUN uv pip install --system -e .
 
-# Prepare persistent data mount points
+# Prepare persistent data mount points with full write permissions (for Hugging Face Spaces user 1000)
 RUN mkdir -p /app/data/raw \
              /app/data/rendered_pages \
              /app/data/chunks \
              /app/data/figures \
              /app/data/tables \
              /app/data/embeddings \
-             /app/data/retrieval_runs
+             /app/data/retrieval_runs \
+    && chmod -R 777 /app/data
 
 ENV PYTHONPATH="/app/backend:/app/backend/src:/app:$PYTHONPATH"
 
+# Expose ports for both Hugging Face Spaces (7860) and Render/Local (8000)
+EXPOSE 7860
 EXPOSE 8000
 
-CMD ["sh", "-c", "uvicorn backend.server:app --host 0.0.0.0 --port ${PORT:-8000}"]
+CMD ["sh", "-c", "uvicorn backend.server:app --host 0.0.0.0 --port ${PORT:-7860}"]
