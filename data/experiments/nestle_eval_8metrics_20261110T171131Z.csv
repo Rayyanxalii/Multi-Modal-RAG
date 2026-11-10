@@ -1,0 +1,115 @@
+id,question,expected_answer,model_answer,context_precision,context_recall,context_entity_recall,noise_sensitivity,answer_relevancy,faithfulness,multimodal_faithness,multimodal_relevance,complexity,question_type,modality,source_page,latency_sec
+nestle_001,"What were Nestlé Pakistan's net sales for the nine months ended September 30, 2026, and how did they change versus the prior year?","Net sales were about PKR 160 billion (PKR 160,260 million), an increase of 6.3% over the same period of 2025 (PKR 150,819 million).","Based on the provided document context, Nestlé Pakistan's financial performance for the nine months ended September 30, 2026, is detailed below:
+
+**Net Sales Performance**
+For the nine-month period ended September 30, 2026, Nestlé Pakistan reported **Net sales** of **PKR 160,260 Million** (or PKR 160,259,856,000). This represents a **6.3% increase** compared to the prior year period (Jan - Sep 2025), where net sales were PKR 150,819 Million [Source 7, Page 2] [Source 4, Page 13].
+
+**Revenue Breakdown by Segment**
+The total revenue from contracts with customers for the nine months ended September 30, 2026, was composed of the following segments [Source 2, Page 13] [Source 4, Page 13]:
+*   **Dairy and Nutrition Products:** PKR 124,858,941,000
+*   **Powdered and Liquid Beverages:** PKR 34,214,416,000
+*   **Other Products:** PKR 1,186,499,000
+*   **Total:** PKR 160,259,856,000
+
+**Contextual Financial Highlights**
+In addition to the net sales growth, the company reported the following key metrics for the same period [Source 7, Page 2]:
+*   **Gross Profit:** PKR 61,313 Million, an **8.1% increase** year-over-year.
+*   **Operating Profit:** PKR 28,609 Million, a **5.9% increase** year-over-year.
+*   **Net Profit After Tax:** PKR 14,526 Million, a **3.1% increase** year-over-year.
+
+These figures are presented in the un-audited financial statements for the nine-month period ended September 30, 2026 [Source 3, Page 13] [Source 5, Page 10].",1.0,1.0,0.2,,,0.4615,,1.0,simple,fact_lookup,text,2,10.38
+nestle_002,What was the gross profit and gross margin for Jan-Sep 2026 compared with Jan-Sep 2025?,"Gross profit was PKR 61,313 million (up 8.1% from PKR 56,706 million). Gross margin was 38.3% versus 37.6%.","Based on the provided financial report excerpts, the gross profit and gross margin for the nine-month period ended September 30, 2026, compared to the same period in 2025, are as follows:
+
+**Gross Profit**
+*   **Jan-Sep 2026:** The gross profit was **PKR 61,313 million** (or PKR 61,313,040,000) [Source 7, Page 2] [Source 3, Page 5].
+*   **Jan-Sep 2025:** The gross profit was **PKR 56,706 million** (or PKR 56,706,151,000) [Source 7, Page 2] [Source 3, Page 5].
+*   **Change:** This represents an increase of **8.1%** year-over-year [Source 7, Page 2].
+
+**Gross Margin (Gross Profit as % of Net Sales)**
+*   **Jan-Sep 2026:** The gross margin was **38.3%** [Source 7, Page 2].
+*   **Jan-Sep 2025:** The gross margin was **37.6%** [Source 7, Page 2].
+*   **Change:** This indicates an improvement of **0.7 percentage points** in gross margin efficiency compared to the prior year period [Source 7, Page 2].
+
+These figures are derived from the summary financial highlights table and the detailed income statement data provided in the document [Source 3, Page 5] [Source 7, Page 2].",1.0,1.0,0.0,,0.8778,0.625,1.0,1.0,simple,fact_lookup,table,2,36.08
+nestle_003,What was operating profit for the nine months and what was the operating margin?,"Operating profit was PKR 28,609 million, up 5.9% from PKR 27,025 million. The operating margin was 17.9%, unchanged from the prior year.","Based on the provided financial report excerpts, the operating profit and operating margin for the nine-month period ended September 30, 2026, are as follows:
+
+**Operating Profit**
+The **operating profit** for the nine-month period ended September 30, 2026, was **PKR 28,608,517,000** (or **PKR 28,609 Million**). This represents a **5.9%** increase compared to the same period in the prior year (January–September 2025), when operating profit was PKR 27,025,064,000 (or PKR 27,025 Million) [Source 5, Page 5] [Source 7, Page 2].
+
+**Operating Margin**
+The **operating margin** (defined as operating profit as a percentage of net sales) for the nine-month period ended September 30, 2026, was **17.9%**. This margin remained stable compared to the prior year period (January–September 2025), which also recorded an operating margin of **17.9%** [Source 7, Page 2].
+
+**Summary of Key Metrics (Jan–Sep 2026 vs. Jan–Sep 2025):**
+*   **Net Sales:** PKR 160,260 Million (up 6.3%) [Source 7, Page 2]
+*   **Operating Profit:** PKR 28,609 Million (up 5.9%) [Source 7, Page 2]
+*   **Operating Margin:** 17.9% (unchanged) [Source 7, Page 2]
+
+These figures are consistent across the summary table on Page 2 and the detailed income statement data on Page 5 [Source 5, Page 5] [Source 7, Page 2].",1.0,1.0,0.5,0.7273,,,,,simple,fact_lookup,table,2,43.87
+nestle_004,Why did operating profit grow more slowly (5.9%) than gross profit (8.1%)?,The gross profit improvement was reduced at the operating level mainly because of increased investment behind the brands and higher distribution costs driven by fuel prices.,"Based on the provided financial report, the slower growth rate of **operating profit** (5.9%) compared to **gross profit** (8.1%) is primarily attributed to the impact of **higher taxation expense** and the specific dynamics of the company's cost structure during the nine-month period ending September 30, 2026.
+
+While the document explicitly notes that **net profit after tax** improved by 3.1% ""despite the impact of higher taxation expense"" [Source 5, Page 2], this tax pressure is part of the broader financial environment affecting profitability. More specifically, the divergence between gross and operating profit growth indicates that **operating expenses** (such as selling, general, and administrative expenses) grew at a rate that outpaced the growth in gross profit, thereby compressing the operating margin growth.
+
+Key financial data supporting this analysis includes:
+*   **Gross Profit:** Increased by **8.1%** to **PKR 61,313 million** (from PKR 56,706 million in the prior year period) [Source 3, Page 2; Source 7, Page 2].
+*   **Operating Profit:** Increased by **5.9%** to **PKR 28,609 million** (from PKR 27,025 million in the prior year period) [Source 3, Page 2; Source 7, Page 2].
+*   **Margins:** The **gross profit margin** expanded from **37.6%** to **38.3%**, indicating improved efficiency in production or pricing relative to cost of goods sold. However, the **operating profit margin** remained flat at **17.9%** for both periods [Source 3, Page 2; Source 7, Page 2].
+
+The flat operating margin despite a higher gross margin suggests that **operating expenses** increased proportionally more than gross profit. The document mentions that the company ""accelerated localization and strategically secured critical inventories"" in response to geopolitical uncertainty [Source 5, Page 2]. These strategic actions, while beneficial for supply chain resilience and reducing foreign exchange exposure, likely involved increased costs (such as inventory holding costs, supply chain adjustments, or administrative expenses) that contributed to the slower growth in operating profit compared to gross profit.
+
+In summary, while the company successfully improved its gross margin, the benefits were partially offset by higher operating costs and the broader impact of higher taxation, resulting in a lower growth rate for operating profit.
+
+**Conclusion:**
+Operating profit grew more slowly than gross profit because **operating expenses increased at a higher rate than gross profit**, keeping the operating margin flat at 17.9% despite the gross margin expanding to 38.3%. This was influenced by strategic costs associated with localization and inventory securing, as well as the overall impact of higher taxation expenses mentioned in the report [Source 3, Page 2; Source 5, Page 2; Source 7, Page 2].",0.0,0.0,0.0,,0.8276,,0.0,0.0,medium,reasoning,text,2,16.97
+nestle_005,What were net profit after tax and earnings per share for the nine months of 2026?,"Net profit after tax was PKR 14,526 million (up 3.1%) and EPS was PKR 320.3 (320.31) versus PKR 310.8 in 2025.","For the nine-month period ended September 30, 2026, **Nestlé Pakistan** reported a **net profit after tax** of **PKR 14,526 million** (or **PKR 14,525,996 thousand**) and **earnings per share (basic and diluted)** of **PKR 320.31** [Source 3, Page 2] [Source 5, Page 5] [Source 1, Page 5].
+
+Key details from the financial report include:
+*   **Net Profit After Tax:** The net profit for the nine months of 2026 was **PKR 14,526 million**, representing a **3.1%** increase compared to the **PKR 14,095 million** reported for the same period in 2025 [Source 3, Page 2] [Source 7, Page 2].
+*   **Earnings Per Share (EPS):** The basic and diluted EPS for the nine months ended September 30, 2026, was **PKR 320.31**, up from **PKR 310.81** in the corresponding period of 2025 [Source 1, Page 5] [Source 3, Page 2].
+*   **Profit Margin:** Net profit as a percentage of sales was **9.1%** for the nine months of 2026, compared to **9.3%** in the same period of 2025 [Source 3, Page 2] [Source 7, Page 2].
+
+These figures are consistent across the summary financial highlights and the detailed income statement provided in the report [Source 3, Page 2] [Source 5, Page 5] [Source 7, Page 2].",,1.0,0.0,,0.7735,,1.0,1.0,simple,fact_lookup,table,2,37.13
+nestle_006,What external factors did the directors cite as challenging the business environment?,"Rising inflation, political instability, and a sharp escalation in fuel and energy prices driven by the US-Iran war.","Based on the provided document context, the directors of Nestlé Pakistan Limited cited several specific external factors that created a challenging business environment for the nine-month period ended September 30, 2026. These factors are detailed in the Director's Report and financial summaries:
+
+*   **Geopolitical Uncertainty and Instability:** The report explicitly mentions **geopolitical uncertainty** and **political instability** as key headwinds [Source 1, Page 2; Source 3, Page 2]. Specifically, the escalation of the **US-Iran war** is identified as a driver for sharp increases in fuel and energy prices [Source 3, Page 2].
+*   **Inflationary Pressures:** The company faced a challenging operating environment marked by **rising inflation** [Source 3, Page 2]. This inflation was driven by fuel prices and continued volatility in energy and other input costs, which the directors noted may continue to influence consumer spending and operating costs for the full year 2026 [Source 4, Page 2].
+*   **Energy and Input Cost Volatility:** There was a **sharp escalation in fuel and energy prices** [Source 3, Page 2]. The directors noted **continued volatility in energy and other input costs** as a persistent challenge [Source 4, Page 2].
+*   **Foreign Exchange Exposure:** The geopolitical situation contributed to **foreign exchange exposure**, prompting the company to accelerate localization and secure critical inventories to mitigate these risks [Source 1, Page 2].
+
+In response to these external challenges, the company implemented strategies such as increasing investment in brands, focusing on consumer-centric innovation, strengthening export routes, and investing in green energy initiatives (solar and biomass) to partially offset energy cost headwinds [Source 3, Page 2]. Despite these difficulties, the company sustained business momentum, achieving a **6.3% increase in net sales** and a **3.1% improvement in net profit after tax** compared to the prior year [Source 1, Page 2; Source 3, Page 2; Source 7, Page 2].",0.0,0.0,0.0,,0.6681,,0.0,0.0,simple,fact_lookup,text,2,41.37
+nestle_007,How did the company respond to geopolitical uncertainty in terms of supply chain and FX exposure?,"It accelerated localization and strategically secured critical inventories, which reduced foreign exchange exposure, strengthened supply chain resilience and safeguarded business continuity.","In response to geopolitical uncertainty, the company implemented a dual strategy focused on **accelerating localization** and **strategically securing critical inventories** [Source 1, Page 2]. These specific actions were designed to achieve three primary operational objectives:
+
+1.  **Reducing Foreign Exchange (FX) Exposure:** By increasing local sourcing and production, the company decreased its reliance on imported inputs, thereby mitigating the financial impact of currency volatility [Source 1, Page 2].
+2.  **Strengthening Supply Chain Resilience:** The strategic accumulation of critical inventories helped safeguard business continuity against potential supply disruptions caused by the unstable geopolitical environment [Source 1, Page 2].
+3.  **Safeguarding Business Continuity:** These measures ensured that operations could continue smoothly despite the challenging external conditions, including rising inflation and political instability [Source 1, Page 2; Source 5, Page 2].
+
+This approach was part of a broader resilience strategy that also included increased investment in brands, consumer-centric innovation, and disciplined pricing actions to sustain business momentum during the nine-month period ended September 30, 2026 [Source 5, Page 2].",0.0,0.0,0.0,,0.7583,,0.0,0.0,medium,summarization,text,2,41.27
+nestle_008,What role did green energy play in offsetting cost pressures?,"Investment in green energy initiatives, especially solar and biomass, helped partially offset energy cost headwinds while reducing carbon emissions.","Based on the provided document, **green energy initiatives** played a critical role in mitigating the financial impact of rising energy costs during the nine-month period ended September 30, 2026.
+
+Specifically, the Company’s continued focused investment in **solar and biomass** energy sources helped **partially offset the energy cost headwinds** [Source 1, Page 2]. This strategic move was particularly significant given the challenging operating environment, which was marked by a **sharp escalation in fuel and energy prices** driven by geopolitical instability, including the US-Iran war [Source 1, Page 2].
+
+Beyond cost mitigation, these green energy investments also contributed to the Company’s sustainability goals by **reducing carbon emissions** [Source 1, Page 2]. This dual benefit supported the Company’s broader resilience, allowing it to sustain business momentum and achieve an **8.1% increase in gross profit** despite the challenging macroeconomic conditions [Source 1, Page 2]. The Company’s commitment to advancing its **sustainability agenda** is further highlighted as a key pillar for navigating future challenges and serving as a ""force for good"" [Source 3, Page 2].",0.0,0.0,0.0,,0.7591,,0.0,0.0,simple,fact_lookup,text,2,45.33
+nestle_009,What is the company's outlook for the full year 2026?,"A cautious outlook, due to ongoing geopolitical instability, volatile energy and other input costs, and elevated fuel-driven inflation that may affect consumer spending and operating costs. The company plans to keep investing behind its brands to strengthen market leadership.","Based on the provided document, the company maintains a **cautious outlook** for the full year 2026 [Source 1, Page 2]. This stance is driven by several macroeconomic and operational challenges, including:
+
+*   **Geopolitical instability**: Ongoing global tensions continue to impact the business environment [Source 1, Page 2].
+*   **Input cost volatility**: There is continued volatility in energy and other input costs [Source 1, Page 2].
+*   **Elevated inflation**: Inflationary pressures, particularly those driven by fuel prices, remain high and are expected to influence both consumer spending and operating costs [Source 1, Page 2].
+
+Despite these headwinds, the company states it is **well positioned** to navigate these challenges through the following strategic focus areas [Source 1, Page 2]:
+
+1.  **Brand Investment**: Ensuring appropriate investment behind its brands to strengthen its **market leadership position** in key product categories [Source 1, Page 2].
+2.  **Operational Excellence**: Focusing on achieving operational efficiency and excellence [Source 1, Page 2].
+3.  **Human Capital**: Developing future-ready, high-performing teams [Source 1, Page 2].
+4.  **Sustainability**: Advancing its sustainability agenda to serve as a ""force for good"" [Source 1, Page 2].
+
+This outlook was communicated by **Joselito Jr Avancena**, the Chief Executive Officer, in a statement dated October 22, 2026 [Source 1, Page 2].",0.0,0.0,0.0,,0.7246,,0.0,0.0,medium,summarization,text,2-3,40.96
+nestle_010,"Who signed the Directors' Review on behalf of the Board, and when and where was it dated?","Joselito Jr Avancena (Chief Executive Officer) and Syed Yawar Ali (Chairman), dated October 22, 2026, in Lahore.","Based on the provided document context, the **Directors' Report** (referred to as the Directors' Review in the query) was signed by the following individuals on behalf of the Board of Directors:
+
+*   **Maqsood Ahmad Anjum**, Chief Financial Officer
+*   **Joselito Jr Avancena**, Chief Executive Officer
+*   **Syed Yawar Ali**, Chairman / Director
+
+These signatures are explicitly listed in the authorization section of the financial statements [Source 3, Page 16]. The corresponding signature blocks are also visually represented in Figures 9, 10, and 11 [Source 9, Page 16; Source 10, Page 16; Source 11, Page 16].
+
+The document was **dated October 22, 2026**. This date is specified in the text stating that the ""un-audited condensed interim financial statements were authorized for issue on October 22, 2026 by the Board of Directors"" [Source 3, Page 16]. Additionally, the Board of Directors held a meeting on this same date to propose an interim cash dividend [Source 4, Page 16].
+
+The document does not explicitly state a specific physical location (city or country) where the document was dated or signed, only the date of authorization.",0.0,0.0,0.0,,0.7482,0.0,0.0,0.0,simple,fact_lookup,image,3,38.62

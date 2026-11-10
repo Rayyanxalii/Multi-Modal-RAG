@@ -629,6 +629,7 @@ def format_context_node(state: RAGState) -> dict[str, Any]:
             "type": "text",
             "id": chunk_id,
             "pages": pages,
+            "text": text,
         })
         context_blocks.append(
             f"[Source {source_idx} | Text Chunk {chunk_id} | Page(s): {page_str}]\n{text}"

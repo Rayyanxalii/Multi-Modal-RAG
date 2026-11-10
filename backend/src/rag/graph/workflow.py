@@ -226,6 +226,7 @@ def run_agentic_rag(
         "routing_reasoning": final_state.get("routing_reasoning", ""),
         "answer": final_state.get("answer", ""),
         "sources": final_state.get("sources", []),
+        "context_str": final_state.get("context_str", ""),
         "retry_count": final_state.get("retry_count", 0),
         "is_relevant": final_state.get("is_relevant", True),
         "is_ingested": final_state.get("is_ingested", True),

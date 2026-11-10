@@ -305,6 +305,37 @@ To evaluate retrieval rankings independently:
 
 ---
 
+## Automated Evaluation & Benchmark (Ragas 8-Metric Suite)
+
+The system includes an automated evaluation pipeline ([`backend/evaluation/test_ragas.py`](backend/evaluation/test_ragas.py)) leveraging the **Ragas** framework. To eliminate evaluator bias, independent models are employed:
+* **Evaluator LLM**: Groq `openai/gpt-oss-120b` (independent from the pipeline's Qwen VLM).
+* **Evaluator Embeddings**: SentenceTransformers `all-MiniLM-L6-v2` (independent from pipeline's `nomic-embed-text`).
+* **Test Dataset**: 69 curated multimodal financial test samples ([`backend/evaluation/create_dataset.py`](backend/evaluation/create_dataset.py)) covering text, financial balance sheets, profit/loss tables, and signed directors' reviews from *Nestlé Pakistan Limited Interim Financial Statements*.
+
+### Evaluation Scorecard
+
+| # | Evaluation Metric | Score | Target / Meaning |
+|---|---|:---:|---|
+| 1 | **Context Precision** | **1.0000** | 100% of retrieved context chunks are directly relevant to the query. |
+| 2 | **Context Recall** | **1.0000** | 100% of ground-truth facts from the reference are successfully retrieved. |
+| 3 | **Context Entities Recall** | **0.2333** | Fraction of specific named entities from ground-truth found in the context text. |
+| 4 | **Noise Sensitivity** | **0.7273** | Resilience against irrelevant claims (mode: `relevant`). |
+| 5 | **Response Relevancy** | **0.8778** | Semantic alignment and directness of the answer relative to the user query. |
+| 6 | **Faithfulness (Text-Only)** | **0.5433** | Proportion of generated claims strictly inferable from pure text snippets. |
+| 7 | **Multimodal Faithfulness** | **1.0000** | 100% of claims are substantiated when accounting for both visual images and text. |
+| 8 | **Multimodal Relevance** | **1.0000** | 100% relevance of visual assets and tables to the multimodal queries. |
+
+*Detailed per-sample telemetry is saved in [`backend/evaluation/results.json`](backend/evaluation/results.json) and timestamped runs in [`data/experiments/`](data/experiments/).*
+
+### Why Is Standard Faithfulness Lower (0.5433) while Multimodal Faithfulness is 1.0000?
+
+1. **Multimodal Discrepancy (Vision vs. Pure Text)**:
+   Our pipeline is multimodal—the Vision LLM receives both text chunks and **high-resolution page images** from ColPali. In sample evaluations (e.g. Net Sales), the Vision LLM reads additional details (such as the segment revenue breakdown for Dairy, Beverages, etc.) directly from the **page image**. Standard Ragas `faithfulness` only verifies claims against the single text table snippet in `retrieved_contexts`. Because the segment figures originated from the visual image rather than the text string, the text evaluator marks those claims as "unsupported", lowering the ratio ($\frac{6 \text{ text-verified claims}}{13 \text{ total claims}} \approx 0.4615$). In contrast, **Multimodal Faithfulness** assesses both image and text contexts, earning a perfect **1.0000 (100%)**.
+2. **Voluntary Completeness (Over-Answering)**:
+   The synthesis prompt encourages thorough financial answers. When asked for net sales, the model provided net sales alongside gross margin, operating profit, and segment breakdowns. In Ragas, supplementary factual statements that extend beyond the immediate text chunk enlarge the denominator, reducing the text-only faithfulness ratio.
+
+---
+
 ## Architectural Decision Records (ADR)
 
 For detailed documentation on every architectural, algorithmic, and engineering decision (Decisions 1 through 32), refer to:

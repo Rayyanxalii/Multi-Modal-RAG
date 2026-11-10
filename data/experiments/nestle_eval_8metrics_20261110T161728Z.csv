@@ -1,0 +1,47 @@
+id,question,expected_answer,model_answer,context_precision,context_recall,context_entity_recall,noise_sensitivity,answer_relevancy,faithfulness,multimodal_faithness,multimodal_relevance,complexity,question_type,modality,source_page,latency_sec
+nestle_001,"What were Nestlé Pakistan's net sales for the nine months ended September 30, 2026, and how did they change versus the prior year?","Net sales were about PKR 160 billion (PKR 160,260 million), an increase of 6.3% over the same period of 2025 (PKR 150,819 million).","Based on the provided document context, Nestlé Pakistan's financial performance for the nine months ended September 30, 2026, is detailed below:
+
+**Net Sales Performance**
+For the nine-month period ended September 30, 2026, Nestlé Pakistan reported **Net sales** of **PKR 160,260 Million** (or PKR 160,259,856,000). This represents a **6.3% increase** compared to the prior year period (Jan - Sep 2025), where net sales were PKR 150,819 Million [Source 7, Page 2] [Source 4, Page 13].
+
+**Revenue Breakdown by Segment**
+The total revenue from contracts with customers for the nine months ended September 30, 2026, was composed of the following segments [Source 2, Page 13] [Source 4, Page 13]:
+*   **Dairy and Nutrition Products:** PKR 124,858,941,000
+*   **Powdered and Liquid Beverages:** PKR 34,214,416,000
+*   **Other Products:** PKR 1,186,499,000
+*   **Total:** PKR 160,259,856,000
+
+**Contextual Financial Highlights**
+In addition to the net sales growth, the company reported the following key metrics for the same period [Source 7, Page 2]:
+*   **Gross Profit:** PKR 61,313 Million, an **8.1% increase** year-over-year.
+*   **Operating Profit:** PKR 28,609 Million, a **5.9% increase** year-over-year.
+*   **Net Profit After Tax:** PKR 14,526 Million, a **3.1% increase** year-over-year.
+
+These figures are presented in the un-audited financial statements for the nine-month period ended September 30, 2026 [Source 3, Page 13] [Source 5, Page 10].",1.0,1.0,0.2,,,0.4615,,1.0,simple,fact_lookup,text,2,10.38
+nestle_002,What was the gross profit and gross margin for Jan-Sep 2026 compared with Jan-Sep 2025?,"Gross profit was PKR 61,313 million (up 8.1% from PKR 56,706 million). Gross margin was 38.3% versus 37.6%.","Based on the provided financial report excerpts, the gross profit and gross margin for the nine-month period ended September 30, 2026, compared to the same period in 2025, are as follows:
+
+**Gross Profit**
+*   **Jan-Sep 2026:** The gross profit was **PKR 61,313 million** (or PKR 61,313,040,000) [Source 7, Page 2] [Source 3, Page 5].
+*   **Jan-Sep 2025:** The gross profit was **PKR 56,706 million** (or PKR 56,706,151,000) [Source 7, Page 2] [Source 3, Page 5].
+*   **Change:** This represents an increase of **8.1%** year-over-year [Source 7, Page 2].
+
+**Gross Margin (Gross Profit as % of Net Sales)**
+*   **Jan-Sep 2026:** The gross margin was **38.3%** [Source 7, Page 2].
+*   **Jan-Sep 2025:** The gross margin was **37.6%** [Source 7, Page 2].
+*   **Change:** This indicates an improvement of **0.7 percentage points** in gross margin efficiency compared to the prior year period [Source 7, Page 2].
+
+These figures are derived from the summary financial highlights table and the detailed income statement data provided in the document [Source 3, Page 5] [Source 7, Page 2].",1.0,1.0,0.0,,0.8778,0.625,1.0,1.0,simple,fact_lookup,table,2,36.08
+nestle_003,What was operating profit for the nine months and what was the operating margin?,"Operating profit was PKR 28,609 million, up 5.9% from PKR 27,025 million. The operating margin was 17.9%, unchanged from the prior year.","Based on the provided financial report excerpts, the operating profit and operating margin for the nine-month period ended September 30, 2026, are as follows:
+
+**Operating Profit**
+The **operating profit** for the nine-month period ended September 30, 2026, was **PKR 28,608,517,000** (or **PKR 28,609 Million**). This represents a **5.9%** increase compared to the same period in the prior year (January–September 2025), when operating profit was PKR 27,025,064,000 (or PKR 27,025 Million) [Source 5, Page 5] [Source 7, Page 2].
+
+**Operating Margin**
+The **operating margin** (defined as operating profit as a percentage of net sales) for the nine-month period ended September 30, 2026, was **17.9%**. This margin remained stable compared to the prior year period (January–September 2025), which also recorded an operating margin of **17.9%** [Source 7, Page 2].
+
+**Summary of Key Metrics (Jan–Sep 2026 vs. Jan–Sep 2025):**
+*   **Net Sales:** PKR 160,260 Million (up 6.3%) [Source 7, Page 2]
+*   **Operating Profit:** PKR 28,609 Million (up 5.9%) [Source 7, Page 2]
+*   **Operating Margin:** 17.9% (unchanged) [Source 7, Page 2]
+
+These figures are consistent across the summary table on Page 2 and the detailed income statement data on Page 5 [Source 5, Page 5] [Source 7, Page 2].",1.0,1.0,0.5,0.7273,,,,,simple,fact_lookup,table,2,43.87

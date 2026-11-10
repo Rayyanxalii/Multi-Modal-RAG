@@ -1,0 +1,117 @@
+{
+  "run_id": "nestle_eval_8metrics_20261110T161728Z",
+  "timestamp": "2026-11-10T16:17:28.066967+00:00",
+  "document_name": "nestle_financial_report.pdf",
+  "num_samples": 3,
+  "overall_scores": {
+    "context_precision": 1.0,
+    "context_recall": 1.0,
+    "context_entity_recall": 0.2333,
+    "noise_sensitivity": 0.7273,
+    "answer_relevancy": 0.8778,
+    "faithfulness": 0.5433,
+    "multimodal_faithness": 1.0,
+    "multimodal_relevance": 1.0
+  },
+  "raw_scores": {
+    "context_precision": 1.0,
+    "context_recall": 1.0,
+    "context_entity_recall": 0.2333,
+    "noise_sensitivity(mode=relevant)": 0.7273,
+    "answer_relevancy": 0.8778,
+    "faithfulness": 0.5433,
+    "faithful_rate": 1.0,
+    "relevance_rate": 1.0
+  },
+  "eval_config": {
+    "eval_llm": "openai/gpt-oss-120b",
+    "eval_embeddings": "all-MiniLM-L6-v2",
+    "max_workers": 2
+  },
+  "records": [
+    {
+      "id": "nestle_001",
+      "user_input": "What were Nestlé Pakistan's net sales for the nine months ended September 30, 2026, and how did they change versus the prior year?",
+      "response": "Based on the provided document context, Nestlé Pakistan's financial performance for the nine months ended September 30, 2026, is detailed below:\n\n**Net Sales Performance**\nFor the nine-month period ended September 30, 2026, Nestlé Pakistan reported **Net sales** of **PKR 160,260 Million** (or PKR 160,259,856,000). This represents a **6.3% increase** compared to the prior year period (Jan - Sep 2025), where net sales were PKR 150,819 Million [Source 7, Page 2] [Source 4, Page 13].\n\n**Revenue Breakdown by Segment**\nThe total revenue from contracts with customers for the nine months ended September 30, 2026, was composed of the following segments [Source 2, Page 13] [Source 4, Page 13]:\n*   **Dairy and Nutrition Products:** PKR 124,858,941,000\n*   **Powdered and Liquid Beverages:** PKR 34,214,416,000\n*   **Other Products:** PKR 1,186,499,000\n*   **Total:** PKR 160,259,856,000\n\n**Contextual Financial Highlights**\nIn addition to the net sales growth, the company reported the following key metrics for the same period [Source 7, Page 2]:\n*   **Gross Profit:** PKR 61,313 Million, an **8.1% increase** year-over-year.\n*   **Operating Profit:** PKR 28,609 Million, a **5.9% increase** year-over-year.\n*   **Net Profit After Tax:** PKR 14,526 Million, a **3.1% increase** year-over-year.\n\nThese figures are presented in the un-audited financial statements for the nine-month period ended September 30, 2026 [Source 3, Page 13] [Source 5, Page 10].",
+      "retrieved_contexts": [
+        "[Table nestle_financial_report_table_001 | Page: 2]\nCaption: \nTable Data:\n|                                    | Jan - Sep 2026   | Jan - Sep 2025   | Change   |\n|------------------------------------|------------------|------------------|----------|\n| Net sales - PKR Million            | 160,260          | 150,819          | 6.3%     |\n| Gross profit - PKR Million         | 61,313           | 56,706           | 8.1%     |\n| Gross profit as % of net sales     | 38.3%            | 37.6%            |          |\n| Operating profit - PKR Million     | 28,609           | 27,025           | 5.9%     |\n| Operating profit as % of net sales | 17.9%            | 17.9%            |          |\n| Net profit after tax - PKR Million | 14,526           | 14,095           | 3.1%     |\n| Net profit as % of sales           | 9.1%             | 9.3%             |          |\n| Earnings per share - PKR           | 320.3            | 310.8            | 3.1%     |"
+      ],
+      "reference": "Net sales were about PKR 160 billion (PKR 160,260 million), an increase of 6.3% over the same period of 2025 (PKR 150,819 million).",
+      "latency_sec": 10.38,
+      "metadata": {
+        "complexity": "simple",
+        "question_type": "fact_lookup",
+        "modality": "text",
+        "source_page": "2"
+      },
+      "sources_count": 5,
+      "route": "both",
+      "scores": {
+        "context_precision": 1.0,
+        "context_recall": 1.0,
+        "context_entity_recall": 0.2,
+        "noise_sensitivity": null,
+        "answer_relevancy": null,
+        "faithfulness": 0.4615,
+        "multimodal_faithness": null,
+        "multimodal_relevance": 1.0
+      }
+    },
+    {
+      "id": "nestle_002",
+      "user_input": "What was the gross profit and gross margin for Jan-Sep 2026 compared with Jan-Sep 2025?",
+      "response": "Based on the provided financial report excerpts, the gross profit and gross margin for the nine-month period ended September 30, 2026, compared to the same period in 2025, are as follows:\n\n**Gross Profit**\n*   **Jan-Sep 2026:** The gross profit was **PKR 61,313 million** (or PKR 61,313,040,000) [Source 7, Page 2] [Source 3, Page 5].\n*   **Jan-Sep 2025:** The gross profit was **PKR 56,706 million** (or PKR 56,706,151,000) [Source 7, Page 2] [Source 3, Page 5].\n*   **Change:** This represents an increase of **8.1%** year-over-year [Source 7, Page 2].\n\n**Gross Margin (Gross Profit as % of Net Sales)**\n*   **Jan-Sep 2026:** The gross margin was **38.3%** [Source 7, Page 2].\n*   **Jan-Sep 2025:** The gross margin was **37.6%** [Source 7, Page 2].\n*   **Change:** This indicates an improvement of **0.7 percentage points** in gross margin efficiency compared to the prior year period [Source 7, Page 2].\n\nThese figures are derived from the summary financial highlights table and the detailed income statement data provided in the document [Source 3, Page 5] [Source 7, Page 2].",
+      "retrieved_contexts": [
+        "[Table nestle_financial_report_table_001 | Page: 2]\nCaption: \nTable Data:\n|                                    | Jan - Sep 2026   | Jan - Sep 2025   | Change   |\n|------------------------------------|------------------|------------------|----------|\n| Net sales - PKR Million            | 160,260          | 150,819          | 6.3%     |\n| Gross profit - PKR Million         | 61,313           | 56,706           | 8.1%     |\n| Gross profit as % of net sales     | 38.3%            | 37.6%            |          |\n| Operating profit - PKR Million     | 28,609           | 27,025           | 5.9%     |\n| Operating profit as % of net sales | 17.9%            | 17.9%            |          |\n| Net profit after tax - PKR Million | 14,526           | 14,095           | 3.1%     |\n| Net profit as % of sales           | 9.1%             | 9.3%             |          |\n| Earnings per share - PKR           | 320.3            | 310.8            | 3.1%     |"
+      ],
+      "reference": "Gross profit was PKR 61,313 million (up 8.1% from PKR 56,706 million). Gross margin was 38.3% versus 37.6%.",
+      "latency_sec": 36.08,
+      "metadata": {
+        "complexity": "simple",
+        "question_type": "fact_lookup",
+        "modality": "table",
+        "source_page": "2"
+      },
+      "sources_count": 2,
+      "route": "both",
+      "scores": {
+        "context_precision": 1.0,
+        "context_recall": 1.0,
+        "context_entity_recall": 0.0,
+        "noise_sensitivity": null,
+        "answer_relevancy": 0.8778,
+        "faithfulness": 0.625,
+        "multimodal_faithness": 1.0,
+        "multimodal_relevance": 1.0
+      }
+    },
+    {
+      "id": "nestle_003",
+      "user_input": "What was operating profit for the nine months and what was the operating margin?",
+      "response": "Based on the provided financial report excerpts, the operating profit and operating margin for the nine-month period ended September 30, 2026, are as follows:\n\n**Operating Profit**\nThe **operating profit** for the nine-month period ended September 30, 2026, was **PKR 28,608,517,000** (or **PKR 28,609 Million**). This represents a **5.9%** increase compared to the same period in the prior year (January–September 2025), when operating profit was PKR 27,025,064,000 (or PKR 27,025 Million) [Source 5, Page 5] [Source 7, Page 2].\n\n**Operating Margin**\nThe **operating margin** (defined as operating profit as a percentage of net sales) for the nine-month period ended September 30, 2026, was **17.9%**. This margin remained stable compared to the prior year period (January–September 2025), which also recorded an operating margin of **17.9%** [Source 7, Page 2].\n\n**Summary of Key Metrics (Jan–Sep 2026 vs. Jan–Sep 2025):**\n*   **Net Sales:** PKR 160,260 Million (up 6.3%) [Source 7, Page 2]\n*   **Operating Profit:** PKR 28,609 Million (up 5.9%) [Source 7, Page 2]\n*   **Operating Margin:** 17.9% (unchanged) [Source 7, Page 2]\n\nThese figures are consistent across the summary table on Page 2 and the detailed income statement data on Page 5 [Source 5, Page 5] [Source 7, Page 2].",
+      "retrieved_contexts": [
+        "[Table nestle_financial_report_table_001 | Page: 2]\nCaption: \nTable Data:\n|                                    | Jan - Sep 2026   | Jan - Sep 2025   | Change   |\n|------------------------------------|------------------|------------------|----------|\n| Net sales - PKR Million            | 160,260          | 150,819          | 6.3%     |\n| Gross profit - PKR Million         | 61,313           | 56,706           | 8.1%     |\n| Gross profit as % of net sales     | 38.3%            | 37.6%            |          |\n| Operating profit - PKR Million     | 28,609           | 27,025           | 5.9%     |\n| Operating profit as % of net sales | 17.9%            | 17.9%            |          |\n| Net profit after tax - PKR Million | 14,526           | 14,095           | 3.1%     |\n| Net profit as % of sales           | 9.1%             | 9.3%             |          |\n| Earnings per share - PKR           | 320.3            | 310.8            | 3.1%     |"
+      ],
+      "reference": "Operating profit was PKR 28,609 million, up 5.9% from PKR 27,025 million. The operating margin was 17.9%, unchanged from the prior year.",
+      "latency_sec": 43.87,
+      "metadata": {
+        "complexity": "simple",
+        "question_type": "fact_lookup",
+        "modality": "table",
+        "source_page": "2"
+      },
+      "sources_count": 2,
+      "route": "both",
+      "scores": {
+        "context_precision": 1.0,
+        "context_recall": 1.0,
+        "context_entity_recall": 0.5,
+        "noise_sensitivity": 0.7273,
+        "answer_relevancy": null,
+        "faithfulness": null,
+        "multimodal_faithness": null,
+        "multimodal_relevance": null
+      }
+    }
+  ]
+}

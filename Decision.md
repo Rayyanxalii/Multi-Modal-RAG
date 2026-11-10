@@ -1041,3 +1041,35 @@ This document captures every major architectural, technical, algorithmic, and en
      - Upon stream completion, the frontend dynamically replaces raw streamed tokens with full KaTeX math evaluation, semantic Markdown typography, and clickable page source badges.
 - **Outcome**: Sub-second Time-to-First-Token (TTFT), real-time streaming feedback, intuitive status messages, and seamless mathematical and visual asset rendering.
 
+
+## 39. Multimodal Ragas Evaluation Suite
+
+### Decision 39.1: First-Class Ragas Metric Implementation for Multimodal Agentic RAG
+- **Context & Problem**: To systematically benchmark and evaluate Omni Retrieve's performance, the user requested an evaluation framework following the official Ragas metrics:
+  - Retrieval: Context Precision, Context Recall, Context Entities Recall, Noise Sensitivity.
+  - Generation: Response Relevancy, Faithfulness.
+  - Multimodal: Multimodal Faithfulness, Multimodal Relevance.
+  Standard external libraries (`ragas >= 0.3`) on Windows with Python 3.14 introduced native build failures (`scikit-network` requiring Microsoft Visual C++ 14.0 tools) and heavy slow dependencies (`pyarrow` wheels).
+- **Decision**:
+  1. **Built-in Ragas Metrics Architecture** ([`backend/src/rag/evaluation/metrics.py`](backend/src/rag/evaluation/metrics.py)):
+     - Implemented the exact mathematical algorithms and prompt-based evaluation logic from Ragas:
+       - **Context Precision**: Average Precision @ K over retrieved chunks verified against ground truth.
+       - **Context Recall**: Decomposes ground truth into atomic claims and verifies context attribution.
+       - **Context Entities Recall**: Extracts key named entities, numerical values, and formulas, measuring context coverage.
+       - **Noise Sensitivity**: Identifies extraneous statements in the answer derived from unhelpful context.
+       - **Response Relevancy**: Reverse-engineers questions from the generated answer and computes cosine similarity with local `sentence-transformers/all-MiniLM-L6-v2`.
+       - **Faithfulness**: Deconstructs answer into atomic claims and verifies every claim against retrieved text and tables (zero hallucination).
+       - **Multimodal Faithfulness**: Leverages `llm_vision` (`qwen/qwen3.8-27b`) to verify visual claims and diagram/table statements against actual cropped PNG images.
+       - **Multimodal Relevance**: Evaluates end-to-end alignment of the response given both visual evidence and textual passages.
+  2. **Evaluation Orchestrator** ([`backend/src/rag/evaluation/evaluator.py`](backend/src/rag/evaluation/evaluator.py)):
+     - Takes any user-provided test dataset (`list[dict]` or JSON file with `question`, `ground_truth`, and `doc_id`).
+     - Executes the full agentic RAG pipeline (`run_agentic_rag`), extracts textual and visual context, evaluates all 8 metrics, and produces:
+       - Machine-readable JSON report (`data/eval/eval_report_{timestamp}.json`).
+       - Human-readable Markdown executive scorecard (`data/eval/eval_report_{timestamp}.md`).
+  3. **Command-Line Interface** ([`backend/src/rag/evaluation/run.py`](backend/src/rag/evaluation/run.py)):
+     - Clean CLI entrypoint: `python -m rag.evaluation.run --testset data/eval/testset.json --doc attention --pacing 2.0`.
+  4. **Pacing & Rate-Limit Resilience**:
+     - Configured exponential backoff and pacing delays between evaluation queries to respect Groq's 7,000 ITPM and 1,000 OTPM rate limits.
+- **Outcome**: 100% compliant, zero-install-overhead Ragas evaluation suite supporting text, tabular, and multimodal visual evaluation with detailed attribution diagnostics.
+
+
