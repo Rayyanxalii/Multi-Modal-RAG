@@ -1,3 +1,4 @@
+# Python virtual environment & configuration
 /.venv
 .env
 .Decision.md
@@ -8,10 +9,19 @@ __pycache__/
 *.egg
 build/
 dist/
+deploy/
+*.pt
+
+# Runtime SQLite Database & WAL logs
+data/chat_history.db*
+
+# Generated Ingestion & Visual Assets
 data/rendered_pages/
 data/figures/
 data/tables/
+data/chunks/
 data/embeddings/
+
+# Diagnostics & Internal Scratch Caches
 data/retrieval_runs/
-deploy/
-*.pt
+data/experiments/.cache_*
