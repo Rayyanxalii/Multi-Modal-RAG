@@ -57,6 +57,13 @@ def get_qdrant_credentials() -> tuple[str, str]:
     return url, api_key
 
 
+def get_ollama_client():
+    """Return configured Ollama Client respecting OLLAMA_HOST."""
+    import ollama
+    host = os.getenv("OLLAMA_HOST")
+    return ollama.Client(host=host) if host else ollama.Client()
+
+
 def get_document_paths(pdf_path: Path | str | None = None) -> dict[str, Any]:
     """Return canonical data paths for any given document."""
     if pdf_path is None:

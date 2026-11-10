@@ -1,0 +1,48 @@
+services:
+  # ----------------------------------------------------------------------------
+  # Ollama Embedding Service (nomic-embed-text)
+  # ----------------------------------------------------------------------------
+  ollama:
+    image: ollama/ollama:latest
+    container_name: rag-ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_models:/root/.ollama
+    # Automatically start Ollama and pull the required nomic-embed-text model
+    entrypoint: >
+      /bin/sh -c "
+        ollama serve &
+        sleep 5
+        echo '[Ollama] Pulling nomic-embed-text embedding model...'
+        ollama pull nomic-embed-text
+        wait
+      "
+    restart: unless-stopped
+
+  # ----------------------------------------------------------------------------
+  # Multi-Modal Agentic RAG Web Application & API
+  # ----------------------------------------------------------------------------
+  rag-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: rag-app
+    ports:
+      - "8000:8000"
+    environment:
+      - GROQ_API=${GROQ_API}
+      - QDRANT_URL=${QDRANT_URL}
+      - QDRANT_API_KEY=${QDRANT_API_KEY}
+      - COLPALI_SPACE=${COLPALI_SPACE:-https://rayyan0-colpali.hf.space}
+      - HF_TOKEN=${HF_TOKEN}
+      - OLLAMA_HOST=http://ollama:11434
+    volumes:
+      # Mount data folder to persist SQLite chat memory, raw PDFs, and extracted visual assets
+      - ./data:/app/data
+    depends_on:
+      - ollama
+    restart: unless-stopped
+
+volumes:
+  ollama_models:

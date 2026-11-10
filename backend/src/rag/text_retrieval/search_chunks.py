@@ -4,6 +4,7 @@ from qdrant_client import QdrantClient
 
 from rag.config import (
     get_qdrant_credentials,
+    get_ollama_client,
     TEXT_COLLECTION_NAME as COLLECTION_NAME,
     EMBEDDING_MODEL,
 )
@@ -24,7 +25,8 @@ def search_chunks(question: str, top_k: int = 5, doc_id: str | None = None) -> l
     client = get_client()
 
     # 1. Convert the question into a vector.
-    response = ollama.embed(
+    ollama_client = get_ollama_client()
+    response = ollama_client.embed(
         model=EMBEDDING_MODEL,
         input=question,
     )

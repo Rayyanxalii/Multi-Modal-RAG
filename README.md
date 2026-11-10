@@ -171,6 +171,10 @@ RAG/
 │   └── graph.mmd                         # Mermaid graph definition exported from LangGraph
 │
 ├── Decision.md                           # Architectural Decisions Record (ADR: Decisions 1–32)
+├── DEPLOYMENT.md                         # Production deployment topologies, Docker & Nginx guide
+├── Dockerfile                            # Production Debian-based container definition
+├── docker-compose.yml                    # Bundled multi-container orchestration (App + Ollama)
+├── .env.example                          # Canonical environment variable template
 ├── pyproject.toml                        # Central project metadata & dependencies (managed by uv)
 ├── uv.lock                               # Deterministic dependency lockfile
 └── README.md                             # Central project documentation
@@ -182,7 +186,7 @@ RAG/
 
 ### Prerequisites
 
-- **Python**: `>=3.14` (or `>=3.13` compatible environment)
+- **Python**: `>=3.12`
 - **Package Manager**: [`uv`](https://github.com/astral-sh/uv) (recommended)
 - **Ollama**: Running instance with `nomic-embed-text`:
   ```bash
@@ -202,12 +206,32 @@ RAG/
    ```
 
 2. **Configure environment variables**:
-   Create a `.env` file in the project root:
+   Copy the example environment template:
+   ```bash
+   cp .env.example .env
+   ```
+   Configure `.env` with your API credentials:
    ```env
    GROQ_API=gsk_your_groq_api_key
    QDRANT_URL=https://your-qdrant-instance.cloud.qdrant.io:6333
    QDRANT_API_KEY=your_qdrant_api_key
+   COLPALI_SPACE=https://rayyan0-colpali.hf.space
+   HF_TOKEN=hf_your_huggingface_token
    ```
+
+---
+
+## Production Deployment
+
+The repository includes pre-configured container definitions for immediate production deployment:
+
+```bash
+# Launch FastAPI Application + Ollama in one command:
+docker compose up -d --build
+```
+
+For complete deployment guides covering **Docker Compose**, **Linux Systemd**, **Nginx Reverse Proxy with SSL**, and **Cloud PaaS (Railway / Render)**, refer to:
+👉 **[`DEPLOYMENT.md`](DEPLOYMENT.md)**
 
 ---
 

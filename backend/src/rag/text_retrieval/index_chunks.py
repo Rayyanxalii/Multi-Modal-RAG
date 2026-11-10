@@ -11,6 +11,7 @@ from rag.config import (
     EMBEDDING_MODEL,
     VECTOR_SIZE,
     get_qdrant_credentials,
+    get_ollama_client,
 )
 
 BATCH_SIZE = 16
@@ -102,7 +103,8 @@ def index_text_chunks(
             for chunk in batch
         ]
 
-        response = ollama.embed(
+        ollama_client = get_ollama_client()
+        response = ollama_client.embed(
             model=EMBEDDING_MODEL,
             input=texts,
         )

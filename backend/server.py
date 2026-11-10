@@ -422,6 +422,8 @@ def purge_document(doc_id: str) -> dict[str, Any]:
 
 if __name__ == "__main__":
     import uvicorn
+    import os
+    port = int(os.getenv("PORT", 8000))
     # Support both project root execution (backend.server:app) and backend dir execution (server:app)
     app_target = "server:app" if Path.cwd() == BACKEND_DIR else "backend.server:app"
-    uvicorn.run(app_target, host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run(app_target, host="0.0.0.0", port=port, reload=False)
