@@ -32,9 +32,9 @@ COLPALI_EMBEDDINGS_PATH = (
 )
 
 # Vector database & retrieval constants
-TEXT_COLLECTION_NAME = "research_papers"
+TEXT_COLLECTION_NAME = os.getenv("QDRANT_TEXT_COLLECTION", "omni_documents")
 VISUAL_COLLECTION_NAME = "research_figures_tables"
-EMBEDDING_MODEL = "nomic-embed-text"
+EMBEDDING_MODEL = "gemini-embedding-001"
 VECTOR_SIZE = 768
 RRF_K = 60
 DEFAULT_TEXT_TOP_K = 5

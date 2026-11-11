@@ -103,12 +103,8 @@ def index_text_chunks(
             for chunk in batch
         ]
 
-        ollama_client = get_ollama_client()
-        response = ollama_client.embed(
-            model=EMBEDDING_MODEL,
-            input=texts,
-        )
-        embeddings = response["embeddings"]
+        from rag.services.embedding_service import embed_documents
+        embeddings = embed_documents(texts)
 
         if len(embeddings) != len(batch):
             raise RuntimeError(

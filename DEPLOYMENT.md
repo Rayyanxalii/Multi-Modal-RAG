@@ -50,11 +50,12 @@ The application requires the following environment variables. Create a `.env` fi
 | Variable | Required | Description | Example |
 | :--- | :---: | :--- | :--- |
 | `GROQ_API` | **Yes** | Groq API Key for LLM and VLM inference | `gsk_...` |
+| `GEMINI_API_KEY` | **Yes** | Google Gemini API Key for 768-dim cloud embeddings (no local Ollama needed) | `AQ.Ab8...` or `AIzaSy...` |
 | `QDRANT_URL` | **Yes** | Qdrant endpoint (Cloud or self-hosted) | `https://xxxx.cloud.qdrant.io` or `http://localhost:6333` |
 | `QDRANT_API_KEY` | **Yes** | Qdrant API key (blank for unauthenticated local instances) | `eyJhbG...` |
 | `COLPALI_SPACE` | **Yes** | Remote Hugging Face Space for ColPali visual embeddings | `https://rayyan0-colpali.hf.space` |
 | `HF_TOKEN` | **Yes** | Hugging Face Read Token for accessing the ColPali Space | `hf_...` |
-| `OLLAMA_HOST` | Optional | Custom Ollama host URL (defaults to `http://localhost:11434`) | `http://ollama:11434` |
+| `OLLAMA_HOST` | Optional | Custom Ollama host URL for fallback (defaults to `http://localhost:11434`) | `http://ollama:11434` |
 
 ---
 

@@ -24,13 +24,9 @@ def search_chunks(question: str, top_k: int = 5, doc_id: str | None = None) -> l
 
     client = get_client()
 
-    # 1. Convert the question into a vector.
-    ollama_client = get_ollama_client()
-    response = ollama_client.embed(
-        model=EMBEDDING_MODEL,
-        input=question,
-    )
-    query_embedding = response["embeddings"][0]
+    # 1. Convert the question into a 768-dim vector via unified embedding service.
+    from rag.services.embedding_service import embed_query
+    query_embedding = embed_query(question)
 
     # Optional filter by document_id
     query_filter = None

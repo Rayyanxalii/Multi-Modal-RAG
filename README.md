@@ -213,6 +213,7 @@ RAG/
    Configure `.env` with your API credentials:
    ```env
    GROQ_API=gsk_your_groq_api_key
+   GEMINI_API_KEY=your_google_gemini_api_key
    QDRANT_URL=https://your-qdrant-instance.cloud.qdrant.io:6333
    QDRANT_API_KEY=your_qdrant_api_key
    COLPALI_SPACE=https://rayyan0-colpali.hf.space
