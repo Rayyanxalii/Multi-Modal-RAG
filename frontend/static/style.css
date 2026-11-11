@@ -1678,3 +1678,19 @@ body {
   color: #b91c1c;
 }
 
+/* Reused ColPali Visual Index Banner inside Chat Stream */
+.colpali-reuse-notice {
+  background-color: #f0f9ff;
+  border: 1px solid #bae6fd;
+  border-left: 3px solid #0284c7;
+  color: #0c4a6e;
+  padding: 12px 16px;
+  margin-bottom: 16px;
+  font-family: var(--dp-typography-mono);
+  font-size: 12px;
+  line-height: 1.5;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+

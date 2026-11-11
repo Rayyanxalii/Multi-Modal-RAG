@@ -1340,6 +1340,8 @@ function initUploadModal() {
 
       let finalDocId = null;
       let finalMessage = "";
+      let colpaliExisted = false;
+      let alreadyExisted = false;
 
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
@@ -1371,6 +1373,8 @@ function initUploadModal() {
             if (data.stage === "complete") {
               finalDocId = data.doc_id;
               finalMessage = data.message;
+              colpaliExisted = Boolean(data.colpali_existed);
+              alreadyExisted = Boolean(data.already_existed);
             }
           } catch (itemErr) {
             if (itemErr.message && itemErr.message.includes("Ingestion error")) {
@@ -1388,14 +1392,17 @@ function initUploadModal() {
           if (data.stage === "complete") {
             finalDocId = data.doc_id;
             finalMessage = data.message;
+            colpaliExisted = Boolean(data.colpali_existed);
+            alreadyExisted = Boolean(data.already_existed);
           }
         } catch (_) {}
       }
 
       completeIngestionProgress(true, finalMessage || `Successfully ingested ${file.name}`);
 
-      // Allow 750ms for user to observe the 100% complete state
-      await new Promise((resolve) => setTimeout(resolve, 750));
+      // Allow extra time for user to read notice when document/pages already existed
+      const delayMs = alreadyExisted ? 1800 : 750;
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
 
       modal.classList.remove("open");
       uploadForm.reset();
@@ -1404,18 +1411,35 @@ function initUploadModal() {
       await loadDocuments();
       if (finalDocId) {
         await switchDocument(finalDocId, true);
+        if (colpaliExisted) {
+          const chatStream = document.getElementById("chatStream");
+          if (chatStream) {
+            const noticeEl = document.createElement("div");
+            noticeEl.className = "colpali-reuse-notice";
+            noticeEl.innerHTML = `<span aria-hidden="true">ℹ️</span> <span><strong>Existing ColPali Pages Detected:</strong> Visual embeddings for this document already existed on ColPali and were linked cleanly. Ask any question below!</span>`;
+            chatStream.prepend(noticeEl);
+          }
+        }
+        const qInput = document.getElementById("questionInput");
+        if (qInput) qInput.focus();
       }
-    } catch (err) {
-      completeIngestionProgress(false, err.message || String(err));
-      alert(`Error during ingestion: ${err.message || err}`);
-    } finally {
+
       setTimeout(() => {
         const box = document.getElementById("uploadProgressBox");
         const globalBar = document.getElementById("globalIngestBar");
         if (box) box.style.display = "none";
         if (globalBar) globalBar.style.display = "none";
-      }, 1500);
-
+      }, alreadyExisted ? 5500 : 1800);
+    } catch (err) {
+      completeIngestionProgress(false, err.message || String(err));
+      alert(`Error during ingestion: ${err.message || err}`);
+      setTimeout(() => {
+        const box = document.getElementById("uploadProgressBox");
+        const globalBar = document.getElementById("globalIngestBar");
+        if (box) box.style.display = "none";
+        if (globalBar) globalBar.style.display = "none";
+      }, 2000);
+    } finally {
       btnSubmitUpload.disabled = false;
       btnSubmitUpload.innerHTML = `Upload &amp; Ingest`;
       btnCloseUpload.disabled = false;

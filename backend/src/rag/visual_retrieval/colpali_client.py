@@ -46,15 +46,41 @@ class ColPaliCloudClient:
             print(f"[ColPali Cloud] Connected successfully.")
         return self._client
 
+    def document_exists(self, doc_id: str) -> bool:
+        """Check whether visual embeddings for doc_id already exist on the remote HF Space."""
+        clean_id = (doc_id or "").strip().lower()
+        if not clean_id:
+            return False
+        try:
+            existing = [str(d).strip().lower() for d in self.list_documents()]
+            return clean_id in existing
+        except Exception as exc:
+            print(f"[ColPali Cloud] Failed to verify existing documents: {exc}")
+            return False
+
     def index_document(
         self,
         doc_id: str,
         image_paths: list[Path | str],
+        force: bool = False,
     ) -> dict[str, Any]:
-        """Upload and compute ColPali visual embeddings for page images on the HF Space GPU."""
+        """Upload and compute ColPali visual embeddings for page images on the HF Space GPU.
+
+        If embeddings for doc_id already exist on the Space (and force=False), skips redundant GPU encoding.
+        """
         doc_id = (doc_id or "").strip().lower()
         if not doc_id:
             raise ValueError("doc_id cannot be empty")
+
+        if not force and self.document_exists(doc_id):
+            print(f"[ColPali Cloud] Visual embeddings for '{doc_id}' already exist on Space. Reusing existing index.")
+            return {
+                "status": "already_exists",
+                "document_id": doc_id,
+                "already_exists": True,
+                "message": f"Visual embeddings for '{doc_id}' already exist on ColPali Cloud Space.",
+            }
+
         if not image_paths:
             raise ValueError(f"No page images provided for document '{doc_id}'")
 

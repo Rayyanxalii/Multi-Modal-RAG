@@ -175,12 +175,41 @@ def extract_and_crop_node(state: RAGState) -> dict[str, Any]:
     return {}
 
 
+def check_qdrant_doc_exists(doc_name: str) -> int:
+    """Check how many points for doc_name already exist in Qdrant omni_documents collection."""
+    try:
+        from qdrant_client import models
+        from rag.text_retrieval.index_chunks import get_client
+        client = get_client()
+        if not client.collection_exists(TEXT_COLLECTION_NAME):
+            return 0
+        return client.count(
+            collection_name=TEXT_COLLECTION_NAME,
+            count_filter=models.Filter(
+                must=[
+                    models.FieldCondition(
+                        key="document_id",
+                        match=models.MatchValue(value=str(doc_name).strip().lower()),
+                    )
+                ]
+            ),
+            exact=True,
+        ).count
+    except Exception:
+        return 0
+
+
 def index_vectors_node(state: RAGState) -> dict[str, Any]:
-    """Index text chunks into Qdrant using nomic-embed-text."""
+    """Index text chunks into Qdrant using Google Gemini embeddings (skipping if already indexed)."""
     from rag.text_retrieval.index_chunks import index_text_chunks
     pdf_path = Path(state.get("pdf_path") or DEFAULT_PDF_PATH)
     doc_paths = get_document_paths(pdf_path)
     doc_name = doc_paths["doc_name"]
+
+    existing_count = check_qdrant_doc_exists(doc_name)
+    if existing_count > 0:
+        print(f"[Ingestion] Qdrant vectors for '{doc_name}' already exist ({existing_count} chunks). Reusing index.")
+        return {"qdrant_existed": True, "qdrant_points": existing_count}
 
     print(f"[Ingestion] Indexing text chunks into Qdrant: {TEXT_COLLECTION_NAME} (doc_id={doc_name})")
     try:
@@ -191,26 +220,33 @@ def index_vectors_node(state: RAGState) -> dict[str, Any]:
         )
     except Exception as exc:
         print(f"[Warning] Dense vector indexing skipped ({exc}). Document remains fully searchable via Okapi BM25 and ColPali visual embeddings.")
-    return {}
+    return {"qdrant_existed": False, "qdrant_points": 0}
 
 
 def index_colpali_node(state: RAGState) -> dict[str, Any]:
-    """Send rendered page images to Hugging Face ZeroGPU Space to index visual embeddings."""
+    """Send rendered page images to Hugging Face ZeroGPU Space (reusing if already indexed)."""
     from rag.visual_retrieval.colpali_client import get_colpali_cloud_client
     pdf_path = Path(state.get("pdf_path") or DEFAULT_PDF_PATH)
     doc_paths = get_document_paths(pdf_path)
     doc_name = doc_paths["doc_name"]
 
     page_images = sorted(list(doc_paths["rendered_pages_dir"].glob("*.png")))
-    if page_images:
-        print(f"[Ingestion] Registering {len(page_images)} pages with ColPali Cloud Space for '{doc_name}'...")
-        try:
-            client = get_colpali_cloud_client()
-            client.index_document(doc_id=doc_name, image_paths=page_images)
-        except Exception as exc:
-            print(f"[Warning] ColPali Cloud indexing encountered error: {exc}")
+    colpali_existed = False
+    try:
+        client = get_colpali_cloud_client()
+        if client.document_exists(doc_name):
+            print(f"[Ingestion] Visual pages for '{doc_name}' already exist on ColPali Space — reusing existing visual index.")
+            colpali_existed = True
+        elif page_images:
+            print(f"[Ingestion] Registering {len(page_images)} pages with ColPali Cloud Space for '{doc_name}'...")
+            res = client.index_document(doc_id=doc_name, image_paths=page_images)
+            colpali_existed = bool(
+                isinstance(res, dict) and (res.get("already_exists") or res.get("status") == "already_exists")
+            )
+    except Exception as exc:
+        print(f"[Warning] ColPali Cloud indexing encountered error: {exc}")
 
-    return {"is_ingested": True}
+    return {"is_ingested": True, "colpali_existed": colpali_existed}
 
 
 # =============================================================================

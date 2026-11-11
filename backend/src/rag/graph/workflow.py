@@ -13,7 +13,7 @@ from langgraph.graph import StateGraph, START, END
 from llama_index.core.llms import ChatMessage, MessageRole, ImageBlock
 
 from services.llm_service import llm_vision
-from rag.config import DEFAULT_PDF_PATH
+from rag.config import DEFAULT_PDF_PATH, get_document_paths
 from rag.graph.state import RAGState
 from rag.graph.nodes import (
     check_doc_status_node,
@@ -238,7 +238,9 @@ def run_agentic_rag(
 def stream_ingest_document(pdf_path: str | Path) -> Generator[dict[str, Any], None, None]:
     """Execute the multi-stage document ingestion pipeline yielding live progress events for real-time UI bars."""
     target_pdf = str(pdf_path)
-    clean_id = Path(target_pdf).stem.lower()
+    pdf_obj = Path(target_pdf)
+    clean_id = pdf_obj.stem.lower()
+    doc_paths = get_document_paths(pdf_obj)
     state: RAGState = {
         "pdf_path": target_pdf,
         "question": "",
@@ -246,32 +248,76 @@ def stream_ingest_document(pdf_path: str | Path) -> Generator[dict[str, Any], No
         "retry_count": 0,
     }
 
+    local_pages_exist = (
+        doc_paths["rendered_pages_dir"].exists()
+        and any(doc_paths["rendered_pages_dir"].glob("*.png"))
+    )
+    local_chunks_exist = (
+        doc_paths["chunks_path"].exists()
+        and doc_paths["chunks_path"].stat().st_size > 0
+    )
+    local_visuals_exist = (
+        doc_paths["figures_raw_jsonl"].exists()
+        or doc_paths["figures_cleaned"].exists()
+    )
+
     # Stage 1: Render pages
-    yield {"stage": "rendering", "progress": 15, "message": "Rendering high-resolution document pages..."}
-    render_pages_node(state)
+    if local_pages_exist:
+        yield {"stage": "rendering", "progress": 15, "message": "Rendered pages already exist locally — skipping rendering..."}
+    else:
+        yield {"stage": "rendering", "progress": 15, "message": "Rendering high-resolution document pages..."}
+        render_pages_node(state)
 
     # Stage 2: Layout parsing & hierarchical chunks with IBM Docling
-    yield {"stage": "parsing", "progress": 40, "message": "Parsing document layout & tables with IBM Docling..."}
-    parse_document_node(state)
+    if local_chunks_exist:
+        yield {"stage": "parsing", "progress": 40, "message": "Layout & text chunks already exist — skipping re-parsing..."}
+    else:
+        yield {"stage": "parsing", "progress": 40, "message": "Parsing document layout & tables with IBM Docling..."}
+        parse_document_node(state)
 
     # Stage 3: Figure & table extraction and cropping
-    yield {"stage": "cropping", "progress": 65, "message": "Extracting and cropping figures & data tables..."}
-    extract_and_crop_node(state)
+    if local_visuals_exist:
+        yield {"stage": "cropping", "progress": 65, "message": "Cropped figures & tables already exist — skipping cropping..."}
+    else:
+        yield {"stage": "cropping", "progress": 65, "message": "Extracting and cropping figures & data tables..."}
+        extract_and_crop_node(state)
 
     # Stage 4: Dense vector indexing into Qdrant
-    yield {"stage": "vectors", "progress": 82, "message": "Indexing text chunks into Qdrant vector database..."}
-    index_vectors_node(state)
+    yield {"stage": "vectors", "progress": 82, "message": "Checking Qdrant vector database..."}
+    vec_res = index_vectors_node(state) or {}
+    qdrant_existed = bool(vec_res.get("qdrant_existed"))
+    if qdrant_existed:
+        pts = vec_res.get("qdrant_points", "")
+        yield {"stage": "vectors", "progress": 88, "message": f"Text vectors already exist in Qdrant ({pts} chunks) — reusing index!"}
 
     # Stage 5: ColPali visual late-interaction indexing
-    yield {"stage": "colpali", "progress": 92, "message": "Registering visual embeddings with ColPali ZeroGPU Space..."}
-    index_colpali_node(state)
+    yield {"stage": "colpali", "progress": 92, "message": "Checking visual pages on ColPali ZeroGPU Space..."}
+    colpali_res = index_colpali_node(state) or {}
+    colpali_existed = bool(colpali_res.get("colpali_existed"))
+    if colpali_existed:
+        yield {
+            "stage": "colpali",
+            "progress": 97,
+            "message": f"Document pages already exist on ColPali Space — reused existing visual index!",
+        }
+
+    doc_filename = pdf_obj.name
+    if colpali_existed and local_chunks_exist:
+        complete_msg = f"'{doc_filename}' already exists on ColPali & workspace — added to chat and ready to query!"
+    elif colpali_existed:
+        complete_msg = f"'{doc_filename}' pages already existed on ColPali — reused visual index & added to chat!"
+    else:
+        complete_msg = f"Successfully ingested {doc_filename} and added to chat!"
 
     yield {
         "stage": "complete",
         "progress": 100,
-        "message": f"Successfully ingested {Path(target_pdf).name}!",
+        "message": complete_msg,
         "doc_id": clean_id,
         "pdf_path": target_pdf,
+        "colpali_existed": colpali_existed,
+        "qdrant_existed": qdrant_existed,
+        "already_existed": bool(colpali_existed or local_chunks_exist or qdrant_existed),
     }
 
 
@@ -279,14 +325,18 @@ def ingest_document(pdf_path: str | Path) -> dict[str, Any]:
     """Execute the multi-stage document ingestion pipeline synchronously without invoking Q&A or polluting chat memory."""
     target_pdf = str(pdf_path)
     clean_id = Path(target_pdf).stem.lower()
-    for _ in stream_ingest_document(pdf_path):
-        pass
+    last_event: dict[str, Any] = {}
+    for ev in stream_ingest_document(pdf_path):
+        last_event = ev
 
     return {
         "status": "success",
         "pdf_path": target_pdf,
         "doc_id": clean_id,
         "is_ingested": True,
+        "colpali_existed": bool(last_event.get("colpali_existed", False)),
+        "already_existed": bool(last_event.get("already_existed", False)),
+        "message": last_event.get("message", f"Successfully ingested {Path(target_pdf).name}!"),
     }
 
 
