@@ -1141,6 +1141,11 @@ function openApiKeyModal(noticeMessage = "") {
       notice.textContent = noticeMessage;
       notice.className = "api-key-notice error";
       notice.style.display = "block";
+    } else if (currentKey) {
+      const tail = currentKey.length >= 4 ? currentKey.slice(-4) : "****";
+      notice.textContent = `✓ Active in browser (ending in ...${tail}). Sent automatically with every question.`;
+      notice.className = "api-key-notice success";
+      notice.style.display = "block";
     } else {
       notice.style.display = "none";
     }

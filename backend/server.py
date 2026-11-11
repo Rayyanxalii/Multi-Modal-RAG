@@ -319,9 +319,14 @@ def submit_question(
             matches = list(RAW_DATA_DIR.glob(f"{doc_id}*.pdf"))
             pdf_path = matches[0] if matches else DEFAULT_PDF_PATH
 
-    token = set_request_groq_key(user_groq_key if user_groq_key else None)
+    token = set_request_groq_key(effective_key)
     try:
-        result = run_agentic_rag(question=question, pdf_path=pdf_path, thread_id=thread_id)
+        result = run_agentic_rag(
+            question=question,
+            pdf_path=pdf_path,
+            thread_id=thread_id,
+            groq_api_key=effective_key,
+        )
 
         # Normalize image paths in sources for frontend rendering
         sources = result.get("sources", [])
@@ -380,9 +385,14 @@ def stream_chat_question(
             pdf_path = matches[0] if matches else DEFAULT_PDF_PATH
 
     def event_stream():
-        token = set_request_groq_key(user_groq_key if user_groq_key else None)
+        token = set_request_groq_key(effective_key)
         try:
-            for event in stream_agentic_rag(question=question, pdf_path=pdf_path, thread_id=thread_id):
+            for event in stream_agentic_rag(
+                question=question,
+                pdf_path=pdf_path,
+                thread_id=thread_id,
+                groq_api_key=effective_key,
+            ):
                 if event.get("type") == "metadata":
                     for src in event.get("sources", []):
                         img = src.get("image_path")

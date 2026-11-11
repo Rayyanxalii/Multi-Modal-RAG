@@ -12,7 +12,7 @@ from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.graph import StateGraph, START, END
 from llama_index.core.llms import ChatMessage, MessageRole, ImageBlock
 
-from services.llm_service import llm_vision
+from services.llm_service import get_llm_vision
 from rag.config import DEFAULT_PDF_PATH, get_document_paths
 from rag.graph.state import RAGState
 from rag.graph.nodes import (
@@ -191,6 +191,7 @@ def run_agentic_rag(
     question: str,
     pdf_path: str | Path | None = None,
     thread_id: str | None = None,
+    groq_api_key: str | None = None,
 ) -> dict[str, Any]:
     """Execute the full agentic multimodal RAG graph for a user question with conversational memory."""
     question = question.strip()
@@ -215,6 +216,7 @@ def run_agentic_rag(
         "original_query": question,
         "pdf_path": target_pdf,
         "retry_count": 0,
+        "groq_api_key": groq_api_key,
     }
 
     final_state = app.invoke(initial_state, config=config)
@@ -349,6 +351,7 @@ def stream_agentic_rag(
     question: str,
     pdf_path: str | Path | None = None,
     thread_id: str | None = None,
+    groq_api_key: str | None = None,
 ) -> Generator[dict[str, Any], None, None]:
     """Execute the agentic RAG workflow yielding real-time SSE progress events, status updates, and token deltas."""
     question = question.strip()
@@ -379,6 +382,7 @@ def stream_agentic_rag(
         "pdf_path": target_pdf,
         "retry_count": 0,
         "chat_history": existing_history,
+        "groq_api_key": groq_api_key,
     }
 
     # 1. Routing & Anaphora resolution
@@ -431,7 +435,8 @@ def stream_agentic_rag(
     yield {"type": "status", "stage": "generating", "message": "Synthesizing answer..."}
     full_answer = ""
     try:
-        stream_res = llm_vision.stream_chat(messages)
+        active_vision = get_llm_vision(groq_api_key)
+        stream_res = active_vision.stream_chat(messages)
         for chunk in stream_res:
             delta = chunk.delta or ""
             if delta:
@@ -447,7 +452,8 @@ def stream_agentic_rag(
                 ChatMessage(role=MessageRole.USER, blocks=lean_blocks),
             ]
             try:
-                stream_res = llm_vision.stream_chat(lean_messages)
+                active_vision = get_llm_vision(groq_api_key)
+                stream_res = active_vision.stream_chat(lean_messages)
                 for chunk in stream_res:
                     delta = chunk.delta or ""
                     if delta:
@@ -457,6 +463,12 @@ def stream_agentic_rag(
                 err_msg = f"An error occurred: {retry_exc}"
                 full_answer = err_msg
                 yield {"type": "token", "delta": err_msg}
+        elif any(tok in err_str.lower() for tok in ("api key", "invalid_api_key", "401", "authentication", "unauthorized")):
+            yield {
+                "type": "error",
+                "content": "Invalid or missing Groq Vision LLM Key. Please click 'Vision LLM Key' (🔑) to update your key.",
+            }
+            return
         else:
             err_msg = f"An error occurred: {exc}"
             full_answer = err_msg

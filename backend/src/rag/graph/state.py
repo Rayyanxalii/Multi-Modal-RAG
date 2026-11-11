@@ -18,6 +18,7 @@ class RAGState(TypedDict, total=False):
     is_ingested: bool                          # True if document assets & vectors exist on disk/DB
 
     # Query & Intent
+    groq_api_key: str | None                   # Per-request BYOK Groq API key (optional)
     question: str                              # Current active query (can be rewritten)
     original_question: str                     # Original user input verbatim
     original_query: str                        # Original user input

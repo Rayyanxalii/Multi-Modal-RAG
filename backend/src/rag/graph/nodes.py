@@ -65,7 +65,7 @@ from rag.text_retrieval.hybrid_retriever import reciprocal_rank_fusion
 from rag.text_retrieval.search_chunks import search_chunks
 from rag.visual_retrieval.colpali_model import get_colpali_retriever
 from rag.visual_retrieval.search.colpali_retriever import extract_page_number, load_jsonl
-from services.llm_service import llm, llm_vision
+from services.llm_service import get_llm, get_llm_vision
 
 
 # Module-level BM25 cache for high-speed repeated queries
@@ -299,7 +299,11 @@ def is_overview_query(query: str) -> bool:
     return any(re.search(pat, q) for pat in patterns)
 
 
-def contextualize_query(question: str, history: list[dict[str, Any]] | None) -> str:
+def contextualize_query(
+    question: str,
+    history: list[dict[str, Any]] | None,
+    api_key: str | None = None,
+) -> str:
     """Reformulate a follow-up query using conversation history into a standalone search query.
 
     Bypasses LLM rewriting if the query is already self-contained or contains no coreference pronouns.
@@ -352,7 +356,7 @@ Follow-up Question: {clean_q}
 Standalone Question:"""
 
     try:
-        reformulated = llm.complete(prompt).text.strip()
+        reformulated = get_llm(api_key).complete(prompt).text.strip()
         reformulated = reformulated.strip('"').strip("'").strip()
         # Prevent repeating old questions if the user asked something new
         prev_user_questions = [
@@ -377,12 +381,13 @@ def route_query_node(state: RAGState) -> dict[str, Any]:
     original_q = state.get("original_question") or state["question"].strip()
     retry_count = state.get("retry_count", 0)
     history = state.get("chat_history", [])
+    api_key = state.get("groq_api_key")
 
     # If this is a retry within the CRAG loop, do NOT re-contextualize the original question!
     if retry_count > 0:
         active_question = state["question"].strip()
     else:
-        active_question = contextualize_query(original_q, history)
+        active_question = contextualize_query(original_q, history, api_key=api_key)
 
     print("\n" + "=" * 65)
     print("[Query Intent Router] Routing bypassed: Always invoking BOTH (Dense + BM25 + ColPali)")
@@ -766,7 +771,7 @@ Respond ONLY with 'NO' if the context is completely unrelated, irrelevant, or mi
 Your verdict (YES/NO):"""
 
     try:
-        response = llm.complete(grading_prompt).text.strip().upper()
+        response = get_llm(state.get("groq_api_key")).complete(grading_prompt).text.strip().upper()
         is_relevant = "YES" in response
     except Exception as exc:
         print(f"[Warning] LLM grading failed ({exc}). Defaulting to relevant.")
@@ -836,7 +841,7 @@ STRICT REQUIREMENTS:
 Expanded Query:"""
 
     try:
-        expanded = llm.complete(expansion_prompt).text.strip().strip('"').strip("'")
+        expanded = get_llm(state.get("groq_api_key")).complete(expansion_prompt).text.strip().strip('"').strip("'")
         # Ensure original query is retained at the start
         if original_query.lower() not in expanded.lower():
             expanded = f"{original_query} {expanded}"
@@ -1168,8 +1173,9 @@ def generate_answer_node(state: RAGState) -> dict[str, Any]:
             ],
         }
 
+    active_vision = get_llm_vision(state.get("groq_api_key"))
     try:
-        response = llm_vision.chat(messages).message.content.strip()
+        response = active_vision.chat(messages).message.content.strip()
     except Exception as exc:
         err_str = str(exc)
         if "413" in err_str or "rate_limit_exceeded" in err_str or "tokens" in err_str.lower():
@@ -1180,7 +1186,7 @@ def generate_answer_node(state: RAGState) -> dict[str, Any]:
                 ChatMessage(role=MessageRole.USER, blocks=lean_blocks),
             ]
             try:
-                response = llm_vision.chat(lean_messages).message.content.strip()
+                response = active_vision.chat(lean_messages).message.content.strip()
                 print("[Self-Healing] Recovery successful: generated grounded answer without visual tokens.")
             except Exception as retry_exc:
                 response = f"An error occurred while generating the answer: {retry_exc}"
