@@ -1,5 +1,6 @@
 """FastAPI Web Server for the Multimodal Agentic RAG """
 
+import os
 import shutil
 import sys
 from pathlib import Path
