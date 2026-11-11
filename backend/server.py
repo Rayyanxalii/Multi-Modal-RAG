@@ -16,7 +16,7 @@ for p in (str(PROJECT_ROOT), str(BACKEND_DIR), str(BACKEND_SRC)):
 
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Header
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse, Response
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import json
@@ -144,6 +144,12 @@ def serve_home():
     if not index_file.exists():
         raise HTTPException(status_code=404, detail="Index HTML not found.")
     return FileResponse(index_file)
+
+
+@app.get("/favicon.ico", include_in_schema=False)
+def serve_favicon():
+    """Return 204 No Content for automatic browser favicon requests."""
+    return Response(status_code=204)
 
 
 @app.get("/api/documents")
@@ -426,12 +432,15 @@ async def upload_document(
 
     if stream:
         def progress_stream():
+            import gc
             yield f"data: {json.dumps({'stage': 'uploaded', 'progress': 5, 'message': f'Uploaded {file.filename}'})}\n\n"
             try:
                 for event in stream_ingest_document(target_pdf):
                     yield f"data: {json.dumps(event)}\n\n"
             except Exception as exc:
                 yield f"data: {json.dumps({'stage': 'error', 'progress': 100, 'message': str(exc)})}\n\n"
+            finally:
+                gc.collect()
 
         return StreamingResponse(
             progress_stream(),

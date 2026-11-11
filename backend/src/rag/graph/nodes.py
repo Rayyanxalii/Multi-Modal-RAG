@@ -129,18 +129,29 @@ def render_pages_node(state: RAGState) -> dict[str, Any]:
 
 
 def parse_document_node(state: RAGState) -> dict[str, Any]:
-    """Parse PDF layout hierarchy & extract text chunks via IBM Docling."""
-    from rag.docling_parser import parse_pdf_to_chunks
+    """Parse PDF layout hierarchy & extract text chunks (Docling on full RAM, PyMuPDF Lite on cloud)."""
+    from rag.fast_pdf_parser import is_low_memory_env, parse_pdf_fast
     pdf_path = Path(state.get("pdf_path") or DEFAULT_PDF_PATH)
     doc_paths = get_document_paths(pdf_path)
+
+    if is_low_memory_env():
+        print(f"[Ingestion] Low-memory environment detected. Parsing '{pdf_path.name}' with PyMuPDF Lite engine...")
+        parse_pdf_fast(pdf_path, doc_paths=doc_paths)
+        return {}
+
     print(f"[Ingestion] Parsing document layout: {pdf_path.name}")
-    parse_pdf_to_chunks(pdf_path, doc_paths=doc_paths)
+    try:
+        from rag.docling_parser import parse_pdf_to_chunks
+        parse_pdf_to_chunks(pdf_path, doc_paths=doc_paths)
+    except (MemoryError, Exception) as exc:
+        print(f"[Ingestion Warning] Docling unavailable or OOM ({exc}). Falling back safely to PyMuPDF Lite parser...")
+        parse_pdf_fast(pdf_path, doc_paths=doc_paths)
     return {}
 
 
 def extract_and_crop_node(state: RAGState) -> dict[str, Any]:
     """Extract figure & table bounding boxes and crop visual element PNGs."""
-    from rag.visual_retrieval.preprocess.figure_extractor import extract_figures, extract_tables
+    from rag.fast_pdf_parser import is_fast_parsed_doc
     from rag.visual_retrieval.preprocess.figure_cropper import crop_figures
     from rag.visual_retrieval.preprocess.table_cropper import crop_tables
 
@@ -149,29 +160,34 @@ def extract_and_crop_node(state: RAGState) -> dict[str, Any]:
     doc_name = doc_paths["doc_name"]
 
     print(f"[Ingestion] Extracting & cropping visual assets for: {doc_name}")
-    extract_figures(
-        document=doc_paths["document_json_path"],
-        doc_name=doc_name,
-        output_dir=doc_paths["figures_dir"],
-        figures_path=doc_paths["figures_raw_jsonl"],
-    )
-    extract_tables(
-        document=doc_paths["document_json_path"],
-        doc_name=doc_name,
-        tables_path=doc_paths["tables_jsonl"],
-    )
-    crop_figures(
-        pdf_path=pdf_path,
-        figures_jsonl=doc_paths["figures_raw_jsonl"],
-        output_dir=doc_paths["figures_dir"],
-        rendered_pages_dir=doc_paths["rendered_pages_dir"],
-    )
-    crop_tables(
-        pdf_path=pdf_path,
-        tables_jsonl=doc_paths["tables_jsonl"],
-        output_dir=doc_paths["tables_dir"],
-        rendered_pages_dir=doc_paths["rendered_pages_dir"],
-    )
+    if not is_fast_parsed_doc(doc_paths["document_json_path"]):
+        from rag.visual_retrieval.preprocess.figure_extractor import extract_figures, extract_tables
+        extract_figures(
+            document=doc_paths["document_json_path"],
+            doc_name=doc_name,
+            output_dir=doc_paths["figures_dir"],
+            figures_path=doc_paths["figures_raw_jsonl"],
+        )
+        extract_tables(
+            document=doc_paths["document_json_path"],
+            doc_name=doc_name,
+            tables_path=doc_paths["tables_jsonl"],
+        )
+
+    if doc_paths["figures_raw_jsonl"].exists():
+        crop_figures(
+            pdf_path=pdf_path,
+            figures_jsonl=doc_paths["figures_raw_jsonl"],
+            output_dir=doc_paths["figures_dir"],
+            rendered_pages_dir=doc_paths["rendered_pages_dir"],
+        )
+    if doc_paths["tables_jsonl"].exists():
+        crop_tables(
+            pdf_path=pdf_path,
+            tables_jsonl=doc_paths["tables_jsonl"],
+            output_dir=doc_paths["tables_dir"],
+            rendered_pages_dir=doc_paths["rendered_pages_dir"],
+        )
     return {}
 
 

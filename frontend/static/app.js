@@ -1342,6 +1342,7 @@ function initUploadModal() {
       let finalMessage = "";
       let colpaliExisted = false;
       let alreadyExisted = false;
+      let receivedComplete = false;
 
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
@@ -1371,6 +1372,7 @@ function initUploadModal() {
               updateIngestionUI(data.progress, data.message || "Processing...", file.name);
             }
             if (data.stage === "complete") {
+              receivedComplete = true;
               finalDocId = data.doc_id;
               finalMessage = data.message;
               colpaliExisted = Boolean(data.colpali_existed);
@@ -1389,13 +1391,25 @@ function initUploadModal() {
       if (buffer.trim().startsWith("data:")) {
         try {
           const data = JSON.parse(buffer.trim().slice(5).trim());
+          if (data.stage === "error") {
+            throw new Error(data.message || "Ingestion error encountered on backend.");
+          }
           if (data.stage === "complete") {
+            receivedComplete = true;
             finalDocId = data.doc_id;
             finalMessage = data.message;
             colpaliExisted = Boolean(data.colpali_existed);
             alreadyExisted = Boolean(data.already_existed);
           }
-        } catch (_) {}
+        } catch (bufErr) {
+          if (bufErr.message && bufErr.message.includes("Ingestion error")) {
+            throw bufErr;
+          }
+        }
+      }
+
+      if (!receivedComplete) {
+        throw new Error("Server stream closed before ingestion completed (the backend may have exceeded its memory/timeout limit).");
       }
 
       completeIngestionProgress(true, finalMessage || `Successfully ingested ${file.name}`);
@@ -1588,6 +1602,7 @@ function goToPage(pageNum) {
   const imgEl = document.getElementById("viewerPageImg");
   if (imgEl && docPagesList.length >= currentPage) {
     imgEl.src = docPagesList[currentPage - 1].image_url;
+    imgEl.style.display = "block";
   }
 
   const badge = document.getElementById("viewerPageBadge");

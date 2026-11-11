@@ -272,7 +272,7 @@ def stream_ingest_document(pdf_path: str | Path) -> Generator[dict[str, Any], No
     if local_chunks_exist:
         yield {"stage": "parsing", "progress": 40, "message": "Layout & text chunks already exist — skipping re-parsing..."}
     else:
-        yield {"stage": "parsing", "progress": 40, "message": "Parsing document layout & tables with IBM Docling..."}
+        yield {"stage": "parsing", "progress": 40, "message": "Parsing document layout, headings & tables..."}
         parse_document_node(state)
 
     # Stage 3: Figure & table extraction and cropping
