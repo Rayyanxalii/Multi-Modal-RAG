@@ -50,10 +50,10 @@
         </div>
 
         <div class="header-actions-group">
-          <!-- LLM API Key Configuration Button -->
-          <button id="btnOpenApiKeyModal" class="btn-clear-chat btn-api-key" type="button" title="Configure your free Groq API key">
+          <!-- Vision LLM API Key Configuration Button -->
+          <button id="btnOpenApiKeyModal" class="btn-clear-chat btn-api-key" type="button" title="Add your Vision LLM Key (Free from Groq)">
             <span class="btn-clear-icon" aria-hidden="true">🔑</span>
-            <span id="btnApiKeyLabel">API Key</span>
+            <span id="btnApiKeyLabel">Vision LLM Key</span>
             <span id="apiKeyStatusDot" class="status-dot-inactive" title="Key status"></span>
           </button>
 
@@ -235,22 +235,32 @@
 
 
   <!-- ====================================================================
-       Modal: Configure LLM API Key (Groq BYOK)
+       Modal: Configure Vision LLM Key (Groq BYOK)
        ==================================================================== -->
   <div id="apiKeyModal" class="upload-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="apiKeyModalTitle" style="display: none;">
     <div class="upload-sheet-card api-key-card">
       <div class="modal-header-rule">
-        <h2 id="apiKeyModalTitle" class="modal-title">Configure Groq API Key</h2>
+        <h2 id="apiKeyModalTitle" class="modal-title">Add Vision LLM Key</h2>
       </div>
       <p class="modal-description">
-        Omni Retrieve uses <strong>Groq</strong> for lightning-fast query rewriting, routing, and multimodal vision synthesis.
-        Enter your personal Groq API key below. It is stored safely in your browser (<code>localStorage</code>) and is never shared or stored on our servers.
+        Please add your <strong>Vision LLM key</strong> below to enable AI reasoning over document figures, architectures, tables, and text.
       </p>
+
+      <!-- Prominent Free Key Hint Banner -->
+      <div class="api-key-hint-banner">
+        <span class="hint-icon" aria-hidden="true">💡</span>
+        <div class="hint-content">
+          <strong>Hint:</strong> You can get a <strong>100% free Vision LLM key</strong> from Groq in 30 seconds with no credit card required.
+          <a href="https://console.groq.com/keys" target="_blank" rel="noopener noreferrer" class="api-key-link">
+            Get your free Groq key here &rarr;
+          </a>
+        </div>
+      </div>
 
       <form id="apiKeyForm">
         <div class="api-key-input-group">
           <label for="groqApiKeyInput" class="api-key-label">
-            Groq API Key (<code>gsk_...</code>)
+            Vision LLM API Key (Groq <code>gsk_...</code>)
           </label>
           <div class="api-key-input-wrapper">
             <input 
@@ -260,14 +270,12 @@
               class="sketch-input mono-font"
               autocomplete="off"
               spellcheck="false"
+              required
             >
             <button type="button" id="btnToggleKeyVisibility" class="btn-key-visibility" title="Show/Hide Key">👁️</button>
           </div>
           <div class="api-key-help">
-            <span>Don't have a key?</span>
-            <a href="https://console.groq.com/keys" target="_blank" rel="noopener noreferrer" class="api-key-link">
-              Get a 100% free Groq key in 30 seconds &rarr;
-            </a>
+            <span>Your key is stored strictly in your browser (<code>localStorage</code>) and is never saved to our database.</span>
           </div>
         </div>
 
@@ -281,7 +289,7 @@
             Cancel
           </button>
           <button type="submit" id="btnSaveApiKey" class="btn-mono-primary">
-            Save Key
+            Save Vision Key
           </button>
         </div>
       </form>

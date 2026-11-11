@@ -1569,6 +1569,31 @@ body {
   max-width: 560px !important;
 }
 
+.api-key-hint-banner {
+  background-color: #fdfbf7;
+  border: 1px solid #e2d9cc;
+  border-left: 3px solid var(--dp-color-ink);
+  padding: 12px 14px;
+  margin: 12px 0 16px 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-family: var(--dp-typography-mono);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.hint-icon {
+  font-size: 16px;
+  line-height: 1.2;
+}
+
+.hint-content {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
 .api-key-input-group {
   margin: 18px 0;
   display: flex;

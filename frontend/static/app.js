@@ -406,8 +406,8 @@ async function handleStreamingChat(query) {
     if (!res.ok) {
       const errJson = await res.json().catch(() => ({}));
       const errorMsg = errJson.detail || `Server error: ${res.status}`;
-      if (res.status === 401 || errorMsg.toLowerCase().includes("api key")) {
-        openApiKeyModal("Please enter your free Groq API key to continue chatting.");
+      if (res.status === 401 || errorMsg.toLowerCase().includes("api key") || errorMsg.toLowerCase().includes("vision")) {
+        openApiKeyModal("Please add a Vision LLM key to ask questions. (Hint: get a free key from Groq at console.groq.com)");
       }
       throw new Error(errorMsg);
     }
@@ -445,8 +445,8 @@ async function handleStreamingChat(query) {
               metadata = data;
             } else if (data.type === "error") {
               const errMsg = data.content || data.message || "Streaming error";
-              if (errMsg.toLowerCase().includes("api key") || errMsg.includes("401")) {
-                openApiKeyModal("Please enter your free Groq API key to continue chatting.");
+              if (errMsg.toLowerCase().includes("api key") || errMsg.includes("401") || errMsg.toLowerCase().includes("vision")) {
+                openApiKeyModal("Please add a Vision LLM key to ask questions. (Hint: get a free key from Groq at console.groq.com)");
               }
               throw new Error(errMsg);
             }
@@ -489,8 +489,8 @@ async function handleStreamingChat(query) {
   } catch (err) {
     if (statusDiv.parentNode) statusDiv.remove();
     answerBody.innerHTML = `<span style="color: #a00;">✕ Error: ${escapeHtml(err.message || String(err))}</span>`;
-    if (err.message && (err.message.includes("401") || err.message.toLowerCase().includes("api key"))) {
-      openApiKeyModal("Please enter your personal Groq API key to start chatting.");
+    if (err.message && (err.message.includes("401") || err.message.toLowerCase().includes("api key") || err.message.toLowerCase().includes("vision"))) {
+      openApiKeyModal("Please add a Vision LLM key to ask questions. (Hint: get a free key from Groq at console.groq.com)");
     }
   }
 }
@@ -1169,10 +1169,10 @@ async function updateApiKeyStatusUI() {
   if (userKey) {
     if (statusDot) {
       statusDot.className = "status-dot-active";
-      statusDot.title = "Personal Groq API Key Active";
+      statusDot.title = "Personal Vision LLM Key Active (Groq)";
     }
     if (btnLabel) {
-      btnLabel.textContent = "API Key ✓";
+      btnLabel.textContent = "Vision Key ✓";
     }
     return;
   }
@@ -1185,10 +1185,10 @@ async function updateApiKeyStatusUI() {
       if (data.has_server_key) {
         if (statusDot) {
           statusDot.className = "status-dot-active";
-          statusDot.title = "Server Default Groq Key Active";
+          statusDot.title = "Server Default Key Active";
         }
         if (btnLabel) {
-          btnLabel.textContent = "API Key";
+          btnLabel.textContent = "Vision Key";
         }
         return;
       }
@@ -1199,10 +1199,10 @@ async function updateApiKeyStatusUI() {
 
   if (statusDot) {
     statusDot.className = "status-dot-inactive";
-    statusDot.title = "Groq Key Not Configured (Click to set)";
+    statusDot.title = "Vision LLM Key Not Configured (Click to add free Groq key)";
   }
   if (btnLabel) {
-    btnLabel.textContent = "API Key !";
+    btnLabel.textContent = "Vision Key !";
   }
 }
 

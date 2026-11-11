@@ -294,7 +294,7 @@ def submit_question(
     if not effective_key:
         raise HTTPException(
             status_code=401,
-            detail="Missing Groq API Key. Please click the 🔑 API Key button in the top navigation to add your free key.",
+            detail="Vision LLM API key required. Please click 'Vision LLM Key' (🔑) to add your key. (Hint: get a free one from Groq at console.groq.com)",
         )
 
     doc_id = (payload.doc_id or "attention").strip().lower()
@@ -355,7 +355,7 @@ def stream_chat_question(
     if not effective_key:
         raise HTTPException(
             status_code=401,
-            detail="Missing Groq API Key. Please click the 🔑 API Key button in the top navigation to add your free key.",
+            detail="Vision LLM API key required. Please click 'Vision LLM Key' (🔑) to add your key. (Hint: get a free one from Groq at console.groq.com)",
         )
 
     doc_id = (payload.doc_id or "attention").strip().lower()

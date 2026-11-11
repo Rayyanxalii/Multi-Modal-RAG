@@ -42,7 +42,7 @@ def get_llm(api_key: str | None = None) -> Groq:
     key = api_key or get_active_groq_key()
     if not key:
         raise ValueError(
-            "Groq API key required. Please click the 🔑 API Key button in the top navigation to add your free Groq API key."
+            "Vision LLM API key required. Please click 'Vision LLM Key' (🔑) to add your key. (Hint: get a free one from Groq at console.groq.com)"
         )
     if key not in _LLM_CACHE:
         _LLM_CACHE[key] = Groq(
@@ -58,7 +58,7 @@ def get_llm_vision(api_key: str | None = None) -> Groq:
     key = api_key or get_active_groq_key()
     if not key:
         raise ValueError(
-            "Groq API key required. Please click the 🔑 API Key button in the top navigation to add your free Groq API key."
+            "Vision LLM API key required. Please click 'Vision LLM Key' (🔑) to add your key. (Hint: get a free one from Groq at console.groq.com)"
         )
     if key not in _VISION_CACHE:
         _VISION_CACHE[key] = Groq(
