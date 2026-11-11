@@ -18,6 +18,7 @@ let currentZoom = 1.0;
 let viewerMode = "pages"; // "pages" or "pdf"
 
 document.addEventListener("DOMContentLoaded", () => {
+  initApiKeyModal();
   initDocumentLedger();
   initChatForm();
   initClearChatButton();
@@ -385,19 +386,30 @@ async function handleStreamingChat(query) {
   let hasStartedTokens = false;
 
   try {
+    const userGroqKey = (typeof localStorage !== "undefined" ? localStorage.getItem("user_groq_key") : "") || "";
+    const headers = { "Content-Type": "application/json" };
+    if (userGroqKey) {
+      headers["X-Groq-Api-Key"] = userGroqKey;
+    }
+
     const res = await fetch("/api/chat/stream", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers,
       body: JSON.stringify({
         question: query,
         doc_id: currentDocId,
         thread_id: `doc_${currentDocId}`,
+        groq_api_key: userGroqKey || undefined,
       }),
     });
 
     if (!res.ok) {
       const errJson = await res.json().catch(() => ({}));
-      throw new Error(errJson.detail || `Server error: ${res.status}`);
+      const errorMsg = errJson.detail || `Server error: ${res.status}`;
+      if (res.status === 401 || errorMsg.toLowerCase().includes("api key")) {
+        openApiKeyModal("Please enter your free Groq API key to continue chatting.");
+      }
+      throw new Error(errorMsg);
     }
 
     const reader = res.body.getReader();
@@ -432,7 +444,11 @@ async function handleStreamingChat(query) {
             } else if (data.type === "metadata") {
               metadata = data;
             } else if (data.type === "error") {
-              throw new Error(data.message || "Streaming error");
+              const errMsg = data.content || data.message || "Streaming error";
+              if (errMsg.toLowerCase().includes("api key") || errMsg.includes("401")) {
+                openApiKeyModal("Please enter your free Groq API key to continue chatting.");
+              }
+              throw new Error(errMsg);
             }
           } catch (pErr) {
             console.warn("Error parsing chat SSE chunk:", pErr);
@@ -473,6 +489,9 @@ async function handleStreamingChat(query) {
   } catch (err) {
     if (statusDiv.parentNode) statusDiv.remove();
     answerBody.innerHTML = `<span style="color: #a00;">✕ Error: ${escapeHtml(err.message || String(err))}</span>`;
+    if (err.message && (err.message.includes("401") || err.message.toLowerCase().includes("api key"))) {
+      openApiKeyModal("Please enter your personal Groq API key to start chatting.");
+    }
   }
 }
 
@@ -1093,6 +1112,184 @@ function completeIngestionProgress(success = true, message = "") {
       globalText.textContent = `✕ INGESTION FAILED: ${errorMsg}`;
     }
   }
+}
+
+// ============================================================================
+// API Key Management (BYOK - Bring Your Own Groq Key)
+// ============================================================================
+let isApiKeyModalOpen = false;
+
+function openApiKeyModal(noticeMessage = "") {
+  const modal = document.getElementById("apiKeyModal");
+  const input = document.getElementById("groqApiKeyInput");
+  const notice = document.getElementById("apiKeyNotice");
+  const btnClear = document.getElementById("btnClearApiKey");
+
+  if (!modal) return;
+
+  const currentKey = localStorage.getItem("user_groq_key") || "";
+  if (input) {
+    input.value = currentKey;
+  }
+
+  if (btnClear) {
+    btnClear.style.display = currentKey ? "inline-block" : "none";
+  }
+
+  if (notice) {
+    if (noticeMessage) {
+      notice.textContent = noticeMessage;
+      notice.className = "api-key-notice error";
+      notice.style.display = "block";
+    } else {
+      notice.style.display = "none";
+    }
+  }
+
+  modal.style.display = "flex";
+  isApiKeyModalOpen = true;
+  if (input) {
+    setTimeout(() => input.focus(), 50);
+  }
+}
+
+function closeApiKeyModal() {
+  const modal = document.getElementById("apiKeyModal");
+  if (modal) {
+    modal.style.display = "none";
+    isApiKeyModalOpen = false;
+  }
+}
+
+async function updateApiKeyStatusUI() {
+  const statusDot = document.getElementById("apiKeyStatusDot");
+  const btnLabel = document.getElementById("btnApiKeyLabel");
+  const userKey = localStorage.getItem("user_groq_key") || "";
+
+  if (userKey) {
+    if (statusDot) {
+      statusDot.className = "status-dot-active";
+      statusDot.title = "Personal Groq API Key Active";
+    }
+    if (btnLabel) {
+      btnLabel.textContent = "API Key ✓";
+    }
+    return;
+  }
+
+  // Check if backend has a server-side default key
+  try {
+    const res = await fetch("/api/auth/status");
+    if (res.ok) {
+      const data = await res.json();
+      if (data.has_server_key) {
+        if (statusDot) {
+          statusDot.className = "status-dot-active";
+          statusDot.title = "Server Default Groq Key Active";
+        }
+        if (btnLabel) {
+          btnLabel.textContent = "API Key";
+        }
+        return;
+      }
+    }
+  } catch (err) {
+    console.warn("Could not check /api/auth/status:", err);
+  }
+
+  if (statusDot) {
+    statusDot.className = "status-dot-inactive";
+    statusDot.title = "Groq Key Not Configured (Click to set)";
+  }
+  if (btnLabel) {
+    btnLabel.textContent = "API Key !";
+  }
+}
+
+function initApiKeyModal() {
+  const modal = document.getElementById("apiKeyModal");
+  const btnOpen = document.getElementById("btnOpenApiKeyModal");
+  const btnClose = document.getElementById("btnCloseApiKeyModal");
+  const form = document.getElementById("apiKeyForm");
+  const input = document.getElementById("groqApiKeyInput");
+  const btnToggle = document.getElementById("btnToggleKeyVisibility");
+  const btnClear = document.getElementById("btnClearApiKey");
+  const notice = document.getElementById("apiKeyNotice");
+
+  if (!modal) return;
+
+  if (btnOpen) {
+    btnOpen.addEventListener("click", () => openApiKeyModal());
+  }
+
+  if (btnClose) {
+    btnClose.addEventListener("click", () => closeApiKeyModal());
+  }
+
+  modal.addEventListener("click", (e) => {
+    if (e.target === modal) closeApiKeyModal();
+  });
+
+  if (btnToggle && input) {
+    btnToggle.addEventListener("click", () => {
+      const isPassword = input.type === "password";
+      input.type = isPassword ? "text" : "password";
+      btnToggle.textContent = isPassword ? "🔒" : "👁️";
+    });
+  }
+
+  if (btnClear) {
+    btnClear.addEventListener("click", () => {
+      localStorage.removeItem("user_groq_key");
+      if (input) input.value = "";
+      if (notice) {
+        notice.textContent = "Personal API key removed. Using server default if configured.";
+        notice.className = "api-key-notice success";
+        notice.style.display = "block";
+      }
+      btnClear.style.display = "none";
+      updateApiKeyStatusUI();
+      setTimeout(() => closeApiKeyModal(), 1200);
+    });
+  }
+
+  if (form) {
+    form.addEventListener("submit", (e) => {
+      e.preventDefault();
+      const key = (input ? input.value : "").trim();
+      if (!key) {
+        if (notice) {
+          notice.textContent = "Please enter an API key or click Cancel.";
+          notice.className = "api-key-notice error";
+          notice.style.display = "block";
+        }
+        return;
+      }
+
+      if (!key.startsWith("gsk_") && key.length < 20) {
+        if (notice) {
+          notice.textContent = "Warning: Groq API keys usually start with 'gsk_'. Please ensure your key is valid.";
+          notice.className = "api-key-notice error";
+          notice.style.display = "block";
+        }
+      }
+
+      localStorage.setItem("user_groq_key", key);
+      updateApiKeyStatusUI();
+
+      if (notice) {
+        notice.textContent = "✓ Groq API Key saved successfully in your browser.";
+        notice.className = "api-key-notice success";
+        notice.style.display = "block";
+      }
+
+      setTimeout(() => {
+        closeApiKeyModal();
+      }, 700);
+    });
+  }
+
+  updateApiKeyStatusUI();
 }
 
 function initUploadModal() {

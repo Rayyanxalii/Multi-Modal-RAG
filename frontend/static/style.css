@@ -1538,3 +1538,118 @@ body {
   font-weight: 700;
   font-family: var(--dp-typography-mono);
 }
+
+/* ====================================================================
+   API Key Management Modal & Status Dot
+   ==================================================================== */
+.btn-api-key {
+  position: relative;
+  gap: 8px;
+}
+
+.status-dot-active {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background-color: #16a34a;
+  box-shadow: 0 0 0 2px rgba(22, 163, 74, 0.2);
+}
+
+.status-dot-inactive {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background-color: #d97706;
+  box-shadow: 0 0 0 2px rgba(217, 119, 6, 0.2);
+}
+
+.api-key-card {
+  max-width: 560px !important;
+}
+
+.api-key-input-group {
+  margin: 18px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.api-key-label {
+  font-family: var(--dp-typography-mono);
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--dp-color-ink);
+}
+
+.api-key-input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.api-key-input-wrapper input {
+  width: 100%;
+  padding-right: 44px;
+}
+
+.btn-key-visibility {
+  position: absolute;
+  right: 8px;
+  background: transparent;
+  border: none;
+  font-size: 14px;
+  cursor: pointer;
+  padding: 4px 8px;
+  opacity: 0.7;
+}
+
+.btn-key-visibility:hover {
+  opacity: 1;
+}
+
+.api-key-help {
+  font-family: var(--dp-typography-mono);
+  font-size: 11.5px;
+  color: var(--dp-color-quiet);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.api-key-link {
+  color: var(--dp-color-ink);
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.api-key-link:hover {
+  opacity: 0.8;
+}
+
+.api-key-notice {
+  font-family: var(--dp-typography-mono);
+  font-size: 12px;
+  padding: 10px 14px;
+  margin-bottom: 16px;
+  border: 1px solid var(--dp-color-ink);
+  background-color: #f4f4f4;
+}
+
+.api-key-notice.success {
+  border-color: #16a34a;
+  background-color: #f0fdf4;
+  color: #15803d;
+}
+
+.api-key-notice.error {
+  border-color: #dc2626;
+  background-color: #fef2f2;
+  color: #b91c1c;
+}
+

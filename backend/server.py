@@ -13,12 +13,18 @@ for p in (str(PROJECT_ROOT), str(BACKEND_DIR), str(BACKEND_SRC)):
     if p not in sys.path:
         sys.path.insert(0, p)
 
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Header
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import json
+
+from services.llm_service import (
+    set_request_groq_key,
+    reset_request_groq_key,
+    get_active_groq_key,
+)
 
 from rag.config import DATA_DIR, RAW_DATA_DIR, DEFAULT_PDF_PATH, FIGURES_DIR, TABLES_DIR, get_document_paths
 from rag.graph import (
@@ -106,12 +112,28 @@ class ChatRequest(BaseModel):
     question: str
     doc_id: str | None = "attention"
     thread_id: str | None = None
+    groq_api_key: str | None = None
 
 
 @app.get("/health")
 def health_check() -> dict[str, str]:
     """Health check endpoint for container probes, uptime monitoring, and load balancers."""
     return {"status": "ok"}
+
+
+@app.get("/api/auth/status")
+def get_auth_status(
+    x_groq_api_key: str | None = Header(None, alias="X-Groq-Api-Key"),
+) -> dict[str, Any]:
+    """Check whether a valid server-side or user-supplied Groq LLM key is configured."""
+    server_key = os.getenv("GROQ_API")
+    has_server_key = bool(server_key and server_key.strip())
+    has_user_key = bool(x_groq_api_key and x_groq_api_key.strip())
+    return {
+        "status": "ready" if (has_server_key or has_user_key) else "needs_key",
+        "has_server_key": has_server_key,
+        "has_user_key": has_user_key,
+    }
 
 
 @app.get("/")
@@ -258,11 +280,22 @@ def clear_document_history(doc_id: str) -> dict[str, Any]:
 
 
 @app.post("/api/chat")
-def submit_question(payload: ChatRequest) -> dict[str, Any]:
+def submit_question(
+    payload: ChatRequest,
+    x_groq_api_key: str | None = Header(None, alias="X-Groq-Api-Key"),
+) -> dict[str, Any]:
     """Execute question answering via the Multimodal LangGraph agent with conversational memory."""
     question = (payload.question or "").strip()
     if not question:
         raise HTTPException(status_code=400, detail="Question cannot be empty.")
+
+    user_groq_key = (x_groq_api_key or payload.groq_api_key or "").strip()
+    effective_key = user_groq_key or os.getenv("GROQ_API")
+    if not effective_key:
+        raise HTTPException(
+            status_code=401,
+            detail="Missing Groq API Key. Please click the 🔑 API Key button in the top navigation to add your free key.",
+        )
 
     doc_id = (payload.doc_id or "attention").strip().lower()
     thread_id = payload.thread_id or f"doc_{doc_id}"
@@ -275,6 +308,7 @@ def submit_question(payload: ChatRequest) -> dict[str, Any]:
             matches = list(RAW_DATA_DIR.glob(f"{doc_id}*.pdf"))
             pdf_path = matches[0] if matches else DEFAULT_PDF_PATH
 
+    token = set_request_groq_key(user_groq_key if user_groq_key else None)
     try:
         result = run_agentic_rag(question=question, pdf_path=pdf_path, thread_id=thread_id)
 
@@ -302,14 +336,27 @@ def submit_question(payload: ChatRequest) -> dict[str, Any]:
     except Exception as exc:
         print(f"[Error in /api/chat]: {exc}")
         raise HTTPException(status_code=500, detail=str(exc))
+    finally:
+        reset_request_groq_key(token)
 
 
 @app.post("/api/chat/stream")
-def stream_chat_question(payload: ChatRequest):
+def stream_chat_question(
+    payload: ChatRequest,
+    x_groq_api_key: str | None = Header(None, alias="X-Groq-Api-Key"),
+):
     """Execute question answering with real-time SSE token and pipeline status streaming."""
     question = (payload.question or "").strip()
     if not question:
         raise HTTPException(status_code=400, detail="Question cannot be empty.")
+
+    user_groq_key = (x_groq_api_key or payload.groq_api_key or "").strip()
+    effective_key = user_groq_key or os.getenv("GROQ_API")
+    if not effective_key:
+        raise HTTPException(
+            status_code=401,
+            detail="Missing Groq API Key. Please click the 🔑 API Key button in the top navigation to add your free key.",
+        )
 
     doc_id = (payload.doc_id or "attention").strip().lower()
     thread_id = payload.thread_id or f"doc_{doc_id}"
@@ -322,15 +369,25 @@ def stream_chat_question(payload: ChatRequest):
             pdf_path = matches[0] if matches else DEFAULT_PDF_PATH
 
     def event_stream():
-        for event in stream_agentic_rag(question=question, pdf_path=pdf_path, thread_id=thread_id):
-            if event.get("type") == "metadata":
-                for src in event.get("sources", []):
-                    img = src.get("image_path")
-                    rec_type = src.get("type", "figure")
-                    resolved = resolve_asset_url(img, doc_id=doc_id, record_type=rec_type)
-                    if resolved:
-                        src["web_image_url"] = resolved
-            yield f"data: {json.dumps(event)}\n\n"
+        token = set_request_groq_key(user_groq_key if user_groq_key else None)
+        try:
+            for event in stream_agentic_rag(question=question, pdf_path=pdf_path, thread_id=thread_id):
+                if event.get("type") == "metadata":
+                    for src in event.get("sources", []):
+                        img = src.get("image_path")
+                        rec_type = src.get("type", "figure")
+                        resolved = resolve_asset_url(img, doc_id=doc_id, record_type=rec_type)
+                        if resolved:
+                            src["web_image_url"] = resolved
+                yield f"data: {json.dumps(event)}\n\n"
+        except Exception as exc:
+            print(f"[Stream error]: {exc}")
+            err_msg = str(exc)
+            if "api_key" in err_msg.lower() or "unauthorized" in err_msg.lower() or "401" in err_msg:
+                err_msg = "Invalid or missing Groq API Key. Please check your key in the 🔑 API Key settings."
+            yield f"data: {json.dumps({'type': 'error', 'content': err_msg})}\n\n"
+        finally:
+            reset_request_groq_key(token)
 
     return StreamingResponse(
         event_stream(),
