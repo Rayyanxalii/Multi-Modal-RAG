@@ -1327,8 +1327,8 @@ function initUploadModal() {
     btnCloseUpload.disabled = true;
 
     try {
-      // Connect to SSE-streamed upload endpoint for live backend progress
-      const res = await fetch("/api/upload?stream=true", {
+      // Launch asynchronous background ingestion job (avoids Cloudflare/Render 100s timeouts)
+      const res = await fetch("/api/upload", {
         method: "POST",
         body: formData,
       });
@@ -1338,78 +1338,65 @@ function initUploadModal() {
         throw new Error(errorData.detail || `Upload failed: ${res.status}`);
       }
 
-      let finalDocId = null;
+      const initData = await res.json();
+      const jobId = initData.job_id;
+      let finalDocId = initData.doc_id || null;
       let finalMessage = "";
       let colpaliExisted = false;
       let alreadyExisted = false;
-      let receivedComplete = false;
 
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
+      if (!jobId) {
+        throw new Error("Server did not return an ingestion job ID.");
+      }
 
+      updateIngestionUI(5, `Uploaded ${file.name}. Starting pipeline...`, file.name);
+
+      let transientErrors = 0;
       while (true) {
-        const { value, done } = await reader.read();
-        if (done) break;
+        await new Promise((resolve) => setTimeout(resolve, 900));
 
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n");
-        buffer = lines.pop(); // Retain incomplete line
-
-        for (const line of lines) {
-          const trimmed = line.trim();
-          if (!trimmed.startsWith("data:")) continue;
-
-          const jsonStr = trimmed.slice(5).trim();
-          if (!jsonStr) continue;
-
-          try {
-            const data = JSON.parse(jsonStr);
-            if (data.stage === "error") {
-              throw new Error(data.message || "Ingestion error encountered on backend.");
-            }
-            if (data.progress !== undefined) {
-              updateIngestionUI(data.progress, data.message || "Processing...", file.name);
-            }
-            if (data.stage === "complete") {
-              receivedComplete = true;
-              finalDocId = data.doc_id;
-              finalMessage = data.message;
-              colpaliExisted = Boolean(data.colpali_existed);
-              alreadyExisted = Boolean(data.already_existed);
-            }
-          } catch (itemErr) {
-            if (itemErr.message && itemErr.message.includes("Ingestion error")) {
-              throw itemErr;
-            }
-            console.warn("Failed to parse ingestion event:", itemErr);
-          }
-        }
-      }
-
-      // Check remaining buffer
-      if (buffer.trim().startsWith("data:")) {
+        let statusRes;
         try {
-          const data = JSON.parse(buffer.trim().slice(5).trim());
-          if (data.stage === "error") {
-            throw new Error(data.message || "Ingestion error encountered on backend.");
+          statusRes = await fetch(`/api/upload/status/${encodeURIComponent(jobId)}`);
+        } catch (netErr) {
+          transientErrors += 1;
+          if (transientErrors >= 8) {
+            throw new Error(`Network connection lost while checking ingestion status: ${netErr.message}`);
           }
-          if (data.stage === "complete") {
-            receivedComplete = true;
-            finalDocId = data.doc_id;
-            finalMessage = data.message;
-            colpaliExisted = Boolean(data.colpali_existed);
-            alreadyExisted = Boolean(data.already_existed);
-          }
-        } catch (bufErr) {
-          if (bufErr.message && bufErr.message.includes("Ingestion error")) {
-            throw bufErr;
-          }
+          continue;
         }
-      }
 
-      if (!receivedComplete) {
-        throw new Error("Server stream closed before ingestion completed (the backend may have exceeded its memory/timeout limit).");
+        if (statusRes.status === 404) {
+          const errJson = await statusRes.json().catch(() => ({}));
+          throw new Error(errJson.detail || "Ingestion job expired or server restarted (memory limit reached).");
+        }
+
+        if (!statusRes.ok) {
+          transientErrors += 1;
+          if (transientErrors >= 8) {
+            throw new Error(`Server status check failed (HTTP ${statusRes.status}).`);
+          }
+          continue;
+        }
+
+        transientErrors = 0;
+        const job = await statusRes.json();
+
+        if (job.progress !== undefined) {
+          updateIngestionUI(job.progress, job.message || "Processing...", file.name);
+        }
+
+        if (job.stage === "error" || job.error) {
+          throw new Error(job.error || job.message || "Ingestion error encountered on backend.");
+        }
+
+        if (job.done || job.stage === "complete") {
+          finalDocId = job.doc_id || finalDocId;
+          finalMessage = job.message || `Successfully ingested ${file.name}!`;
+          colpaliExisted = Boolean(job.colpali_existed);
+          alreadyExisted = Boolean(job.already_existed);
+          break;
+        }
       }
 
       completeIngestionProgress(true, finalMessage || `Successfully ingested ${file.name}`);

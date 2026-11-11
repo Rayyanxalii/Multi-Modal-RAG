@@ -262,18 +262,21 @@ def stream_ingest_document(pdf_path: str | Path) -> Generator[dict[str, Any], No
     )
 
     # Stage 1: Render pages
+    import gc
     if local_pages_exist:
         yield {"stage": "rendering", "progress": 15, "message": "Rendered pages already exist locally — skipping rendering..."}
     else:
         yield {"stage": "rendering", "progress": 15, "message": "Rendering high-resolution document pages..."}
         render_pages_node(state)
+        gc.collect()
 
-    # Stage 2: Layout parsing & hierarchical chunks with IBM Docling
+    # Stage 2: Layout parsing & hierarchical chunks
     if local_chunks_exist:
         yield {"stage": "parsing", "progress": 40, "message": "Layout & text chunks already exist — skipping re-parsing..."}
     else:
         yield {"stage": "parsing", "progress": 40, "message": "Parsing document layout, headings & tables..."}
         parse_document_node(state)
+        gc.collect()
 
     # Stage 3: Figure & table extraction and cropping
     if local_visuals_exist:
@@ -281,10 +284,12 @@ def stream_ingest_document(pdf_path: str | Path) -> Generator[dict[str, Any], No
     else:
         yield {"stage": "cropping", "progress": 65, "message": "Extracting and cropping figures & data tables..."}
         extract_and_crop_node(state)
+        gc.collect()
 
     # Stage 4: Dense vector indexing into Qdrant
-    yield {"stage": "vectors", "progress": 82, "message": "Checking Qdrant vector database..."}
+    yield {"stage": "vectors", "progress": 82, "message": "Indexing text vectors into Qdrant..."}
     vec_res = index_vectors_node(state) or {}
+    gc.collect()
     qdrant_existed = bool(vec_res.get("qdrant_existed"))
     if qdrant_existed:
         pts = vec_res.get("qdrant_points", "")

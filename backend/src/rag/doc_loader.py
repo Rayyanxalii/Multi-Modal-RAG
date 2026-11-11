@@ -20,7 +20,8 @@ def render_pdf_to_images(
         output_dir = get_document_paths(pdf_path)["rendered_pages_dir"]
 
     from rag.fast_pdf_parser import is_low_memory_env
-    scale = 1.5 if is_low_memory_env() else 2.0
+    low_mem = is_low_memory_env()
+    base_scale = 1.5 if low_mem else 2.0
 
     output_dir.mkdir(parents=True, exist_ok=True)
     image_paths = []
@@ -30,6 +31,12 @@ def render_pdf_to_images(
             page_number = index + 1
             image_path = output_dir / f"page_{page_number}.png"
 
+            scale = base_scale
+            if low_mem:
+                max_dim = max(page.rect.width, page.rect.height)
+                if max_dim > 0 and (max_dim * scale) > 1300:
+                    scale = 1300.0 / max_dim
+
             pixmap = page.get_pixmap(
                 matrix=pymupdf.Matrix(scale, scale),
                 alpha=False,
@@ -38,7 +45,7 @@ def render_pdf_to_images(
             del pixmap
             image_paths.append(image_path)
 
-            if page_number % 10 == 0:
+            if page_number % 5 == 0:
                 gc.collect()
 
     return image_paths

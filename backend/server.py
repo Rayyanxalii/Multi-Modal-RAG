@@ -1,8 +1,12 @@
 """FastAPI Web Server for the Multimodal Agentic RAG """
 
+import gc
 import os
+import queue as queue_mod
 import shutil
 import sys
+import threading
+import uuid
 from pathlib import Path
 from typing import Any
 
@@ -407,12 +411,69 @@ def stream_chat_question(
     )
 
 
+# In-memory background ingestion job registry (prevents Render/Cloudflare 100s proxy timeouts)
+_INGEST_JOBS: dict[str, dict[str, Any]] = {}
+_INGEST_LOCK = threading.Lock()
+
+
+def _run_ingest_job(job_id: str, target_pdf: Path) -> None:
+    """Execute document ingestion in a background daemon thread updating job progress."""
+    try:
+        for event in stream_ingest_document(target_pdf):
+            with _INGEST_LOCK:
+                job = _INGEST_JOBS.get(job_id)
+                if job is not None:
+                    job.update({
+                        "stage": event.get("stage", job["stage"]),
+                        "progress": event.get("progress", job["progress"]),
+                        "message": event.get("message", job["message"]),
+                        "colpali_existed": event.get("colpali_existed", job.get("colpali_existed", False)),
+                        "qdrant_existed": event.get("qdrant_existed", job.get("qdrant_existed", False)),
+                        "already_existed": event.get("already_existed", job.get("already_existed", False)),
+                    })
+                    if event.get("stage") == "complete":
+                        job["done"] = True
+            gc.collect()
+
+        with _INGEST_LOCK:
+            job = _INGEST_JOBS.get(job_id)
+            if job and not job.get("done") and not job.get("error"):
+                job["done"] = True
+                job["stage"] = "complete"
+                job["progress"] = 100
+    except Exception as exc:
+        print(f"[Background Ingest Error ({job_id})]: {exc}")
+        with _INGEST_LOCK:
+            job = _INGEST_JOBS.get(job_id)
+            if job:
+                job["stage"] = "error"
+                job["progress"] = 100
+                job["error"] = str(exc)
+                job["message"] = str(exc)
+                job["done"] = True
+    finally:
+        gc.collect()
+
+
+@app.get("/api/upload/status/{job_id}")
+def get_upload_status(job_id: str) -> dict[str, Any]:
+    """Poll live progress of an asynchronous document ingestion job."""
+    with _INGEST_LOCK:
+        job = _INGEST_JOBS.get(job_id)
+        if not job:
+            raise HTTPException(
+                status_code=404,
+                detail="Ingestion job not found (the server may have restarted or exceeded memory limits).",
+            )
+        return dict(job)
+
+
 @app.post("/api/upload")
 async def upload_document(
     file: UploadFile = File(...),
     stream: bool = False,
 ):
-    """Upload a new PDF file and initiate automated ingestion with optional live SSE progress."""
+    """Upload a new PDF file and initiate automated ingestion (async background job by default)."""
     if not file.filename.lower().endswith(".pdf"):
         raise HTTPException(status_code=400, detail="Only PDF files are accepted.")
 
@@ -431,16 +492,31 @@ async def upload_document(
     print(f"[Upload] Saved '{file.filename}' to '{target_pdf}' (doc_id={doc_id})")
 
     if stream:
-        def progress_stream():
-            import gc
-            yield f"data: {json.dumps({'stage': 'uploaded', 'progress': 5, 'message': f'Uploaded {file.filename}'})}\n\n"
+        # SSE streaming mode with 4s keep-alive heartbeats via worker queue
+        q: queue_mod.Queue = queue_mod.Queue()
+
+        def worker():
             try:
                 for event in stream_ingest_document(target_pdf):
-                    yield f"data: {json.dumps(event)}\n\n"
+                    q.put(event)
             except Exception as exc:
-                yield f"data: {json.dumps({'stage': 'error', 'progress': 100, 'message': str(exc)})}\n\n"
+                q.put({"stage": "error", "progress": 100, "message": str(exc)})
             finally:
                 gc.collect()
+                q.put(None)
+
+        threading.Thread(target=worker, daemon=True).start()
+
+        def progress_stream():
+            yield f"data: {json.dumps({'stage': 'uploaded', 'progress': 5, 'message': f'Uploaded {file.filename}'})}\n\n"
+            while True:
+                try:
+                    event = q.get(timeout=4.0)
+                    if event is None:
+                        break
+                    yield f"data: {json.dumps(event)}\n\n"
+                except queue_mod.Empty:
+                    yield ": keep-alive\n\n"
 
         return StreamingResponse(
             progress_stream(),
@@ -452,22 +528,31 @@ async def upload_document(
             },
         )
 
-    # Non-streaming fallback
-    try:
-        ingest_result = ingest_document(target_pdf)
-        return {
-            "status": "success",
+    # Default asynchronous job mode: returns immediately so Cloudflare/Render proxies never time out
+    job_id = uuid.uuid4().hex[:12]
+    with _INGEST_LOCK:
+        _INGEST_JOBS[job_id] = {
+            "job_id": job_id,
             "doc_id": doc_id,
             "filename": file.filename,
+            "stage": "uploaded",
+            "progress": 5,
+            "message": f"Uploaded {file.filename}. Initializing pipeline...",
+            "colpali_existed": False,
+            "qdrant_existed": False,
+            "already_existed": False,
+            "done": False,
+            "error": None,
         }
-    except Exception as exc:
-        print(f"[Error during ingestion]: {exc}")
-        return {
-            "status": "uploaded",
-            "doc_id": doc_id,
-            "filename": file.filename,
-            "notice": f"Saved, background ingestion note: {exc}",
-        }
+
+    threading.Thread(target=_run_ingest_job, args=(job_id, target_pdf), daemon=True).start()
+
+    return {
+        "status": "accepted",
+        "job_id": job_id,
+        "doc_id": doc_id,
+        "filename": file.filename,
+    }
 
 
 @app.delete("/api/documents/{doc_id}")
