@@ -15,7 +15,7 @@ Powered by **LangGraph**, the system orchestrates an adaptive, self-correcting s
 > [!IMPORTANT]
 > **Hosting & Resource Constraints (Render Free Tier)**
 > * **Memory & Cold Starts**: The live demo is hosted on **Render's Free Tier (512 MB RAM, shared CPU)**. If the service has been idle, the first page load may take **30–50 seconds** to wake up.
-> * **PDF Size & Page Limits**: Because of the **512 MB RAM ceiling** on Render's free tier, please upload **compact PDFs (recommended: `< 5–10 MB` and `≤ 25 pages`)**. Very large or scan-heavy PDFs can exceed container memory or timeout limits. *(In low-memory cloud environments, the backend automatically engages the lightweight PyMuPDF parser [`fast_pdf_parser.py`](backend/src/rag/fast_pdf_parser.py) instead of heavy IBM Docling deep-learning models to stay safely under 512 MB RAM.)*
+> * **PDF Size & Page Limits (Enforced)**: Because of the **512 MB RAM ceiling** on Render's free tier, uploads on the hosted instance are **strictly limited to `10 MB` and `25 pages` maximum** (`MAX_UPLOAD_MB` / `MAX_UPLOAD_PAGES`). Larger files are automatically rejected before ingestion to protect server stability. *(In low-memory cloud environments, the backend automatically switches from heavy IBM Docling deep-learning models to the lightweight PyMuPDF parser [`fast_pdf_parser.py`](backend/src/rag/fast_pdf_parser.py) to stay safely under 512 MB RAM.)*
 > * **Bring Your Own Vision LLM Key (BYOK)**: For security and quota protection, visitors supply their own free **Groq API Key** via the **🔑 Vision LLM Key** button in the top navigation bar. Your key is stored solely in your browser's `localStorage` and is never persisted on the server—you can grab a free key in 30 seconds at [console.groq.com/keys](https://console.groq.com/keys).
 > * **Cloud Visual Search**: Late-interaction ColPali page indexing and MaxSim search run remotely on a **Hugging Face ZeroGPU Space**; heavy visual indexing may take a brief moment if the Space is waking from sleep.
 
@@ -337,6 +337,18 @@ The automated pipeline executes four unified stages for any ingested document:
 4. **Multi-Modal Vector Indexing**: Indexes dense text embeddings (`gemini-embedding-001`, 768-dim) into Qdrant (`omni_documents` with `document_id` payload filtering), builds BM25 heading search indices, and registers ColPali visual embeddings on Hugging Face ZeroGPU (automatically reusing existing indexes if already present).
 
 *(Documents can also be uploaded asynchronously via the **"+ Upload Document"** button in the Web Workspace with live job status polling.)*
+
+#### Adaptive Parser Trade-Off (Docling vs. PyMuPDF Lite)
+
+To operate cleanly across both high-RAM workstations and 512 MB free-tier containers without out-of-memory crashes, `parse_document_node` selects the parser dynamically based on available RAM (`USE_DOCLING=1` forces Docling):
+
+| Feature | IBM Docling (`docling_parser.py`, ≥ 2.5 GB RAM) | PyMuPDF Lite (`fast_pdf_parser.py`, 512 MB Cloud) |
+| :--- | :--- | :--- |
+| **Memory & Speed** | ~1.2–1.5 GB RAM, ~25–60s cold load | ~30 MB RAM, ~1–4s total |
+| **Text & Headings** | Neural layout predictor + `HybridChunker` | Font-size/boldness heuristics + 380-word semantic chunks |
+| **Tables** | **TableFormer** deep model (handles borderless & merged grids) | Native `page.find_tables()` → Markdown (best on ruled/bordered tables) |
+| **Figures & Captions** | Neural layout + auto-paired figure captions & vector diagrams | Embedded raster images (`≥ 60×60 pt`) |
+| **ColPali Visual Search** | Encodes full page PNGs on HF ZeroGPU (**identical**) | Encodes full page PNGs on HF ZeroGPU (**identical**) |
 
 ---
 
