@@ -8,6 +8,19 @@ Powered by **LangGraph**, the system orchestrates an adaptive, self-correcting s
 
 ---
 
+## Live Deployment & Free-Tier Disclaimer
+
+**Live App**: **[https://multi-modal-rag-fxw5.onrender.com/](https://multi-modal-rag-fxw5.onrender.com/)**
+
+> [!IMPORTANT]
+> **Hosting & Resource Constraints (Render Free Tier)**
+> * **Memory & Cold Starts**: The live demo is hosted on **Render's Free Tier (512 MB RAM, shared CPU)**. If the service has been idle, the first page load may take **30–50 seconds** to wake up.
+> * **PDF Size & Page Limits**: Because of the **512 MB RAM ceiling** on Render's free tier, please upload **compact PDFs (recommended: `< 5–10 MB` and `≤ 25 pages`)**. Very large or scan-heavy PDFs can exceed container memory or timeout limits. *(In low-memory cloud environments, the backend automatically engages the lightweight PyMuPDF parser [`fast_pdf_parser.py`](backend/src/rag/fast_pdf_parser.py) instead of heavy IBM Docling deep-learning models to stay safely under 512 MB RAM.)*
+> * **Bring Your Own Vision LLM Key (BYOK)**: For security and quota protection, visitors supply their own free **Groq API Key** via the **🔑 Vision LLM Key** button in the top navigation bar. Your key is stored solely in your browser's `localStorage` and is never persisted on the server—you can grab a free key in 30 seconds at [console.groq.com/keys](https://console.groq.com/keys).
+> * **Cloud Visual Search**: Late-interaction ColPali page indexing and MaxSim search run remotely on a **Hugging Face ZeroGPU Space**; heavy visual indexing may take a brief moment if the Space is waking from sleep.
+
+---
+
 ## Architecture Overview
 
 ```mermaid
@@ -25,7 +38,7 @@ graph TD;
     check_doc_status -.->|"Already Ingested"| route_query[3. route_query_node<br/>Fixed Parallel Multimodal Dispatch]
 
     %% Parallel Multi-Modal Retrieval Branches
-    route_query --> dense_retriever[4a. dense_retriever_node<br/>Qdrant nomic-embed-text: 5 Chunks]
+    route_query --> dense_retriever[4a. dense_retriever_node<br/>Qdrant gemini-embedding-001: 5 Chunks]
     route_query --> bm25_retriever[4b. bm25_retriever_node<br/>Heading Okapi BM25: 5 Chunks]
     route_query --> colpali_retriever[4c. colpali_retriever_node<br/>ColPali MaxSim on Page Embeddings]
 
@@ -58,7 +71,7 @@ graph TD;
    - Preserves spatial layout coordinates and table hierarchies across ingestion and retrieval.
 
 2. **Balanced Multimodal Retrieval (Calibrated Depth)**:
-   - **Dense Retrieval**: Retrieves **5 candidate text chunks** using Qdrant and `nomic-embed-text`.
+   - **Dense Retrieval**: Retrieves **5 candidate text chunks** using Qdrant (`omni_documents` collection) and Google Gemini `gemini-embedding-001` (768-dim, with local Ollama fallback).
    - **Lexical Retrieval**: Retrieves **5 candidate heading chunks** using Okapi BM25.
    - **Reciprocal Rank Fusion (RRF)**: Fuses both candidate streams ($k=60$) to select the **top 5 text chunks**.
    - **Visual Asset Discovery**: ColPali multi-vector late-interaction MaxSim discovers top visual pages, hydrating **up to 10 visual assets** (cropped figures and structured Markdown tables) with full caption metadata.
@@ -98,7 +111,7 @@ graph TD;
 
 | Retrieval Stage | Default Count | Purpose & Mechanism |
 | :--- | :--- | :--- |
-| **Dense Search** | **5 chunks** | Semantic vector search via Qdrant (`nomic-embed-text`) |
+| **Dense Search** | **5 chunks** | Semantic vector search via Qdrant (`gemini-embedding-001`) |
 | **BM25 Search** | **5 chunks** | Lexical keyword search over chunk section headings |
 | **RRF Fusion** | **5 chunks** | Reciprocal Rank Fusion ($k=60$) combining Dense + BM25 |
 | **ColPali Pages** | **5 pages** | Late-interaction MaxSim discovery on rendered page embeddings |
@@ -119,9 +132,12 @@ RAG/
 │       │   ├── config.py                 # Single source of truth for paths, models, & retrieval limits
 │       │   ├── doc_loader.py             # PyMuPDF page rendering pipeline
 │       │   ├── docling_parser.py         # IBM Docling layout parsing & hierarchical chunking
+│       │   ├── fast_pdf_parser.py        # Ultra-low-memory PyMuPDF parser for 512 MB cloud tiers
 │       │   ├── document_manager.py       # Multi-document listing and deletion utilities
 │       │   ├── ingest.py                 # Multi-stage automated ingestion CLI pipeline
 │       │   ├── main.py                   # Interactive CLI chat assistant
+│       │   ├── services/
+│       │   │   └── embedding_service.py  # Google Gemini 768-dim cloud embedding service (+ Ollama fallback)
 │       │   │
 │       │   ├── graph/                    # LangGraph Agentic RAG Subpackage
 │       │   │   ├── __init__.py           # Exports app, build_rag_graph, run_agentic_rag
@@ -188,12 +204,10 @@ RAG/
 
 - **Python**: `>=3.12`
 - **Package Manager**: [`uv`](https://github.com/astral-sh/uv) (recommended)
-- **Ollama**: Running instance with `nomic-embed-text`:
-  ```bash
-  ollama pull nomic-embed-text
-  ```
+- **Google Gemini API Key**: Free API key from Google AI Studio for `gemini-embedding-001` (768-dim cloud embeddings, zero local RAM required)
+- **Optional Ollama**: Local fallback with `nomic-embed-text` (`ollama pull nomic-embed-text`)
 - **Qdrant**: Running Qdrant cluster (Cloud or local container)
-- **Groq API**: An active Groq API key for LLM and VLM inference
+- **Groq API**: A Groq API key for LLM and VLM inference (or entered per-user directly in the Web UI via BYOK)
 
 ---
 
@@ -317,12 +331,12 @@ python -m rag.ingest --pdf data/raw/attention.pdf
 ```
 
 The automated pipeline executes four unified stages for any ingested document:
-1. **PyMuPDF Page Rendering**: Generates 2x high-resolution page images for inspection and visual embeddings.
-2. **IBM Docling Layout Parsing**: Extracts structural hierarchies, section headings, body paragraphs, and bounding boxes.
+1. **PyMuPDF Page Rendering**: Generates high-resolution page images for inspection and visual embeddings.
+2. **Adaptive Layout Parsing**: Uses IBM Docling on full-RAM hosts, or automatically switches to the lightweight PyMuPDF parser ([`fast_pdf_parser.py`](backend/src/rag/fast_pdf_parser.py)) on 512 MB cloud environments.
 3. **Visual Asset Extraction**: Automatically crops figures, diagrams, and plots as PNGs and formats tables into clean Markdown grids.
-4. **Multi-Modal Vector Indexing**: Indexes dense text embeddings (`nomic-embed-text`) into isolated Qdrant collections, builds BM25 heading search indices, and creates ColPali multi-vector page embeddings.
+4. **Multi-Modal Vector Indexing**: Indexes dense text embeddings (`gemini-embedding-001`, 768-dim) into Qdrant (`omni_documents` with `document_id` payload filtering), builds BM25 heading search indices, and registers ColPali visual embeddings on Hugging Face ZeroGPU (automatically reusing existing indexes if already present).
 
-*(Documents can also be uploaded and ingested directly via the **"+ Upload Document"** button in the Web Workspace).*
+*(Documents can also be uploaded asynchronously via the **"+ Upload Document"** button in the Web Workspace with live job status polling.)*
 
 ---
 
