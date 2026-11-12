@@ -126,6 +126,15 @@ def health_check() -> dict[str, str]:
     return {"status": "ok", "version": "2026-11-12-byok-v2"}
 
 
+def get_upload_limits() -> tuple[float, int]:
+    """Return (max_mb, max_pages) for PDF uploads, enforcing strict free-tier limits on cloud."""
+    from rag.fast_pdf_parser import is_low_memory_env
+    low_mem = is_low_memory_env()
+    max_mb = float(os.getenv("MAX_UPLOAD_MB", "10" if low_mem else "50"))
+    max_pages = int(os.getenv("MAX_UPLOAD_PAGES", "25" if low_mem else "150"))
+    return max_mb, max_pages
+
+
 @app.get("/api/auth/status")
 def get_auth_status(
     x_groq_api_key: str | None = Header(None, alias="X-Groq-Api-Key"),
@@ -134,10 +143,13 @@ def get_auth_status(
     server_key = os.getenv("GROQ_API")
     has_server_key = bool(server_key and server_key.strip())
     has_user_key = bool(x_groq_api_key and x_groq_api_key.strip())
+    max_mb, max_pages = get_upload_limits()
     return {
         "status": "ready" if (has_server_key or has_user_key) else "needs_key",
         "has_server_key": has_server_key,
         "has_user_key": has_user_key,
+        "max_upload_mb": max_mb,
+        "max_upload_pages": max_pages,
     }
 
 
@@ -494,12 +506,56 @@ async def upload_document(
         doc_id = f"doc_{Path(file.filename).stem[:8]}"
 
     target_pdf = RAW_DATA_DIR / f"{doc_id}.pdf"
+    temp_pdf = RAW_DATA_DIR / f".tmp_{uuid.uuid4().hex[:8]}_{doc_id}.pdf"
     RAW_DATA_DIR.mkdir(parents=True, exist_ok=True)
 
-    with target_pdf.open("wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
+    max_mb, max_pages = get_upload_limits()
+    max_bytes = int(max_mb * 1024 * 1024)
+    bytes_written = 0
 
-    print(f"[Upload] Saved '{file.filename}' to '{target_pdf}' (doc_id={doc_id})")
+    try:
+        with temp_pdf.open("wb") as buffer:
+            while True:
+                chunk = await file.read(65536)
+                if not chunk:
+                    break
+                bytes_written += len(chunk)
+                if bytes_written > max_bytes:
+                    raise HTTPException(
+                        status_code=413,
+                        detail=(
+                            f"PDF exceeds the {max_mb:g} MB limit "
+                            f"({bytes_written / (1024 * 1024):.1f} MB uploaded). "
+                            f"Please upload a PDF smaller than {max_mb:g} MB."
+                        ),
+                    )
+                buffer.write(chunk)
+
+        try:
+            import pymupdf
+            with pymupdf.open(temp_pdf) as pdf_doc:
+                page_count = len(pdf_doc)
+        except Exception as exc:
+            raise HTTPException(status_code=400, detail=f"Invalid or corrupted PDF file: {exc}") from exc
+
+        if page_count > max_pages:
+            raise HTTPException(
+                status_code=413,
+                detail=(
+                    f"PDF has {page_count} pages, exceeding the {max_pages}-page free-tier limit. "
+                    f"Please upload a PDF with {max_pages} pages or fewer."
+                ),
+            )
+
+        temp_pdf.replace(target_pdf)
+    except HTTPException:
+        temp_pdf.unlink(missing_ok=True)
+        raise
+    except Exception as exc:
+        temp_pdf.unlink(missing_ok=True)
+        raise HTTPException(status_code=500, detail=f"Failed to process uploaded PDF: {exc}") from exc
+
+    print(f"[Upload] Saved '{file.filename}' to '{target_pdf}' (doc_id={doc_id}, pages={page_count}, size={bytes_written}B)")
 
     if stream:
         # SSE streaming mode with 4s keep-alive heartbeats via worker queue

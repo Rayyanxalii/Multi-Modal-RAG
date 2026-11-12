@@ -1307,8 +1307,49 @@ function initUploadModal() {
   const uploadForm = document.getElementById("uploadForm");
   const fileInput = document.getElementById("pdfFileInput");
   const btnSubmitUpload = document.getElementById("btnSubmitUpload");
+  const errorNotice = document.getElementById("uploadErrorNotice");
+  const limitHint = document.getElementById("uploadLimitHint");
+
+  let maxUploadMb = 10;
+  let maxUploadPages = 25;
+
+  const showUploadError = (msg) => {
+    if (errorNotice) {
+      errorNotice.textContent = msg;
+      errorNotice.style.display = "block";
+    }
+  };
+
+  const clearUploadError = () => {
+    if (errorNotice) {
+      errorNotice.style.display = "none";
+      errorNotice.textContent = "";
+    }
+  };
+
+  const syncUploadLimits = async () => {
+    try {
+      const res = await fetch("/api/auth/status");
+      if (res.ok) {
+        const data = await res.json();
+        if (typeof data.max_upload_mb === "number") maxUploadMb = data.max_upload_mb;
+        if (typeof data.max_upload_pages === "number") maxUploadPages = data.max_upload_pages;
+        if (limitHint) {
+          limitHint.textContent = `Upload a PDF document (max ${maxUploadMb} MB, ${maxUploadPages} pages) to analyze its text, figures, and tables.`;
+        }
+      }
+    } catch (_) {}
+  };
+
+  syncUploadLimits();
+
+  if (fileInput) {
+    fileInput.addEventListener("change", () => clearUploadError());
+  }
 
   btnOpen.addEventListener("click", () => {
+    clearUploadError();
+    syncUploadLimits();
     modal.classList.add("open");
     fileInput.focus();
   });
@@ -1323,9 +1364,17 @@ function initUploadModal() {
 
   uploadForm.addEventListener("submit", async (e) => {
     e.preventDefault();
+    clearUploadError();
     if (!fileInput.files || fileInput.files.length === 0) return;
 
     const file = fileInput.files[0];
+    if (file.size > maxUploadMb * 1024 * 1024) {
+      const sizeMb = (file.size / (1024 * 1024)).toFixed(1);
+      const errMsg = `PDF exceeds the ${maxUploadMb} MB limit (${sizeMb} MB selected). Please choose a smaller PDF.`;
+      showUploadError(errMsg);
+      return;
+    }
+
     const formData = new FormData();
     formData.append("file", file);
 
@@ -1440,8 +1489,9 @@ function initUploadModal() {
         if (globalBar) globalBar.style.display = "none";
       }, alreadyExisted ? 5500 : 1800);
     } catch (err) {
-      completeIngestionProgress(false, err.message || String(err));
-      alert(`Error during ingestion: ${err.message || err}`);
+      const errMsg = err.message || String(err);
+      completeIngestionProgress(false, errMsg);
+      showUploadError(errMsg);
       setTimeout(() => {
         const box = document.getElementById("uploadProgressBox");
         const globalBar = document.getElementById("globalIngestBar");

@@ -194,8 +194,8 @@
       <div class="modal-header-rule">
         <h2 id="modalTitle" class="modal-title">Upload Technical Document</h2>
       </div>
-      <p class="modal-description">
-        Upload a PDF document to analyze its text, figures, and tables.
+      <p id="uploadLimitHint" class="modal-description">
+        Upload a PDF document (recommended: under 10 MB &amp; &le; 25 pages on free tier) to analyze its text, figures, and tables.
       </p>
 
       <form id="uploadForm">
@@ -206,6 +206,8 @@
           required 
           class="file-input-mono"
         >
+
+        <div id="uploadErrorNotice" class="api-key-notice error" style="display: none;"></div>
         
         <!-- Ingestion Progress Box with Animated Loading Bar -->
         <div id="uploadProgressBox" class="progress-box-sketch" style="display: none;">
@@ -297,6 +299,6 @@
     </div>
   </div>
 
-  <script src="/static/app.js?v=20261112"></script>
+  <script src="/static/app.js?v=20261112b"></script>
 </body>
 </html>
