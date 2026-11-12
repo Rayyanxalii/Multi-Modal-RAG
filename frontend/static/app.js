@@ -427,31 +427,34 @@ async function handleStreamingChat(query) {
       for (const line of lines) {
         const trimmed = line.trim();
         if (trimmed.startsWith("data: ")) {
+          let data = null;
           try {
-            const data = JSON.parse(trimmed.slice(6));
-            if (data.type === "status") {
-              if (!hasStartedTokens) {
-                statusDiv.innerHTML = `<span class="progress-spinner" aria-hidden="true">⏳</span> ${escapeHtml(data.message)}`;
-              }
-            } else if (data.type === "token") {
-              if (!hasStartedTokens) {
-                hasStartedTokens = true;
-                statusDiv.remove();
-              }
-              rawAnswer += data.delta;
-              answerBody.innerHTML = `<span class="streaming-text">${escapeHtml(rawAnswer)}</span><span class="streaming-cursor"></span>`;
-              stream.scrollTop = stream.scrollHeight;
-            } else if (data.type === "metadata") {
-              metadata = data;
-            } else if (data.type === "error") {
-              const errMsg = data.content || data.message || "Streaming error";
-              if (errMsg.toLowerCase().includes("api key") || errMsg.includes("401") || errMsg.toLowerCase().includes("vision")) {
-                openApiKeyModal("Please add a Vision LLM key to ask questions. (Hint: get a free key from Groq at console.groq.com)");
-              }
-              throw new Error(errMsg);
-            }
+            data = JSON.parse(trimmed.slice(6));
           } catch (pErr) {
             console.warn("Error parsing chat SSE chunk:", pErr);
+            continue;
+          }
+
+          if (data.type === "status") {
+            if (!hasStartedTokens) {
+              statusDiv.innerHTML = `<span class="progress-spinner" aria-hidden="true">⏳</span> ${escapeHtml(data.message)}`;
+            }
+          } else if (data.type === "token") {
+            if (!hasStartedTokens) {
+              hasStartedTokens = true;
+              statusDiv.remove();
+            }
+            rawAnswer += data.delta;
+            answerBody.innerHTML = `<span class="streaming-text">${escapeHtml(rawAnswer)}</span><span class="streaming-cursor"></span>`;
+            stream.scrollTop = stream.scrollHeight;
+          } else if (data.type === "metadata") {
+            metadata = data;
+          } else if (data.type === "error") {
+            const errMsg = data.content || data.message || "Streaming error";
+            if (errMsg.toLowerCase().includes("api key") || errMsg.includes("401") || errMsg.toLowerCase().includes("vision")) {
+              openApiKeyModal("Please add a Vision LLM key to ask questions. (Hint: get a free key from Groq at console.groq.com)");
+            }
+            throw new Error(errMsg);
           }
         }
       }

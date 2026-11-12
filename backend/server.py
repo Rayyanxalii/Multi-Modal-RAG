@@ -123,7 +123,7 @@ class ChatRequest(BaseModel):
 @app.get("/health")
 def health_check() -> dict[str, str]:
     """Health check endpoint for container probes, uptime monitoring, and load balancers."""
-    return {"status": "ok"}
+    return {"status": "ok", "version": "2026-11-12-byok-v2"}
 
 
 @app.get("/api/auth/status")
@@ -300,8 +300,8 @@ def submit_question(
     if not question:
         raise HTTPException(status_code=400, detail="Question cannot be empty.")
 
-    user_groq_key = (x_groq_api_key or payload.groq_api_key or "").strip()
-    effective_key = user_groq_key or os.getenv("GROQ_API")
+    user_groq_key = (x_groq_api_key or payload.groq_api_key or "").strip().strip("'\"")
+    effective_key = user_groq_key or (os.getenv("GROQ_API") or "").strip().strip("'\"") or None
     if not effective_key:
         raise HTTPException(
             status_code=401,
@@ -366,8 +366,8 @@ def stream_chat_question(
     if not question:
         raise HTTPException(status_code=400, detail="Question cannot be empty.")
 
-    user_groq_key = (x_groq_api_key or payload.groq_api_key or "").strip()
-    effective_key = user_groq_key or os.getenv("GROQ_API")
+    user_groq_key = (x_groq_api_key or payload.groq_api_key or "").strip().strip("'\"")
+    effective_key = user_groq_key or (os.getenv("GROQ_API") or "").strip().strip("'\"") or None
     if not effective_key:
         raise HTTPException(
             status_code=401,

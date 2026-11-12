@@ -475,26 +475,30 @@ def stream_agentic_rag(
             yield {"type": "token", "delta": err_msg}
 
     # 7. Grounding filter & checkpointer update
-    if _is_unanswerable_response(full_answer):
+    is_error_answer = full_answer.startswith("An error occurred:")
+    if is_error_answer:
+        sources = []
+    elif _is_unanswerable_response(full_answer):
         full_answer = "I don't have information about that in the document."
         sources = []
     else:
         raw_sources = state.get("sources", [])
         sources = filter_relevant_sources(full_answer, raw_sources, question=user_dialogue_question)
 
-    new_turn = [
-        {"role": "user", "content": user_dialogue_question},
-        {"role": "assistant", "content": full_answer, "sources": sources},
-    ]
+    if not is_error_answer:
+        new_turn = [
+            {"role": "user", "content": user_dialogue_question},
+            {"role": "assistant", "content": full_answer, "sources": sources},
+        ]
 
-    try:
-        app.update_state(config, {
-            "answer": full_answer,
-            "sources": sources,
-            "chat_history": new_turn,
-        })
-    except Exception as exc:
-        print(f"[Warning] Failed updating checkpointer in streaming mode: {exc}")
+        try:
+            app.update_state(config, {
+                "answer": full_answer,
+                "sources": sources,
+                "chat_history": new_turn,
+            })
+        except Exception as exc:
+            print(f"[Warning] Failed updating checkpointer in streaming mode: {exc}")
 
     yield {
         "type": "metadata",
