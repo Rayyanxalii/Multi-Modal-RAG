@@ -793,26 +793,41 @@ function parseMarkdownToHtml(rawText) {
   const mathTokens = [];
   let s = rawText;
 
-  // Stash math expressions
+  // Defensive pre-clean: Repair any legacy or corrupted math token remnants from previous turns
+  s = s.replace(/_{1,3}MATH_TOKEN_\d+_{1,3}/g, "$");
+
+  // Stash display/block math ($$ ... $$ and \[ ... \])
   s = s.replace(/\$\$([\s\S]+?)\$\$/g, (m, eq) => {
     const idx = mathTokens.length;
     mathTokens.push({ type: "block", code: eq.trim() });
-    return `___MATH_TOKEN_${idx}___`;
+    return `@@@MATH_TOKEN_${idx}@@@`;
   });
   s = s.replace(/\\\[([\s\S]+?)\\\]/g, (m, eq) => {
     const idx = mathTokens.length;
     mathTokens.push({ type: "block", code: eq.trim() });
-    return `___MATH_TOKEN_${idx}___`;
+    return `@@@MATH_TOKEN_${idx}@@@`;
   });
-  s = s.replace(/(?<!\$)\$([^\$\n]+?)\$(?!\$)/g, (m, eq) => {
-    const idx = mathTokens.length;
-    mathTokens.push({ type: "inline", code: eq.trim() });
-    return `___MATH_TOKEN_${idx}___`;
-  });
+
+  // Stash LaTeX parentheses \( ... \)
   s = s.replace(/\\\(([\s\S]+?)\\\)/g, (m, eq) => {
     const idx = mathTokens.length;
     mathTokens.push({ type: "inline", code: eq.trim() });
-    return `___MATH_TOKEN_${idx}___`;
+    return `@@@MATH_TOKEN_${idx}@@@`;
+  });
+
+  // Stash inline math ($ ... $) with strict currency disambiguation
+  s = s.replace(/(?<!\$)\$([^\$\n]+?)\$(?!\$)/g, (fullMatch, content) => {
+    const trimmed = content.trim();
+    const words = trimmed.split(/\s+/);
+    // If the content contains multiple English words without LaTeX commands or operators,
+    // it represents separate currency values (e.g. "$1,773 million and $2,938 million"), not a formula
+    const hasMathSymbols = /[\\=+^_{}[\]<>*/~|]/.test(trimmed) || /^[a-zA-Z]$/.test(trimmed);
+    if (!hasMathSymbols && words.length > 2) {
+      return fullMatch;
+    }
+    const idx = mathTokens.length;
+    mathTokens.push({ type: "inline", code: trimmed });
+    return `@@@MATH_TOKEN_${idx}@@@`;
   });
 
   // Pre-process inline sub-bullets like ": * **" or ". * **" -> newline with indent
@@ -864,10 +879,15 @@ function parseMarkdownToHtml(rawText) {
   // Single newlines
   s = s.replace(/([^>])\n([^<])/g, '$1<br>$2');
 
-  // Render & Re-inject math expressions
-  s = s.replace(/___MATH_TOKEN_(\d+)___/g, (match, idxStr) => {
+  // Render & Re-inject math expressions (using safe @@@ tokens unaffected by markdown bold/italic)
+  s = s.replace(/@@@MATH_TOKEN_(\d+)@@@/g, (match, idxStr) => {
     const token = mathTokens[parseInt(idxStr, 10)];
     if (!token) return match;
+
+    // Bare numeric values like "$1,773$" or "$1.70$" restore as clean currency amounts
+    if (/^[\d,.]+$/.test(token.code)) {
+      return `$${token.code}`;
+    }
 
     if (window.katex && typeof window.katex.renderToString === "function") {
       try {
