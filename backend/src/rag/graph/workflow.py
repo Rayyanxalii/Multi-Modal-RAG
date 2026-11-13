@@ -215,6 +215,7 @@ def run_agentic_rag(
         "original_question": question,
         "original_query": question,
         "pdf_path": target_pdf,
+        "doc_name": clean_doc,
         "retry_count": 0,
         "groq_api_key": groq_api_key,
     }
@@ -245,6 +246,7 @@ def stream_ingest_document(pdf_path: str | Path) -> Generator[dict[str, Any], No
     doc_paths = get_document_paths(pdf_obj)
     state: RAGState = {
         "pdf_path": target_pdf,
+        "doc_name": clean_id,
         "question": "",
         "original_question": "",
         "retry_count": 0,
@@ -380,6 +382,7 @@ def stream_agentic_rag(
         "original_question": question,
         "original_query": question,
         "pdf_path": target_pdf,
+        "doc_name": clean_doc,
         "retry_count": 0,
         "chat_history": existing_history,
         "groq_api_key": groq_api_key,

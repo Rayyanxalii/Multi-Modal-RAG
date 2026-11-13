@@ -136,3 +136,76 @@ class TestChatAuthValidation:
             )
             assert res.status_code == 401
             assert "Vision LLM API key required" in res.json().get("detail", "")
+
+
+class TestDocumentIsolation:
+    """Verify strict document isolation so multi-tenant documents never leak across queries."""
+
+    def test_dense_retriever_node_enforces_active_doc_id(self):
+        """dense_retriever_node must derive doc_id and filter out any foreign document chunks."""
+        from rag.graph.nodes import dense_retriever_node
+
+        mock_chunks = [
+            {"chunk_id": "dell_1", "document_id": "dell", "text": "Dell revenue"},
+            {"chunk_id": "nestle_1", "document_id": "nestle", "text": "Nestle profit"},
+        ]
+
+        with patch("rag.graph.nodes.search_chunks", return_value=mock_chunks) as mock_search:
+            state = {
+                "question": "What is the profit?",
+                "pdf_path": "data/raw/dell.pdf",
+                "doc_name": "dell",
+            }
+            res = dense_retriever_node(state)
+
+            # Assert search_chunks was called with doc_id="dell"
+            mock_search.assert_called_once_with("What is the profit?", top_k=5, doc_id="dell")
+
+            # Assert defense-in-depth discarded the foreign nestle chunk
+            matches = res["dense_matches"]
+            assert len(matches) == 1
+            assert matches[0]["document_id"] == "dell"
+
+    def test_text_fusion_node_purges_cross_document_leakage(self):
+        """text_fusion_node must discard any chunks from another document before RRF fusion."""
+        from rag.graph.nodes import text_fusion_node
+
+        state = {
+            "question": "Financial results",
+            "pdf_path": "data/raw/dell.pdf",
+            "doc_name": "dell",
+            "dense_matches": [
+                {"chunk_id": "dell_1", "document_id": "dell", "text": "Dell chunk"},
+                {"chunk_id": "nestle_9", "document_id": "nestle", "text": "Nestle chunk"},
+            ],
+            "bm25_matches": [
+                {"chunk_id": "dell_2", "document_id": "dell", "text": "Dell BM25"},
+            ],
+        }
+
+        res = text_fusion_node(state)
+        text_results = res["text_results"]
+        # All items must belong to dell
+        for r in text_results:
+            if r.get("document_id"):
+                assert r["document_id"] == "dell"
+
+    def test_search_chunks_constructs_doc_id_filter(self):
+        """search_chunks must attach a FieldCondition for document_id in Qdrant query filter."""
+        from rag.text_retrieval.search_chunks import search_chunks
+
+        with patch("rag.text_retrieval.search_chunks.get_client") as mock_get_client, \
+             patch("rag.services.embedding_service.embed_query", return_value=[0.1] * 768):
+
+            mock_client = mock_get_client.return_value
+            mock_client.query_points.return_value.points = []
+
+            search_chunks("test query", top_k=3, doc_id="dell_financials")
+
+            mock_client.query_points.assert_called_once()
+            _, kwargs = mock_client.query_points.call_args
+            query_filter = kwargs.get("query_filter")
+            assert query_filter is not None
+            assert query_filter.must[0].key == "document_id"
+            assert query_filter.must[0].match.value == "dell_financials"
+

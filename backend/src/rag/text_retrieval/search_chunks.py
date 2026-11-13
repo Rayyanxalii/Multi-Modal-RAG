@@ -28,18 +28,21 @@ def search_chunks(question: str, top_k: int = 5, doc_id: str | None = None) -> l
     from rag.services.embedding_service import embed_query
     query_embedding = embed_query(question)
 
-    # Optional filter by document_id
+    # Strict isolation by document_id
     query_filter = None
     if doc_id:
+        clean_doc = str(doc_id).strip().lower()
         from qdrant_client import models
         query_filter = models.Filter(
             must=[
                 models.FieldCondition(
                     key="document_id",
-                    match=models.MatchValue(value=str(doc_id).lower()),
+                    match=models.MatchValue(value=clean_doc),
                 )
             ]
         )
+    else:
+        print("[Warning] search_chunks called without doc_id! This allows cross-document results.")
 
     # 2. Retrieve the closest vectors from Qdrant.
     response = client.query_points(

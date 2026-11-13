@@ -411,14 +411,22 @@ def route_query_node(state: RAGState) -> dict[str, Any]:
 def dense_retriever_node(state: RAGState) -> dict[str, Any]:
     """Execute dense semantic vector search via Qdrant & nomic-embed-text."""
     query = state["question"].strip()
-    doc_id = state.get("doc_name")
+    pdf_path = Path(state.get("pdf_path") or DEFAULT_PDF_PATH)
+    doc_paths = get_document_paths(pdf_path)
+    doc_id = (state.get("doc_name") or doc_paths.get("doc_name") or pdf_path.stem).strip().lower()
+
     try:
         results = search_chunks(query, top_k=5, doc_id=doc_id)
-        print(f"  [Dense Retriever] Found {len(results)} candidate chunks in Qdrant.")
+        # Defense-in-depth: Discard any point that does not belong to this document
+        filtered = [
+            r for r in results
+            if not r.get("document_id") or str(r.get("document_id")).strip().lower() == doc_id
+        ]
+        print(f"  [Dense Retriever] Found {len(filtered)} isolated candidate chunks for '{doc_id}' in Qdrant.")
     except Exception as exc:
         print(f"[Warning] Dense retriever error: {exc}")
-        results = []
-    return {"dense_matches": results}
+        filtered = []
+    return {"dense_matches": filtered}
 
 
 def bm25_retriever_node(state: RAGState) -> dict[str, Any]:
@@ -438,8 +446,19 @@ def bm25_retriever_node(state: RAGState) -> dict[str, Any]:
 
 def text_fusion_node(state: RAGState) -> dict[str, Any]:
     """Fuse dense vector search and BM25 keywords via Reciprocal Rank Fusion (RRF)."""
+    pdf_path = Path(state.get("pdf_path") or DEFAULT_PDF_PATH)
+    doc_paths = get_document_paths(pdf_path)
+    active_doc = (state.get("doc_name") or doc_paths.get("doc_name") or pdf_path.stem).strip().lower()
+
     dense_matches = state.get("dense_matches") or []
     bm25_matches = state.get("bm25_matches") or []
+
+    # Strict isolation: ensure no cross-document dense matches leak through
+    if active_doc:
+        dense_matches = [
+            m for m in dense_matches
+            if not m.get("document_id") or str(m.get("document_id")).strip().lower() == active_doc
+        ]
 
     if not dense_matches and not bm25_matches:
         fused = []

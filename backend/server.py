@@ -393,7 +393,7 @@ def submit_question(
         else:
             # Check if any matching pdf exists in RAW_DATA_DIR
             matches = list(RAW_DATA_DIR.glob(f"{doc_id}*.pdf"))
-            pdf_path = matches[0] if matches else DEFAULT_PDF_PATH
+            pdf_path = matches[0] if matches else (RAW_DATA_DIR / f"{doc_id}.pdf")
 
     token = set_request_groq_key(effective_key)
     try:
@@ -458,7 +458,7 @@ def stream_chat_question(
             pdf_path = DEFAULT_PDF_PATH
         else:
             matches = list(RAW_DATA_DIR.glob(f"{doc_id}*.pdf"))
-            pdf_path = matches[0] if matches else DEFAULT_PDF_PATH
+            pdf_path = matches[0] if matches else (RAW_DATA_DIR / f"{doc_id}.pdf")
 
     def event_stream():
         token = set_request_groq_key(effective_key)
