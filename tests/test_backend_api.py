@@ -118,6 +118,53 @@ class TestAsyncUploadJobQueue:
         assert "done" in status_data
         assert isinstance(status_data["progress"], (int, float))
 
+    def test_upload_duplicate_name_deduplication_and_auto_increment(self, client: TestClient):
+        """Uploading identical content reuses doc_id; uploading different content auto-increments doc_id."""
+        from rag.config import RAW_DATA_DIR, CHUNKS_DIR
+        for p in RAW_DATA_DIR.glob("same_name_doc*.*"):
+            p.unlink(missing_ok=True)
+        for p in CHUNKS_DIR.glob("same_name_doc*.*"):
+            p.unlink(missing_ok=True)
+
+        pdf_bytes_v1 = create_test_pdf(pages=1, text_per_page="Original Document Version 1")
+        pdf_bytes_v2 = create_test_pdf(pages=1, text_per_page="Different Content Version 2")
+        pdf_bytes_v3 = create_test_pdf(pages=1, text_per_page="Yet Another Content Version 3")
+
+        try:
+            with patch("backend.server.threading.Thread"):
+                # 1. First upload -> doc_id="same_name_doc"
+                files1 = {"file": ("same_name_doc.pdf", io.BytesIO(pdf_bytes_v1), "application/pdf")}
+                res1 = client.post("/api/upload", files=files1)
+                assert res1.status_code == 200
+                data1 = res1.json()
+                assert data1["doc_id"] == "same_name_doc"
+
+                # 2. Identical re-upload -> reuses "same_name_doc"
+                files_identical = {"file": ("same_name_doc.pdf", io.BytesIO(pdf_bytes_v1), "application/pdf")}
+                res_same = client.post("/api/upload", files=files_identical)
+                assert res_same.status_code == 200
+                data_same = res_same.json()
+                assert data_same["doc_id"] == "same_name_doc"
+
+                # 3. Different content with same filename -> auto-increments to "same_name_doc_1"
+                files2 = {"file": ("same_name_doc.pdf", io.BytesIO(pdf_bytes_v2), "application/pdf")}
+                res2 = client.post("/api/upload", files=files2)
+                assert res2.status_code == 200
+                data2 = res2.json()
+                assert data2["doc_id"] == "same_name_doc_1"
+
+                # 4. Third different content -> auto-increments to "same_name_doc_2"
+                files3 = {"file": ("same_name_doc.pdf", io.BytesIO(pdf_bytes_v3), "application/pdf")}
+                res3 = client.post("/api/upload", files=files3)
+                assert res3.status_code == 200
+                data3 = res3.json()
+                assert data3["doc_id"] == "same_name_doc_2"
+        finally:
+            for p in RAW_DATA_DIR.glob("same_name_doc*.*"):
+                p.unlink(missing_ok=True)
+            for p in CHUNKS_DIR.glob("same_name_doc*.*"):
+                p.unlink(missing_ok=True)
+
 
 class TestChatAuthValidation:
     """Verify chat endpoints enforce user-supplied Groq key requirement."""

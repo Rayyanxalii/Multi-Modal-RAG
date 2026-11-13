@@ -31,7 +31,15 @@ from services.llm_service import (
     get_active_groq_key,
 )
 
-from rag.config import DATA_DIR, RAW_DATA_DIR, DEFAULT_PDF_PATH, FIGURES_DIR, TABLES_DIR, get_document_paths
+from rag.config import (
+    DATA_DIR,
+    RAW_DATA_DIR,
+    CHUNKS_DIR,
+    DEFAULT_PDF_PATH,
+    FIGURES_DIR,
+    TABLES_DIR,
+    get_document_paths,
+)
 from rag.graph import (
     app as rag_app,
     run_agentic_rag,
@@ -513,6 +521,7 @@ def _run_ingest_job(job_id: str, target_pdf: Path) -> None:
                         "stage": event.get("stage", job["stage"]),
                         "progress": event.get("progress", job["progress"]),
                         "message": event.get("message", job["message"]),
+                        "doc_id": event.get("doc_id", job.get("doc_id")),
                         "colpali_existed": event.get("colpali_existed", job.get("colpali_existed", False)),
                         "qdrant_existed": event.get("qdrant_existed", job.get("qdrant_existed", False)),
                         "already_existed": event.get("already_existed", job.get("already_existed", False)),
@@ -554,6 +563,16 @@ def get_upload_status(job_id: str) -> dict[str, Any]:
         return dict(job)
 
 
+def compute_file_sha256(path: Path) -> str:
+    """Compute SHA-256 checksum of a file for content-based deduplication."""
+    import hashlib
+    hasher = hashlib.sha256()
+    with path.open("rb") as f:
+        while chunk := f.read(65536):
+            hasher.update(chunk)
+    return hasher.hexdigest()
+
+
 @app.post("/api/upload")
 async def upload_document(
     file: UploadFile = File(...),
@@ -565,12 +584,11 @@ async def upload_document(
 
     # Sanitize document ID from filename
     raw_stem = Path(file.filename).stem.lower()
-    doc_id = "".join(c if c.isalnum() or c in ("-", "_") else "_" for c in raw_stem).strip("_")
-    if not doc_id:
-        doc_id = f"doc_{Path(file.filename).stem[:8]}"
+    base_id = "".join(c if c.isalnum() or c in ("-", "_") else "_" for c in raw_stem).strip("_")
+    if not base_id:
+        base_id = f"doc_{Path(file.filename).stem[:8]}"
 
-    target_pdf = RAW_DATA_DIR / f"{doc_id}.pdf"
-    temp_pdf = RAW_DATA_DIR / f".tmp_{uuid.uuid4().hex[:8]}_{doc_id}.pdf"
+    temp_pdf = RAW_DATA_DIR / f".tmp_{uuid.uuid4().hex[:8]}_{base_id}.pdf"
     RAW_DATA_DIR.mkdir(parents=True, exist_ok=True)
 
     max_mb, max_pages = get_upload_limits()
@@ -611,13 +629,72 @@ async def upload_document(
                 ),
             )
 
-        temp_pdf.replace(target_pdf)
+        # Content-based hash comparison for deduplication vs collision auto-increment
+        temp_hash = compute_file_sha256(temp_pdf)
+
+        doc_id = base_id
+        target_pdf = RAW_DATA_DIR / f"{doc_id}.pdf"
+        chunks_file = CHUNKS_DIR / f"{doc_id}_chunks.jsonl"
+
+        is_identical = False
+        if target_pdf.exists():
+            try:
+                is_identical = (compute_file_sha256(target_pdf) == temp_hash)
+            except Exception:
+                is_identical = False
+
+        if target_pdf.exists() or chunks_file.exists():
+            if is_identical:
+                # Same file re-uploaded! Reuse existing document ID without duplicate storage
+                temp_pdf.unlink(missing_ok=True)
+                print(f"[Upload] Identical content match for '{file.filename}' -> reusing existing doc_id='{doc_id}'")
+            else:
+                # Content differs! Auto-increment doc_id to avoid overwriting or mixing
+                import re
+                m = re.match(r"^(.*?)(?:_(\d+))?$", base_id)
+                clean_base = m.group(1) if m else base_id
+                start_num = int(m.group(2)) + 1 if (m and m.group(2)) else 1
+
+                counter = start_num
+                while True:
+                    candidate_id = f"{clean_base}_{counter}"
+                    cand_pdf = RAW_DATA_DIR / f"{candidate_id}.pdf"
+                    cand_chunks = CHUNKS_DIR / f"{candidate_id}_chunks.jsonl"
+
+                    if cand_pdf.exists():
+                        try:
+                            if compute_file_sha256(cand_pdf) == temp_hash:
+                                doc_id = candidate_id
+                                target_pdf = cand_pdf
+                                is_identical = True
+                                temp_pdf.unlink(missing_ok=True)
+                                print(f"[Upload] Identical content match for '{file.filename}' -> reusing existing doc_id='{doc_id}'")
+                                break
+                        except Exception:
+                            pass
+                    elif not cand_chunks.exists():
+                        # Found first unused auto-incremented ID
+                        doc_id = candidate_id
+                        target_pdf = cand_pdf
+                        temp_pdf.replace(target_pdf)
+                        print(f"[Upload] Auto-incremented duplicate filename '{file.filename}' -> doc_id='{doc_id}' ({target_pdf.name})")
+                        break
+                    counter += 1
+        else:
+            # First time seeing this document name
+            temp_pdf.replace(target_pdf)
     except HTTPException:
         temp_pdf.unlink(missing_ok=True)
         raise
     except Exception as exc:
         temp_pdf.unlink(missing_ok=True)
         raise HTTPException(status_code=500, detail=f"Failed to process uploaded PDF: {exc}") from exc
+
+    display_name = target_pdf.name
+    init_msg = f"Uploaded {file.filename}"
+    if doc_id != base_id:
+        init_msg += f" (auto-assigned as {display_name})"
+    init_msg += ". Initializing pipeline..."
 
     print(f"[Upload] Saved '{file.filename}' to '{target_pdf}' (doc_id={doc_id}, pages={page_count}, size={bytes_written}B)")
 
@@ -638,7 +715,7 @@ async def upload_document(
         threading.Thread(target=worker, daemon=True).start()
 
         def progress_stream():
-            yield f"data: {json.dumps({'stage': 'uploaded', 'progress': 5, 'message': f'Uploaded {file.filename}'})}\n\n"
+            yield f"data: {json.dumps({'stage': 'uploaded', 'progress': 5, 'message': init_msg, 'doc_id': doc_id})}\n\n"
             while True:
                 try:
                     event = q.get(timeout=4.0)
@@ -664,13 +741,14 @@ async def upload_document(
         _INGEST_JOBS[job_id] = {
             "job_id": job_id,
             "doc_id": doc_id,
-            "filename": file.filename,
+            "filename": display_name,
+            "original_filename": file.filename,
             "stage": "uploaded",
             "progress": 5,
-            "message": f"Uploaded {file.filename}. Initializing pipeline...",
+            "message": init_msg,
             "colpali_existed": False,
             "qdrant_existed": False,
-            "already_existed": False,
+            "already_existed": is_identical,
             "done": False,
             "error": None,
         }
@@ -681,7 +759,8 @@ async def upload_document(
         "status": "accepted",
         "job_id": job_id,
         "doc_id": doc_id,
-        "filename": file.filename,
+        "filename": display_name,
+        "original_filename": file.filename,
     }
 
 

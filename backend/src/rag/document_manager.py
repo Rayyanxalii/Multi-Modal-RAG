@@ -222,4 +222,30 @@ def list_all_documents() -> list[dict[str, Any]]:
             "tables": tbl_count,
         })
 
+    # Discover from raw PDFs directory in case chunks are in progress or omitted
+    for pdf_file in sorted(RAW_DATA_DIR.glob("*.pdf")):
+        stem = pdf_file.stem.lower()
+        if stem.startswith(".tmp_") or stem in seen:
+            continue
+        seen.add(stem)
+
+        pages_dir = RENDERED_PAGES_DIR if stem == "attention" else RENDERED_PAGES_DIR / stem
+        page_count = len(list(pages_dir.glob("*.png"))) if pages_dir.exists() else 0
+        if page_count == 0:
+            try:
+                import pymupdf
+                with pymupdf.open(pdf_file) as doc_obj:
+                    page_count = len(doc_obj)
+            except Exception:
+                page_count = 0
+
+        docs.append({
+            "doc_id": stem,
+            "title": stem.replace("_", " ").title(),
+            "pages": page_count,
+            "chunks": 0,
+            "figures": 0,
+            "tables": 0,
+        })
+
     return docs
