@@ -216,14 +216,25 @@ def get_document_pages(doc_id: str) -> dict[str, Any]:
 
     paths = get_document_paths(pdf_path)
     pages_dir: Path = paths["rendered_pages_dir"]
+    pages_dir.mkdir(parents=True, exist_ok=True)
 
-    # Render pages on demand if not yet rendered
-    if not pages_dir.exists() or not any(pages_dir.glob("page_*.png")):
+    # Determine total expected pages from PDF directly
+    try:
+        import pymupdf
+        with pymupdf.open(pdf_path) as doc_obj:
+            expected_pages = len(doc_obj)
+    except Exception:
+        expected_pages = 0
+
+    existing_pages = list(pages_dir.glob("page_*.png"))
+    # Render pages on demand if missing or incomplete
+    if expected_pages > 0 and len(existing_pages) < expected_pages:
         from rag.doc_loader import render_pdf_to_images
         render_pdf_to_images(pdf_path=pdf_path, output_dir=pages_dir)
+        existing_pages = list(pages_dir.glob("page_*.png"))
 
     page_files = sorted(
-        pages_dir.glob("page_*.png"),
+        existing_pages,
         key=lambda p: int("".join(filter(str.isdigit, p.stem)) or "0"),
     )
 
@@ -232,7 +243,8 @@ def get_document_pages(doc_id: str) -> dict[str, Any]:
         rel_path = p.relative_to(DATA_DIR).as_posix()
         pages.append({
             "page_number": idx,
-            "image_url": f"/data/{rel_path}",
+            "image_url": f"/api/documents/{clean_id}/pages/{idx}",
+            "static_url": f"/data/{rel_path}",
             "filename": p.name,
         })
 
@@ -244,6 +256,58 @@ def get_document_pages(doc_id: str) -> dict[str, Any]:
         "pages": pages,
         "pdf_url": f"/api/documents/{clean_id}/pdf",
     }
+
+
+@app.get("/api/documents/{doc_id}/pages/{page_num}")
+def get_document_page_image(doc_id: str, page_num: int):
+    """Serve a specific rendered page image on demand, rendering dynamically if missing."""
+    clean_id = (doc_id or "attention").strip().lower()
+    pdf_path = RAW_DATA_DIR / f"{clean_id}.pdf"
+    if not pdf_path.exists():
+        if clean_id == "attention":
+            pdf_path = DEFAULT_PDF_PATH
+        else:
+            matches = list(RAW_DATA_DIR.glob(f"{clean_id}*.pdf"))
+            pdf_path = matches[0] if matches else None
+
+    if not pdf_path or not pdf_path.exists():
+        raise HTTPException(status_code=404, detail=f"Document '{doc_id}' not found.")
+
+    paths = get_document_paths(pdf_path)
+    pages_dir: Path = paths["rendered_pages_dir"]
+    pages_dir.mkdir(parents=True, exist_ok=True)
+
+    target_img = pages_dir / f"page_{page_num}.png"
+    if not target_img.exists():
+        cand = pages_dir / f"page_{page_num:04d}.png"
+        if cand.exists():
+            target_img = cand
+
+    # On-demand single page render if missing (<40ms via PyMuPDF)
+    if not target_img.exists():
+        try:
+            import pymupdf
+            with pymupdf.open(pdf_path) as pdf_doc:
+                if 1 <= page_num <= len(pdf_doc):
+                    page = pdf_doc[page_num - 1]
+                    scale = 1.5
+                    max_dim = max(page.rect.width, page.rect.height)
+                    if max_dim > 0 and (max_dim * scale) > 1300:
+                        scale = 1300.0 / max_dim
+                    pix = page.get_pixmap(matrix=pymupdf.Matrix(scale, scale), alpha=False)
+                    pix.save(str(target_img))
+                    del pix
+        except Exception as exc:
+            print(f"[Page Render Error] Failed rendering page {page_num} for {doc_id}: {exc}")
+
+    if not target_img.exists():
+        raise HTTPException(status_code=404, detail=f"Page {page_num} could not be rendered.")
+
+    return FileResponse(
+        target_img,
+        media_type="image/png",
+        headers={"Cache-Control": "public, max-age=86400"},
+    )
 
 
 @app.get("/api/documents/{doc_id}/history")

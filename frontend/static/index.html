@@ -12,7 +12,7 @@
   <link rel="stylesheet" href="/static/vendor/katex/katex.min.css">
   <script defer src="/static/vendor/katex/katex.min.js"></script>
   <script defer src="/static/vendor/katex/contrib/auto-render.min.js"></script>
-  <link rel="stylesheet" href="/static/style.css?v=20261112">
+  <link rel="stylesheet" href="/static/style.css?v=20261113c">
 </head>
 <body>
 
@@ -163,6 +163,12 @@
             <div id="pageViewContainer" class="page-view-container">
               <div id="pageImageWrapper" class="page-image-wrapper">
                 <img id="viewerPageImg" src="" alt="Rendered page preview" class="rendered-page-preview" style="display: none;">
+                <div id="viewerFallbackCard" class="viewer-fallback-card" style="display: none;">
+                  <p class="viewer-fallback-msg">Page preview rendering or temporarily unavailable.</p>
+                  <button type="button" id="btnFallbackPdfView" class="btn-mono-primary" style="margin-top: 8px;">
+                    View in Native PDF Mode
+                  </button>
+                </div>
               </div>
             </div>
 
@@ -299,6 +305,6 @@
     </div>
   </div>
 
-  <script src="/static/app.js?v=20261113b"></script>
+  <script src="/static/app.js?v=20261113c"></script>
 </body>
 </html>

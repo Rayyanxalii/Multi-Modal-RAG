@@ -910,6 +910,23 @@ body {
   filter: grayscale(100%) contrast(105%);
 }
 
+.viewer-fallback-card {
+  padding: 36px 20px;
+  text-align: center;
+  background: var(--dp-color-paper);
+  border: var(--dp-border-rule-thin) dashed var(--dp-color-quiet);
+  border-radius: var(--dp-radius-card);
+  margin: 40px auto;
+  max-width: 320px;
+}
+
+.viewer-fallback-msg {
+  font-size: 13px;
+  color: var(--dp-color-ink-muted);
+  line-height: 1.5;
+  margin-bottom: 12px;
+}
+
 /* Thumbnail Quick-Jump Strip */
 .thumbnail-strip {
   display: flex;

@@ -83,6 +83,13 @@ class TestDocumentArchiveEndpoints:
         assert data.get("total_pages", 0) > 0
         assert len(data.get("pages", [])) > 0
 
+    def test_get_specific_page_image_on_demand(self, client: TestClient):
+        """Dedicated page image endpoint must serve image/png on demand."""
+        res = client.get("/api/documents/attention/pages/1")
+        assert res.status_code == 200
+        assert "image/png" in res.headers.get("content-type", "")
+        assert len(res.content) > 1000
+
 
 class TestAsyncUploadJobQueue:
     """Verify background ingestion job creation and polling."""

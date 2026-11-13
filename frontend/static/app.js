@@ -1608,6 +1608,11 @@ function initDocViewer() {
   if (tabPdf) {
     tabPdf.addEventListener("click", () => setViewerMode("pdf"));
   }
+
+  const btnFallbackPdf = document.getElementById("btnFallbackPdfView");
+  if (btnFallbackPdf) {
+    btnFallbackPdf.addEventListener("click", () => setViewerMode("pdf"));
+  }
 }
 
 async function toggleDocViewer(forceState) {
@@ -1668,9 +1673,22 @@ function goToPage(pageNum) {
   currentPage = Math.max(1, Math.min(pageNum, totalPages));
 
   const imgEl = document.getElementById("viewerPageImg");
+  const fallback = document.getElementById("viewerFallbackCard");
+
   if (imgEl && docPagesList.length >= currentPage) {
-    imgEl.src = docPagesList[currentPage - 1].image_url;
-    imgEl.style.display = "block";
+    const pageItem = docPagesList[currentPage - 1];
+    imgEl.onload = () => {
+      if (fallback) fallback.style.display = "none";
+      imgEl.style.display = "block";
+    };
+    imgEl.onerror = () => {
+      console.warn(`[Viewer] Failed loading page preview: ${imgEl.src}`);
+      imgEl.style.display = "none";
+      if (fallback) fallback.style.display = "block";
+    };
+
+    if (fallback) fallback.style.display = "none";
+    imgEl.src = pageItem.image_url;
   }
 
   const badge = document.getElementById("viewerPageBadge");
