@@ -25,3 +25,7 @@ data/embeddings/
 # Diagnostics & Internal Scratch Caches
 data/retrieval_runs/
 data/experiments/.cache_*
+
+# Test suite & pytest cache (kept local only)
+tests/
+.pytest_cache/
