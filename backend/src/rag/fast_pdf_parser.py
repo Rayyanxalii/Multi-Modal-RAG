@@ -14,21 +14,37 @@ from rag.config import DEFAULT_PDF_PATH, get_document_paths
 
 
 def is_low_memory_env() -> bool:
-    """Detect constrained cloud environments (e.g. Render 512 MB Free Tier) where Docling would OOM."""
+    """Detect constrained environments or default to lightweight PyMuPDF parser to protect against OOM."""
+    # 1. Explicit user opt-in for heavy IBM Docling
+    if os.getenv("USE_DOCLING", "").strip().lower() in ("1", "true", "yes"):
+        return False
+
+    # 2. Explicit flag for low-memory parser
     low_flag = os.getenv("LOW_MEMORY_PARSER", "").strip().lower()
     if low_flag in ("1", "true", "yes"):
         return True
     if low_flag in ("0", "false", "no"):
         return False
 
-    if os.getenv("USE_DOCLING", "").strip().lower() in ("1", "true", "yes"):
-        return False
-
-    # Render sets RENDER=true on all services
-    if os.getenv("RENDER", "").strip().lower() == "true":
+    # 3. Cloud / container platform detection
+    cloud_vars = (
+        "RENDER",
+        "RENDER_SERVICE_ID",
+        "RENDER_INSTANCE_ID",
+        "SPACE_ID",
+        "K_SERVICE",
+        "FLY_APP_NAME",
+        "DYNO",
+        "AWS_EXECUTION_ENV",
+    )
+    if any(os.getenv(v) for v in cloud_vars):
         return True
 
-    # Check Linux cgroup memory ceiling (Docker, Render, Cloud Run, HF CPU Basic)
+    # Docker container environment
+    if Path("/.dockerenv").exists():
+        return True
+
+    # 4. Check Linux cgroup memory ceiling (Docker, Render, Cloud Run, HF CPU Basic)
     for cgroup_path in (
         "/sys/fs/cgroup/memory.max",
         "/sys/fs/cgroup/memory/memory.limit_in_bytes",
@@ -39,21 +55,22 @@ def is_low_memory_env() -> bool:
                 val = p.read_text(encoding="utf-8").strip()
                 if val.isdigit():
                     limit_mb = int(val) / (1024 * 1024)
-                    if 0 < limit_mb < 2200:
+                    if 0 < limit_mb < 3500:
                         return True
         except Exception:
             pass
 
-    # Fallback check on host total RAM
+    # 5. Check host total RAM
     try:
         import psutil
         total_mb = psutil.virtual_memory().total / (1024 * 1024)
-        if total_mb < 2500:
+        if total_mb < 3500:
             return True
     except Exception:
         pass
 
-    return False
+    # Default to lightweight parser for maximum stability and speed
+    return True
 
 
 def is_fast_parsed_doc(document_json_path: Path) -> bool:

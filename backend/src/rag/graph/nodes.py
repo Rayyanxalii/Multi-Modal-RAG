@@ -129,17 +129,18 @@ def render_pages_node(state: RAGState) -> dict[str, Any]:
 
 
 def parse_document_node(state: RAGState) -> dict[str, Any]:
-    """Parse PDF layout hierarchy & extract text chunks (Docling on full RAM, PyMuPDF Lite on cloud)."""
+    """Parse PDF layout hierarchy & extract text chunks (PyMuPDF Lite by default, Docling only if USE_DOCLING=1)."""
     from rag.fast_pdf_parser import is_low_memory_env, parse_pdf_fast
     pdf_path = Path(state.get("pdf_path") or DEFAULT_PDF_PATH)
     doc_paths = get_document_paths(pdf_path)
 
-    if is_low_memory_env():
-        print(f"[Ingestion] Low-memory environment detected. Parsing '{pdf_path.name}' with PyMuPDF Lite engine...")
+    use_docling = os.getenv("USE_DOCLING", "").strip().lower() in ("1", "true", "yes")
+    if not use_docling or is_low_memory_env():
+        print(f"[Ingestion] Parsing '{pdf_path.name}' with high-speed PyMuPDF Lite engine (<35 MB RAM)...")
         parse_pdf_fast(pdf_path, doc_paths=doc_paths)
         return {}
 
-    print(f"[Ingestion] Parsing document layout: {pdf_path.name}")
+    print(f"[Ingestion] Parsing document layout with Docling: {pdf_path.name}")
     try:
         from rag.docling_parser import parse_pdf_to_chunks
         parse_pdf_to_chunks(pdf_path, doc_paths=doc_paths)

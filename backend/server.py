@@ -142,7 +142,7 @@ def get_auth_status(
     """Check whether a valid server-side or user-supplied Groq LLM key is configured."""
     server_key = os.getenv("GROQ_API")
     has_server_key = bool(server_key and server_key.strip())
-    has_user_key = bool(x_groq_api_key and x_groq_api_key.strip())
+    has_user_key = bool(isinstance(x_groq_api_key, str) and x_groq_api_key.strip())
     max_mb, max_pages = get_upload_limits()
     return {
         "status": "ready" if (has_server_key or has_user_key) else "needs_key",

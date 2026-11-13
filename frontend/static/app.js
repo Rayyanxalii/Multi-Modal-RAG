@@ -1417,7 +1417,7 @@ function initUploadModal() {
           statusRes = await fetch(`/api/upload/status/${encodeURIComponent(jobId)}`);
         } catch (netErr) {
           transientErrors += 1;
-          if (transientErrors >= 8) {
+          if (transientErrors >= 15) {
             throw new Error(`Network connection lost while checking ingestion status: ${netErr.message}`);
           }
           continue;
@@ -1430,7 +1430,10 @@ function initUploadModal() {
 
         if (!statusRes.ok) {
           transientErrors += 1;
-          if (transientErrors >= 8) {
+          if (transientErrors >= 15) {
+            if (statusRes.status === 502 || statusRes.status === 503 || statusRes.status === 504) {
+              throw new Error(`Server temporarily unreachable (HTTP ${statusRes.status} Bad Gateway). The container may have restarted.`);
+            }
             throw new Error(`Server status check failed (HTTP ${statusRes.status}).`);
           }
           continue;

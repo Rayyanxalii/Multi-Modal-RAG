@@ -85,15 +85,20 @@ class ColPaliCloudClient:
             raise ValueError(f"No page images provided for document '{doc_id}'")
 
         print(f"[ColPali Cloud] Uploading {len(image_paths)} pages for '{doc_id}' to ZeroGPU...")
-        files = [handle_file(str(p)) for p in sorted(image_paths)]
-
-        result = self.client.predict(
-            doc_id=doc_id,
-            image_files=files,
-            api_name="/index",
-        )
-        print(f"[ColPali Cloud] Indexing complete: {result}")
-        return result
+        files = None
+        try:
+            files = [handle_file(str(p)) for p in sorted(image_paths)]
+            result = self.client.predict(
+                doc_id=doc_id,
+                image_files=files,
+                api_name="/index",
+            )
+            print(f"[ColPali Cloud] Indexing complete: {result}")
+            return result
+        finally:
+            del files
+            import gc
+            gc.collect()
 
     def search(
         self,
