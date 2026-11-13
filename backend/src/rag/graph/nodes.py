@@ -1093,20 +1093,27 @@ def build_vlm_messages(state: RAGState) -> tuple[list[ChatMessage], list[Any], s
     max_images = 1
     attached_images = 0
 
-    # 1. Text Chunks (stay comfortably within Groq's 7,000 ITPM rate limit)
-    max_chunks = 5
+    # 1. Text Chunks (strictly budgeted by default to stay well under Groq's 7,000 ITPM limit)
+    max_chunks = 3
     selected_text_results = text_results[:max_chunks]
     if selected_text_results:
         text_parts = ["Retrieved Text Chunks:"]
+        total_chunk_chars = 0
+        max_chunk_chars_budget = 2000
         for item in selected_text_results:
+            if total_chunk_chars >= max_chunk_chars_budget:
+                break
             chunk_id = item.get("chunk_id", "Unknown")
             pages = item.get("page_numbers") or []
             page_str = ", ".join(str(p) for p in pages) if pages else "Unknown"
             raw_text = item.get("text") or item.get("contextualized_text") or ""
             text = str(raw_text).strip()
-            text_parts.append(
-                f"[Source {source_idx} | Text Chunk {chunk_id} | Page(s): {page_str}]\n{text}"
-            )
+            # Truncate individual chunk to 650 chars max to guarantee low token usage
+            if len(text) > 650:
+                text = text[:650] + "..."
+            entry = f"[Source {source_idx} | Text Chunk {chunk_id} | Page(s): {page_str}]\n{text}"
+            total_chunk_chars += len(entry)
+            text_parts.append(entry)
             source_idx += 1
         user_blocks.append(TextBlock(text="\n\n".join(text_parts)))
 
@@ -1122,9 +1129,9 @@ def build_vlm_messages(state: RAGState) -> tuple[list[ChatMessage], list[Any], s
 
             if rec_type == "table":
                 table_md = str(item.get("table_markdown", "")).strip()
-                # Truncate giant table markdown to 850 chars to prevent rate limit spikes
-                if len(table_md) > 850:
-                    table_md = table_md[:850] + "\n... [table truncated for token budget]"
+                # Truncate table markdown to 350 chars to prevent rate limit spikes
+                if len(table_md) > 350:
+                    table_md = table_md[:350] + "\n... [table truncated for token budget]"
                 lines = [f"[Source {source_idx} | Table {rec_id} | Page: {page}]"]
                 if caption:
                     lines.append(f"Caption: {caption}")
@@ -1161,12 +1168,12 @@ def build_vlm_messages(state: RAGState) -> tuple[list[ChatMessage], list[Any], s
     if is_overview_query(q_to_eval):
         prompt_instruction = (
             f"Question: {question}\n\n"
-            "Please synthesize a clear, concise (around 250-350 words), and well-structured executive summary of the document based on the provided context, citing relevant sources."
+            "Please synthesize a clear, concise (around 200-250 words), and well-structured executive summary of the document based on the provided context, citing relevant sources."
         )
     else:
         prompt_instruction = (
             f"Question: {question}\n\n"
-            "Please provide a clear, detailed, grounded explanation citing relevant sources."
+            "Please provide a clear, concise, detailed grounded explanation citing relevant sources (around 150-250 words)."
         )
     user_blocks.append(TextBlock(text=prompt_instruction))
 
@@ -1174,11 +1181,16 @@ def build_vlm_messages(state: RAGState) -> tuple[list[ChatMessage], list[Any], s
         ChatMessage(role=MessageRole.SYSTEM, content=system_prompt),
     ]
 
-    # Prepend up to last 4 conversation messages (2 dialogue turns) as short-term memory context
+    # Prepend up to last 2 conversation messages (1 dialogue turn) as short-term memory context,
+    # strictly truncating previous assistant replies so history doesn't consume the token budget
     if chat_history:
-        for msg in chat_history[-4:]:
+        for msg in chat_history[-2:]:
             role = MessageRole.USER if msg.get("role") == "user" else MessageRole.ASSISTANT
             content = str(msg.get("content", "")).strip()
+            if role == MessageRole.ASSISTANT and len(content) > 250:
+                content = content[:250] + "..."
+            elif role == MessageRole.USER and len(content) > 150:
+                content = content[:150] + "..."
             if content:
                 messages.append(ChatMessage(role=role, content=content))
 
@@ -1215,15 +1227,19 @@ def generate_answer_node(state: RAGState) -> dict[str, Any]:
     except Exception as exc:
         err_str = str(exc)
         if "413" in err_str or "rate_limit_exceeded" in err_str or "tokens" in err_str.lower():
-            print(f"\n[Self-Healing] Groq rate-limit/token ceiling encountered ({err_str[:70]}). Retrying with lean text payload...")
-            lean_blocks = [b for b in user_blocks if not isinstance(b, ImageBlock)]
+            print(f"\n[Self-Healing] Groq rate-limit/token ceiling encountered ({err_str[:70]}). Retrying with ultralight payload...")
+            top_chunk_text = ""
+            if selected_text_results:
+                raw_c = selected_text_results[0].get("text") or selected_text_results[0].get("contextualized_text") or ""
+                top_chunk_text = f"Context:\n{str(raw_c)[:450]}\n\n"
+            lean_user_prompt = f"{top_chunk_text}Question: {user_dialogue_question}\n\nAnswer concisely based on the context above."
             lean_messages = [
-                ChatMessage(role=MessageRole.SYSTEM, content=system_prompt),
-                ChatMessage(role=MessageRole.USER, blocks=lean_blocks),
+                ChatMessage(role=MessageRole.SYSTEM, content="You are a helpful AI assistant. Answer the user question concisely using the provided context."),
+                ChatMessage(role=MessageRole.USER, content=lean_user_prompt),
             ]
             try:
                 response = active_vision.chat(lean_messages).message.content.strip()
-                print("[Self-Healing] Recovery successful: generated grounded answer without visual tokens.")
+                print("[Self-Healing] Recovery successful: generated concise grounded answer.")
             except Exception as retry_exc:
                 response = f"An error occurred while generating the answer: {retry_exc}"
         else:

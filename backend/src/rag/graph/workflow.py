@@ -459,11 +459,15 @@ def stream_agentic_rag(
     except Exception as exc:
         err_str = str(exc)
         if "413" in err_str or "rate_limit_exceeded" in err_str or "tokens" in err_str.lower():
-            yield {"type": "status", "stage": "self_healing", "message": "Adapting token payload..."}
-            lean_blocks = [b for b in user_blocks if not isinstance(b, ImageBlock)]
+            yield {"type": "status", "stage": "self_healing", "message": "Rate limit exceeded. Adapting token payload..."}
+            top_chunk_text = ""
+            if selected_text:
+                raw_c = selected_text[0].get("text") or selected_text[0].get("contextualized_text") or ""
+                top_chunk_text = f"Context:\n{str(raw_c)[:450]}\n\n"
+            lean_user_prompt = f"{top_chunk_text}Question: {user_dialogue_question}\n\nAnswer concisely based on the context above."
             lean_messages = [
-                ChatMessage(role=MessageRole.SYSTEM, content=system_prompt),
-                ChatMessage(role=MessageRole.USER, blocks=lean_blocks),
+                ChatMessage(role=MessageRole.SYSTEM, content="You are a helpful AI assistant. Answer the user question concisely using the provided context."),
+                ChatMessage(role=MessageRole.USER, content=lean_user_prompt),
             ]
             try:
                 active_vision = get_llm_vision(groq_api_key)
@@ -474,7 +478,7 @@ def stream_agentic_rag(
                         full_answer += delta
                         yield {"type": "token", "delta": delta}
             except Exception as retry_exc:
-                err_msg = f"An error occurred: {retry_exc}"
+                err_msg = "The AI service is currently busy due to free-tier rate limits. Please wait a few moments and ask again."
                 full_answer = err_msg
                 yield {"type": "token", "delta": err_msg}
         elif any(tok in err_str.lower() for tok in ("api key", "invalid_api_key", "401", "authentication", "unauthorized")):

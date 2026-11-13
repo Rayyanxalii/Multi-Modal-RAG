@@ -46,9 +46,9 @@ def get_llm(api_key: str | None = None) -> Groq:
         )
     if key not in _LLM_CACHE:
         _LLM_CACHE[key] = Groq(
-            model="openai/gpt-oss-20b",
+            model="llama-3.1-8b-instant",
             api_key=key,
-            max_tokens=500,
+            max_tokens=400,
         )
     return _LLM_CACHE[key]
 
@@ -64,7 +64,7 @@ def get_llm_vision(api_key: str | None = None) -> Groq:
         _VISION_CACHE[key] = Groq(
             model="qwen/qwen3.8-27b",
             api_key=key,
-            max_tokens=1000,
+            max_tokens=650,
         )
     return _VISION_CACHE[key]
 
