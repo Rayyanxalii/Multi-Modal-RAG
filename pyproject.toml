@@ -30,6 +30,15 @@ dependencies = [
 [project.scripts]
 rag = "rag.main:main"
 
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["backend", "backend/src", "."]
+testpaths = ["tests"]
+
 [build-system]
 requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
