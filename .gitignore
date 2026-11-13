@@ -21,6 +21,7 @@ data/figures/
 data/tables/
 data/chunks/
 data/embeddings/
+data/raw/*.pdf
 
 # Diagnostics & Internal Scratch Caches
 data/retrieval_runs/

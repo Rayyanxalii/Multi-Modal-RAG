@@ -123,7 +123,7 @@ def resolve_asset_url(image_path: str | None, doc_id: str = "attention", record_
 
 class ChatRequest(BaseModel):
     question: str
-    doc_id: str | None = "attention"
+    doc_id: str | None = None
     thread_id: str | None = None
     groq_api_key: str | None = None
 
@@ -185,17 +185,16 @@ def get_documents() -> list[dict[str, Any]]:
 @app.get("/api/documents/{doc_id}/pdf")
 def get_document_pdf(doc_id: str):
     """Serve the raw PDF file directly for inline browser rendering in side-by-side view."""
-    clean_id = (doc_id or "attention").strip().lower()
+    clean_id = (doc_id or "").strip().lower()
+    if not clean_id:
+        raise HTTPException(status_code=400, detail="Document ID required.")
     pdf_path = RAW_DATA_DIR / f"{clean_id}.pdf"
     if not pdf_path.exists():
-        if clean_id == "attention":
-            pdf_path = DEFAULT_PDF_PATH
+        matches = list(RAW_DATA_DIR.glob(f"{clean_id}*.pdf"))
+        if matches:
+            pdf_path = matches[0]
         else:
-            matches = list(RAW_DATA_DIR.glob(f"{clean_id}*.pdf"))
-            if matches:
-                pdf_path = matches[0]
-            else:
-                raise HTTPException(status_code=404, detail=f"Document '{doc_id}' PDF not found.")
+            raise HTTPException(status_code=404, detail=f"Document '{doc_id}' PDF not found.")
 
     if not pdf_path.exists():
         raise HTTPException(status_code=404, detail="PDF file does not exist on disk.")
@@ -210,14 +209,13 @@ def get_document_pdf(doc_id: str):
 @app.get("/api/documents/{doc_id}/pages")
 def get_document_pages(doc_id: str) -> dict[str, Any]:
     """List all rendered page images for side-by-side inspection."""
-    clean_id = (doc_id or "attention").strip().lower()
+    clean_id = (doc_id or "").strip().lower()
+    if not clean_id:
+        raise HTTPException(status_code=400, detail="Document ID required.")
     pdf_path = RAW_DATA_DIR / f"{clean_id}.pdf"
     if not pdf_path.exists():
-        if clean_id == "attention":
-            pdf_path = DEFAULT_PDF_PATH
-        else:
-            matches = list(RAW_DATA_DIR.glob(f"{clean_id}*.pdf"))
-            pdf_path = matches[0] if matches else None
+        matches = list(RAW_DATA_DIR.glob(f"{clean_id}*.pdf"))
+        pdf_path = matches[0] if matches else None
 
     if not pdf_path or not pdf_path.exists():
         raise HTTPException(status_code=404, detail=f"Document '{doc_id}' not found.")
@@ -269,14 +267,13 @@ def get_document_pages(doc_id: str) -> dict[str, Any]:
 @app.get("/api/documents/{doc_id}/pages/{page_num}")
 def get_document_page_image(doc_id: str, page_num: int):
     """Serve a specific rendered page image on demand, rendering dynamically if missing."""
-    clean_id = (doc_id or "attention").strip().lower()
+    clean_id = (doc_id or "").strip().lower()
+    if not clean_id:
+        raise HTTPException(status_code=400, detail="Document ID required.")
     pdf_path = RAW_DATA_DIR / f"{clean_id}.pdf"
     if not pdf_path.exists():
-        if clean_id == "attention":
-            pdf_path = DEFAULT_PDF_PATH
-        else:
-            matches = list(RAW_DATA_DIR.glob(f"{clean_id}*.pdf"))
-            pdf_path = matches[0] if matches else None
+        matches = list(RAW_DATA_DIR.glob(f"{clean_id}*.pdf"))
+        pdf_path = matches[0] if matches else None
 
     if not pdf_path or not pdf_path.exists():
         raise HTTPException(status_code=404, detail=f"Document '{doc_id}' not found.")
@@ -321,7 +318,9 @@ def get_document_page_image(doc_id: str, page_num: int):
 @app.get("/api/documents/{doc_id}/history")
 def get_document_history(doc_id: str) -> dict[str, Any]:
     """Retrieve full conversation history stored in the LangGraph checkpointer for this document."""
-    clean_id = (doc_id or "attention").strip().lower()
+    clean_id = (doc_id or "").strip().lower()
+    if not clean_id:
+        return {"status": "success", "doc_id": "", "thread_id": "", "total_messages": 0, "messages": []}
     thread_id = f"doc_{clean_id}"
     config = {"configurable": {"thread_id": thread_id}}
 
@@ -358,7 +357,9 @@ def get_document_history(doc_id: str) -> dict[str, Any]:
 @app.delete("/api/documents/{doc_id}/history")
 def clear_document_history(doc_id: str) -> dict[str, Any]:
     """Purge stored conversation checkpoints for a document thread."""
-    clean_id = (doc_id or "attention").strip().lower()
+    clean_id = (doc_id or "").strip().lower()
+    if not clean_id:
+        raise HTTPException(status_code=400, detail="Document ID required.")
     thread_id = f"doc_{clean_id}"
     try:
         from rag.graph.workflow import DB_PATH
@@ -392,16 +393,14 @@ def submit_question(
             detail="Vision LLM API key required. Please click 'Vision LLM Key' (🔑) to add your key. (Hint: get a free one from Groq at console.groq.com)",
         )
 
-    doc_id = (payload.doc_id or "attention").strip().lower()
+    doc_id = (payload.doc_id or "").strip().lower()
+    if not doc_id:
+        raise HTTPException(status_code=400, detail="No document selected. Please select a document to chat with.")
     thread_id = payload.thread_id or f"doc_{doc_id}"
     pdf_path = RAW_DATA_DIR / f"{doc_id}.pdf"
     if not pdf_path.exists():
-        if doc_id == "attention":
-            pdf_path = DEFAULT_PDF_PATH
-        else:
-            # Check if any matching pdf exists in RAW_DATA_DIR
-            matches = list(RAW_DATA_DIR.glob(f"{doc_id}*.pdf"))
-            pdf_path = matches[0] if matches else (RAW_DATA_DIR / f"{doc_id}.pdf")
+        matches = list(RAW_DATA_DIR.glob(f"{doc_id}*.pdf"))
+        pdf_path = matches[0] if matches else (RAW_DATA_DIR / f"{doc_id}.pdf")
 
     token = set_request_groq_key(effective_key)
     try:
@@ -458,15 +457,14 @@ def stream_chat_question(
             detail="Vision LLM API key required. Please click 'Vision LLM Key' (🔑) to add your key. (Hint: get a free one from Groq at console.groq.com)",
         )
 
-    doc_id = (payload.doc_id or "attention").strip().lower()
+    doc_id = (payload.doc_id or "").strip().lower()
+    if not doc_id:
+        raise HTTPException(status_code=400, detail="No document selected. Please select a document to chat with.")
     thread_id = payload.thread_id or f"doc_{doc_id}"
     pdf_path = RAW_DATA_DIR / f"{doc_id}.pdf"
     if not pdf_path.exists():
-        if doc_id == "attention":
-            pdf_path = DEFAULT_PDF_PATH
-        else:
-            matches = list(RAW_DATA_DIR.glob(f"{doc_id}*.pdf"))
-            pdf_path = matches[0] if matches else (RAW_DATA_DIR / f"{doc_id}.pdf")
+        matches = list(RAW_DATA_DIR.glob(f"{doc_id}*.pdf"))
+        pdf_path = matches[0] if matches else (RAW_DATA_DIR / f"{doc_id}.pdf")
 
     def event_stream():
         token = set_request_groq_key(effective_key)
@@ -767,7 +765,9 @@ async def upload_document(
 @app.delete("/api/documents/{doc_id}")
 def purge_document(doc_id: str) -> dict[str, Any]:
     """Purge document assets, Qdrant vectors, cloud embeddings, and conversation checkpoints."""
-    clean_id = (doc_id or "attention").strip().lower()
+    clean_id = (doc_id or "").strip().lower()
+    if not clean_id:
+        raise HTTPException(status_code=400, detail="Document ID required.")
     thread_id = f"doc_{clean_id}"
     try:
         from rag.graph.workflow import DB_PATH
