@@ -72,6 +72,11 @@ def ensure_collection(client: QdrantClient, collection_name: str = COLLECTION_NA
             field_name="document_id",
             field_schema=models.PayloadSchemaType.KEYWORD,
         )
+        client.create_payload_index(
+            collection_name=collection_name,
+            field_name="user_id",
+            field_schema=models.PayloadSchemaType.KEYWORD,
+        )
     except Exception:
         pass
 
@@ -80,8 +85,9 @@ def index_text_chunks(
     chunks_file_path: Path = CHUNKS_PATH,
     collection_name: str = COLLECTION_NAME,
     doc_id: str | None = None,
+    user_id: str | None = None,
 ) -> int:
-    """Index text chunks into Qdrant vector database with optional document_id filtering."""
+    """Index text chunks into Qdrant vector database with optional document_id and user_id filtering."""
     chunks = load_chunks(chunks_file_path)
     client = get_client()
 
@@ -94,6 +100,8 @@ def index_text_chunks(
 
     print(f"Chunks in JSONL: {len(chunks)}")
     print(f"Points currently in Qdrant: {indexed_count}")
+
+    clean_user = str(user_id or "default").strip()
 
     for start in range(0, len(chunks), BATCH_SIZE):
         batch = chunks[start:start + BATCH_SIZE]
@@ -124,7 +132,7 @@ def index_text_chunks(
             point_id = str(
                 uuid.uuid5(
                     uuid.NAMESPACE_URL,
-                    f"{chunk_doc_id}:{chunk['chunk_id']}",
+                    f"{clean_user}:{chunk_doc_id}:{chunk['chunk_id']}",
                 )
             )
 
@@ -134,6 +142,7 @@ def index_text_chunks(
                 if key not in {"contextualized_text"}
             }
             payload["document_id"] = chunk_doc_id
+            payload["user_id"] = clean_user
             payload["contextualized_text"] = chunk["contextualized_text"]
 
             points.append(

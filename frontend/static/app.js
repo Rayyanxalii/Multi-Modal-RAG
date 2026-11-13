@@ -8,6 +8,41 @@ let currentDocId = savedActiveDoc || null;
 let allDocuments = [];
 const chatHistories = {}; // doc_id -> in-memory HTML snapshot
 
+// ============================================================================
+// Anonymous Multi-Tenant User Session (Isolated personal workspace per device)
+// ============================================================================
+function getOrCreateUserId() {
+  const STORAGE_KEY = "rag_user_id";
+  let uid = null;
+  try {
+    uid = localStorage.getItem(STORAGE_KEY);
+  } catch (_) {}
+
+  if (!uid || typeof uid !== "string" || !uid.startsWith("user_")) {
+    const rand = Math.random().toString(36).substring(2, 10);
+    const ts = Date.now().toString(36);
+    uid = `user_${ts}_${rand}`;
+    try {
+      localStorage.setItem(STORAGE_KEY, uid);
+    } catch (_) {}
+  }
+  return uid;
+}
+
+const currentUserId = getOrCreateUserId();
+
+function getAuthHeaders(extraHeaders = {}) {
+  const headers = {
+    "X-User-ID": currentUserId,
+    ...extraHeaders,
+  };
+  const groqKey = typeof localStorage !== "undefined" ? (localStorage.getItem("user_groq_key") || "") : "";
+  if (groqKey) {
+    headers["X-Groq-Api-Key"] = groqKey;
+  }
+  return headers;
+}
+
 // Document Viewer State
 let isDocViewerOpen = false;
 let currentViewerDoc = currentDocId;
@@ -33,7 +68,6 @@ document.addEventListener("DOMContentLoaded", () => {
           delimiters: [
             { left: "$$", right: "$$", display: true },
             { left: "\\[", right: "\\]", display: true },
-            { left: "$", right: "$", display: false },
             { left: "\\(", right: "\\)", display: false },
           ],
           throwOnError: false,
@@ -55,7 +89,9 @@ async function initDocumentLedger() {
 async function loadDocuments() {
   const docList = document.getElementById("docList");
   try {
-    const res = await fetch("/api/documents");
+    const res = await fetch(`/api/documents?user_id=${encodeURIComponent(currentUserId)}`, {
+      headers: getAuthHeaders(),
+    });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const docs = await res.json();
     allDocuments = docs || [];
@@ -128,7 +164,9 @@ async function loadDocumentHistory(docId) {
   `;
 
   try {
-    const res = await fetch(`/api/documents/${docId}/history`);
+    const res = await fetch(`/api/documents/${docId}/history?user_id=${encodeURIComponent(currentUserId)}`, {
+      headers: getAuthHeaders(),
+    });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
 
@@ -239,7 +277,10 @@ function initClearChatButton() {
     btn.innerHTML = `<span class="btn-clear-icon" aria-hidden="true">⏳</span><span>Clearing...</span>`;
 
     try {
-      const res = await fetch(`/api/documents/${currentDocId}/history`, { method: "DELETE" });
+      const res = await fetch(`/api/documents/${currentDocId}/history?user_id=${encodeURIComponent(currentUserId)}`, {
+        method: "DELETE",
+        headers: getAuthHeaders(),
+      });
       if (!res.ok) {
         const errData = await res.json().catch(() => ({}));
         throw new Error(errData.detail || `Server error: ${res.status}`);
@@ -303,7 +344,10 @@ async function handleDeleteDoc(event, docId) {
   if (!confirmed) return;
 
   try {
-    const res = await fetch(`/api/documents/${docId}`, { method: "DELETE" });
+    const res = await fetch(`/api/documents/${docId}?user_id=${encodeURIComponent(currentUserId)}`, {
+      method: "DELETE",
+      headers: getAuthHeaders(),
+    });
     const data = await res.json();
     if (res.ok) {
       delete chatHistories[docId];
@@ -387,10 +431,7 @@ async function handleStreamingChat(query) {
 
   try {
     const userGroqKey = (typeof localStorage !== "undefined" ? localStorage.getItem("user_groq_key") : "") || "";
-    const headers = { "Content-Type": "application/json" };
-    if (userGroqKey) {
-      headers["X-Groq-Api-Key"] = userGroqKey;
-    }
+    const headers = getAuthHeaders({ "Content-Type": "application/json" });
 
     const res = await fetch("/api/chat/stream", {
       method: "POST",
@@ -398,7 +439,7 @@ async function handleStreamingChat(query) {
       body: JSON.stringify({
         question: query,
         doc_id: currentDocId,
-        thread_id: `doc_${currentDocId}`,
+        user_id: currentUserId,
         groq_api_key: userGroqKey || undefined,
       }),
     });
@@ -711,6 +752,9 @@ function cleanAnswerTextAndExtractPages(rawText, sources = []) {
   const mathPlaceholders = [];
   let text = rawText;
 
+  // Disambiguate financial currency amounts ($100, $1,773, $(1,427), $ 50) before math regexes run
+  text = text.replace(/(?<![\\$])\$(?!\$)(?=\s*\(?[\d\.])/g, "___CURRENCY_DOLLAR___");
+
   // Stash math blocks and inlines so regexes don't touch them
   text = text.replace(/\$\$([\s\S]+?)\$\$/g, (m, eq) => {
     const idx = mathPlaceholders.length;
@@ -723,8 +767,10 @@ function cleanAnswerTextAndExtractPages(rawText, sources = []) {
     return `___MATH_BLOCK_${idx}___`;
   });
   text = text.replace(/(?<!\$)\$([^\$\n]+?)\$(?!\$)/g, (m, eq) => {
+    const trimmed = eq.trim();
+    if (/\*\*|__/.test(trimmed)) return m;
     const idx = mathPlaceholders.length;
-    mathPlaceholders.push({ type: "inline", code: eq.trim() });
+    mathPlaceholders.push({ type: "inline", code: trimmed });
     return `___MATH_INLINE_${idx}___`;
   });
   text = text.replace(/\\\(([\s\S]+?)\\\)/g, (m, eq) => {
@@ -775,9 +821,10 @@ function cleanAnswerTextAndExtractPages(rawText, sources = []) {
     });
   }
 
-  // Restore math placeholders
+  // Restore math placeholders and protected currency
   text = text.replace(/___MATH_BLOCK_(\d+)___/g, (m, idx) => `$$${mathPlaceholders[idx].code}$$`);
   text = text.replace(/___MATH_INLINE_(\d+)___/g, (m, idx) => `$${mathPlaceholders[idx].code}$`);
+  text = text.replace(/___CURRENCY_DOLLAR___/g, "$");
 
   const sortedPages = [...citedPages].sort((a, b) => a - b);
   return { cleanText: text.trim(), pages: sortedPages };
@@ -795,6 +842,10 @@ function parseMarkdownToHtml(rawText) {
 
   // Defensive pre-clean: Repair any legacy or corrupted math token remnants from previous turns
   s = s.replace(/_{1,3}MATH_TOKEN_\d+_{1,3}/g, "$");
+  s = s.replace(/_{1,3}CURRENCY_DOLLAR_{1,3}/g, "$");
+
+  // Disambiguate financial currency amounts ($100, $1,773, $(1,427), $ 50) before LaTeX parsing
+  s = s.replace(/(?<![\\$])\$(?!\$)(?=\s*\(?[\d\.])/g, "@@@CURRENCY_DOLLAR@@@");
 
   // Stash display/block math ($$ ... $$ and \[ ... \])
   s = s.replace(/\$\$([\s\S]+?)\$\$/g, (m, eq) => {
@@ -818,10 +869,13 @@ function parseMarkdownToHtml(rawText) {
   // Stash inline math ($ ... $) with strict currency disambiguation
   s = s.replace(/(?<!\$)\$([^\$\n]+?)\$(?!\$)/g, (fullMatch, content) => {
     const trimmed = content.trim();
+    if (/\*\*|__/.test(trimmed)) {
+      return fullMatch;
+    }
     const words = trimmed.split(/\s+/);
     // If the content contains multiple English words without LaTeX commands or operators,
     // it represents separate currency values (e.g. "$1,773 million and $2,938 million"), not a formula
-    const hasMathSymbols = /[\\=+^_{}[\]<>*/~|]/.test(trimmed) || /^[a-zA-Z]$/.test(trimmed);
+    const hasMathSymbols = /[\\=+^_{}[\]<>~/|]/.test(trimmed) || /^[a-zA-Z]$/.test(trimmed);
     if (!hasMathSymbols && words.length > 2) {
       return fullMatch;
     }
@@ -907,6 +961,9 @@ function parseMarkdownToHtml(rawText) {
     return formatMathFallback(token.code, token.type === "block");
   });
 
+  // Restore protected currency dollar signs
+  s = s.replace(/@@@CURRENCY_DOLLAR@@@/g, "$");
+
   return s;
 }
 
@@ -974,7 +1031,6 @@ function renderMathInElementSafely(element) {
       delimiters: [
         { left: "$$", right: "$$", display: true },
         { left: "\\[", right: "\\]", display: true },
-        { left: "$", right: "$", display: false },
         { left: "\\(", right: "\\)", display: false },
       ],
       throwOnError: false,
@@ -1397,6 +1453,7 @@ function initUploadModal() {
 
     const formData = new FormData();
     formData.append("file", file);
+    formData.append("user_id", currentUserId);
 
     startIngestionProgress(file.name);
     btnSubmitUpload.disabled = true;
@@ -1407,6 +1464,7 @@ function initUploadModal() {
       // Launch asynchronous background ingestion job (avoids Cloudflare/Render 100s timeouts)
       const res = await fetch("/api/upload", {
         method: "POST",
+        headers: { "X-User-ID": currentUserId },
         body: formData,
       });
 
@@ -1644,7 +1702,9 @@ async function loadDocumentPages(docId) {
   if (titleEl) titleEl.textContent = `${docId}.pdf`;
 
   try {
-    const res = await fetch(`/api/documents/${docId}/pages`);
+    const res = await fetch(`/api/documents/${docId}/pages?user_id=${encodeURIComponent(currentUserId)}`, {
+      headers: getAuthHeaders(),
+    });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
 
@@ -1658,7 +1718,7 @@ async function loadDocumentPages(docId) {
 
     const pdfIframe = document.getElementById("pdfIframe");
     if (pdfIframe) {
-      pdfIframe.src = data.pdf_url || `/api/documents/${docId}/pdf`;
+      pdfIframe.src = data.pdf_url || `/api/documents/${docId}/pdf?user_id=${encodeURIComponent(currentUserId)}`;
     }
 
     renderThumbnails();
@@ -1677,17 +1737,29 @@ function goToPage(pageNum) {
 
   if (imgEl && docPagesList.length >= currentPage) {
     const pageItem = docPagesList[currentPage - 1];
+
+    // Hide image and fallback card immediately during page load to avoid showing empty alt-text box
+    imgEl.style.display = "none";
+    if (fallback) fallback.style.display = "none";
+
+    let triedStatic = false;
+
     imgEl.onload = () => {
       if (fallback) fallback.style.display = "none";
       imgEl.style.display = "block";
     };
     imgEl.onerror = () => {
       console.warn(`[Viewer] Failed loading page preview: ${imgEl.src}`);
+      // Retry with direct static asset URL if the dynamic API endpoint failed
+      if (!triedStatic && pageItem.static_url) {
+        triedStatic = true;
+        imgEl.src = pageItem.static_url;
+        return;
+      }
       imgEl.style.display = "none";
       if (fallback) fallback.style.display = "block";
     };
 
-    if (fallback) fallback.style.display = "none";
     imgEl.src = pageItem.image_url;
   }
 
@@ -1709,6 +1781,7 @@ function goToPage(pageNum) {
 
 async function openAndJumpToPage(pageNum) {
   if (!isDocViewerOpen) {
+    currentPage = pageNum;
     await toggleDocViewer(true);
   }
   setViewerMode("pages");

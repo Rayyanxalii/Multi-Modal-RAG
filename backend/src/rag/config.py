@@ -64,45 +64,63 @@ def get_ollama_client():
     return ollama.Client(host=host) if host else ollama.Client()
 
 
-def get_document_paths(pdf_path: Path | str | None = None) -> dict[str, Any]:
-    """Return canonical data paths for any given document."""
+def get_document_paths(
+    pdf_path: Path | str | None = None,
+    user_id: str | None = None,
+) -> dict[str, Any]:
+    """Return canonical data paths for any given document, scoped by user_id if provided."""
     if pdf_path is None:
         p = DEFAULT_PDF_PATH
     else:
         p = Path(pdf_path)
 
     doc_id = p.stem.lower()
+    clean_user = "".join(c for c in (user_id or "") if c.isalnum() or c in ("-", "_")).strip()
 
-    # Document-namespaced directories for visual assets
-    if doc_id == "attention":
-        rendered_pages_dir = RENDERED_PAGES_DIR
-        figures_dir = FIGURES_DIR
-        tables_dir = TABLES_DIR
+    if clean_user and clean_user != "default":
+        user_root = DATA_DIR / "users" / clean_user
+        raw_dir = user_root / "raw"
+        chunks_dir = user_root / "chunks"
+        rendered_pages_dir = user_root / "rendered_pages" / doc_id
+        figures_dir = user_root / "figures" / doc_id
+        tables_dir = user_root / "tables" / doc_id
+        embeddings_path = EMBEDDINGS_DIR / clean_user / f"{doc_id}.pt"
     else:
-        rendered_pages_dir = RENDERED_PAGES_DIR / doc_id
-        figures_dir = FIGURES_DIR / doc_id
-        tables_dir = TABLES_DIR / doc_id
+        clean_user = "default"
+        raw_dir = RAW_DATA_DIR
+        chunks_dir = CHUNKS_DIR
+        if doc_id == "attention":
+            rendered_pages_dir = RENDERED_PAGES_DIR
+            figures_dir = FIGURES_DIR
+            tables_dir = TABLES_DIR
+        else:
+            rendered_pages_dir = RENDERED_PAGES_DIR / doc_id
+            figures_dir = FIGURES_DIR / doc_id
+            tables_dir = TABLES_DIR / doc_id
+        embeddings_path = EMBEDDINGS_DIR / f"{doc_id}.pt"
 
     # Cleaned figures preference
-    cleaned_fig = CHUNKS_DIR / f"{doc_id}_figures_cleaned.jsonl"
-    raw_fig = CHUNKS_DIR / f"{doc_id}_figures.jsonl"
+    cleaned_fig = chunks_dir / f"{doc_id}_figures_cleaned.jsonl"
+    raw_fig = chunks_dir / f"{doc_id}_figures.jsonl"
     figures_jsonl = cleaned_fig if cleaned_fig.exists() else raw_fig
 
     return {
+        "user_id": clean_user,
         "pdf_path": p,
+        "raw_dir": raw_dir,
         "doc_id": doc_id,
         "doc_name": doc_id,
-        "chunks_dir": CHUNKS_DIR,
+        "chunks_dir": chunks_dir,
         "rendered_pages_dir": rendered_pages_dir,
         "figures_dir": figures_dir,
         "tables_dir": tables_dir,
-        "chunks_path": CHUNKS_DIR / f"{doc_id}_chunks.jsonl",
-        "document_json": CHUNKS_DIR / f"{doc_id}_document.json",
-        "document_json_path": CHUNKS_DIR / f"{doc_id}_document.json",
-        "parsed_md": CHUNKS_DIR / f"{doc_id}_parsed.md",
+        "chunks_path": chunks_dir / f"{doc_id}_chunks.jsonl",
+        "document_json": chunks_dir / f"{doc_id}_document.json",
+        "document_json_path": chunks_dir / f"{doc_id}_document.json",
+        "parsed_md": chunks_dir / f"{doc_id}_parsed.md",
         "figures_jsonl": figures_jsonl,
         "figures_raw_jsonl": raw_fig,
         "figures_cleaned": cleaned_fig,
-        "tables_jsonl": CHUNKS_DIR / f"{doc_id}_tables.jsonl",
-        "colpali_embeddings_path": EMBEDDINGS_DIR / f"{doc_id}.pt",
+        "tables_jsonl": chunks_dir / f"{doc_id}_tables.jsonl",
+        "colpali_embeddings_path": embeddings_path,
     }

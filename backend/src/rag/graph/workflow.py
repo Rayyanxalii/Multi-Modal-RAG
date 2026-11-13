@@ -192,6 +192,7 @@ def run_agentic_rag(
     pdf_path: str | Path | None = None,
     thread_id: str | None = None,
     groq_api_key: str | None = None,
+    user_id: str | None = None,
 ) -> dict[str, Any]:
     """Execute the full agentic multimodal RAG graph for a user question with conversational memory."""
     question = question.strip()
@@ -206,7 +207,8 @@ def run_agentic_rag(
 
     target_pdf = str(pdf_path) if pdf_path else str(DEFAULT_PDF_PATH)
     clean_doc = Path(target_pdf).stem.lower()
-    active_thread = thread_id or f"doc_{clean_doc}"
+    clean_user = "".join(c for c in (user_id or "") if c.isalnum() or c in ("-", "_")).strip() or "default"
+    active_thread = thread_id or f"user_{clean_user}_doc_{clean_doc}"
 
     config = {"configurable": {"thread_id": active_thread}}
 
@@ -216,6 +218,7 @@ def run_agentic_rag(
         "original_query": question,
         "pdf_path": target_pdf,
         "doc_name": clean_doc,
+        "user_id": clean_user,
         "retry_count": 0,
         "groq_api_key": groq_api_key,
     }
@@ -238,15 +241,20 @@ def run_agentic_rag(
     }
 
 
-def stream_ingest_document(pdf_path: str | Path) -> Generator[dict[str, Any], None, None]:
+def stream_ingest_document(
+    pdf_path: str | Path,
+    user_id: str | None = None,
+) -> Generator[dict[str, Any], None, None]:
     """Execute the multi-stage document ingestion pipeline yielding live progress events for real-time UI bars."""
     target_pdf = str(pdf_path)
     pdf_obj = Path(target_pdf)
     clean_id = pdf_obj.stem.lower()
-    doc_paths = get_document_paths(pdf_obj)
+    clean_user = "".join(c for c in (user_id or "") if c.isalnum() or c in ("-", "_")).strip() or "default"
+    doc_paths = get_document_paths(pdf_obj, user_id=clean_user)
     state: RAGState = {
         "pdf_path": target_pdf,
         "doc_name": clean_id,
+        "user_id": clean_user,
         "question": "",
         "original_question": "",
         "retry_count": 0,
@@ -354,6 +362,7 @@ def stream_agentic_rag(
     pdf_path: str | Path | None = None,
     thread_id: str | None = None,
     groq_api_key: str | None = None,
+    user_id: str | None = None,
 ) -> Generator[dict[str, Any], None, None]:
     """Execute the agentic RAG workflow yielding real-time SSE progress events, status updates, and token deltas."""
     question = question.strip()
@@ -363,7 +372,8 @@ def stream_agentic_rag(
 
     target_pdf = str(pdf_path) if pdf_path else str(DEFAULT_PDF_PATH)
     clean_doc = Path(target_pdf).stem.lower()
-    active_thread = thread_id or f"doc_{clean_doc}"
+    clean_user = "".join(c for c in (user_id or "") if c.isalnum() or c in ("-", "_")).strip() or "default"
+    active_thread = thread_id or f"user_{clean_user}_doc_{clean_doc}"
     config = {"configurable": {"thread_id": active_thread}}
 
     # Retrieve existing checkpointer history for multi-turn dialogue
@@ -383,6 +393,7 @@ def stream_agentic_rag(
         "original_query": question,
         "pdf_path": target_pdf,
         "doc_name": clean_doc,
+        "user_id": clean_user,
         "retry_count": 0,
         "chat_history": existing_history,
         "groq_api_key": groq_api_key,

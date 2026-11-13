@@ -18,7 +18,7 @@ for p in (str(PROJECT_ROOT), str(BACKEND_DIR), str(BACKEND_SRC)):
     if p not in sys.path:
         sys.path.insert(0, p)
 
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Header
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Header, Query
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse, Response
 from fastapi.middleware.cors import CORSMiddleware
@@ -126,6 +126,13 @@ class ChatRequest(BaseModel):
     doc_id: str | None = None
     thread_id: str | None = None
     groq_api_key: str | None = None
+    user_id: str | None = None
+
+
+def sanitize_user_id(uid: str | None) -> str:
+    """Sanitize user ID for filesystem safety and memory thread namespacing."""
+    clean = "".join(c for c in (uid or "") if c.isalnum() or c in ("-", "_")).strip()
+    return clean[:64] if clean else "default"
 
 
 @app.get("/health")
@@ -177,20 +184,31 @@ def serve_favicon():
 
 
 @app.get("/api/documents")
-def get_documents() -> list[dict[str, Any]]:
-    """List all ingested documents available for chat."""
-    return list_all_documents()
+def get_documents(
+    x_user_id: str | None = Header(None, alias="X-User-ID"),
+    user_id: str | None = Query(None),
+) -> list[dict[str, Any]]:
+    """List all ingested documents available for this user session."""
+    uid = sanitize_user_id(x_user_id or user_id)
+    return list_all_documents(user_id=uid)
 
 
 @app.get("/api/documents/{doc_id}/pdf")
-def get_document_pdf(doc_id: str):
+def get_document_pdf(
+    doc_id: str,
+    x_user_id: str | None = Header(None, alias="X-User-ID"),
+    user_id: str | None = Query(None),
+):
     """Serve the raw PDF file directly for inline browser rendering in side-by-side view."""
     clean_id = (doc_id or "").strip().lower()
     if not clean_id:
         raise HTTPException(status_code=400, detail="Document ID required.")
-    pdf_path = RAW_DATA_DIR / f"{clean_id}.pdf"
+    uid = sanitize_user_id(x_user_id or user_id)
+    paths = get_document_paths(clean_id, user_id=uid)
+    raw_dir: Path = paths["raw_dir"]
+    pdf_path = raw_dir / f"{clean_id}.pdf"
     if not pdf_path.exists():
-        matches = list(RAW_DATA_DIR.glob(f"{clean_id}*.pdf"))
+        matches = list(raw_dir.glob(f"{clean_id}*.pdf"))
         if matches:
             pdf_path = matches[0]
         else:
@@ -207,20 +225,26 @@ def get_document_pdf(doc_id: str):
 
 
 @app.get("/api/documents/{doc_id}/pages")
-def get_document_pages(doc_id: str) -> dict[str, Any]:
+def get_document_pages(
+    doc_id: str,
+    x_user_id: str | None = Header(None, alias="X-User-ID"),
+    user_id: str | None = Query(None),
+) -> dict[str, Any]:
     """List all rendered page images for side-by-side inspection."""
     clean_id = (doc_id or "").strip().lower()
     if not clean_id:
         raise HTTPException(status_code=400, detail="Document ID required.")
-    pdf_path = RAW_DATA_DIR / f"{clean_id}.pdf"
+    uid = sanitize_user_id(x_user_id or user_id)
+    paths = get_document_paths(clean_id, user_id=uid)
+    raw_dir: Path = paths["raw_dir"]
+    pdf_path = raw_dir / f"{clean_id}.pdf"
     if not pdf_path.exists():
-        matches = list(RAW_DATA_DIR.glob(f"{clean_id}*.pdf"))
+        matches = list(raw_dir.glob(f"{clean_id}*.pdf"))
         pdf_path = matches[0] if matches else None
 
     if not pdf_path or not pdf_path.exists():
         raise HTTPException(status_code=404, detail=f"Document '{doc_id}' not found.")
 
-    paths = get_document_paths(pdf_path)
     pages_dir: Path = paths["rendered_pages_dir"]
     pages_dir.mkdir(parents=True, exist_ok=True)
 
@@ -245,11 +269,12 @@ def get_document_pages(doc_id: str) -> dict[str, Any]:
     )
 
     pages = []
+    user_param = f"?user_id={uid}" if uid != "default" else ""
     for idx, p in enumerate(page_files, 1):
         rel_path = p.relative_to(DATA_DIR).as_posix()
         pages.append({
             "page_number": idx,
-            "image_url": f"/api/documents/{clean_id}/pages/{idx}",
+            "image_url": f"/api/documents/{clean_id}/pages/{idx}{user_param}",
             "static_url": f"/data/{rel_path}",
             "filename": p.name,
         })
@@ -260,36 +285,43 @@ def get_document_pages(doc_id: str) -> dict[str, Any]:
         "filename": pdf_path.name,
         "total_pages": len(pages),
         "pages": pages,
-        "pdf_url": f"/api/documents/{clean_id}/pdf",
+        "pdf_url": f"/api/documents/{clean_id}/pdf{user_param}",
     }
 
 
 @app.get("/api/documents/{doc_id}/pages/{page_num}")
-def get_document_page_image(doc_id: str, page_num: int):
+def get_document_page_image(
+    doc_id: str,
+    page_num: int,
+    x_user_id: str | None = Header(None, alias="X-User-ID"),
+    user_id: str | None = Query(None),
+):
     """Serve a specific rendered page image on demand, rendering dynamically if missing."""
     clean_id = (doc_id or "").strip().lower()
     if not clean_id:
         raise HTTPException(status_code=400, detail="Document ID required.")
-    pdf_path = RAW_DATA_DIR / f"{clean_id}.pdf"
+    uid = sanitize_user_id(x_user_id or user_id)
+    paths = get_document_paths(clean_id, user_id=uid)
+    raw_dir: Path = paths["raw_dir"]
+    pdf_path = raw_dir / f"{clean_id}.pdf"
     if not pdf_path.exists():
-        matches = list(RAW_DATA_DIR.glob(f"{clean_id}*.pdf"))
+        matches = list(raw_dir.glob(f"{clean_id}*.pdf"))
         pdf_path = matches[0] if matches else None
 
     if not pdf_path or not pdf_path.exists():
         raise HTTPException(status_code=404, detail=f"Document '{doc_id}' not found.")
 
-    paths = get_document_paths(pdf_path)
     pages_dir: Path = paths["rendered_pages_dir"]
     pages_dir.mkdir(parents=True, exist_ok=True)
 
     target_img = pages_dir / f"page_{page_num}.png"
-    if not target_img.exists():
+    if not target_img.exists() or target_img.stat().st_size == 0:
         cand = pages_dir / f"page_{page_num:04d}.png"
-        if cand.exists():
+        if cand.exists() and cand.stat().st_size > 0:
             target_img = cand
 
-    # On-demand single page render if missing (<40ms via PyMuPDF)
-    if not target_img.exists():
+    # On-demand single page render if missing or incomplete (<40ms via PyMuPDF)
+    if not target_img.exists() or target_img.stat().st_size == 0:
         try:
             import pymupdf
             with pymupdf.open(pdf_path) as pdf_doc:
@@ -300,12 +332,14 @@ def get_document_page_image(doc_id: str, page_num: int):
                     if max_dim > 0 and (max_dim * scale) > 1300:
                         scale = 1300.0 / max_dim
                     pix = page.get_pixmap(matrix=pymupdf.Matrix(scale, scale), alpha=False)
-                    pix.save(str(target_img))
+                    tmp_target = pages_dir / f".tmp_{page_num}_{uuid.uuid4().hex[:6]}.png"
+                    pix.save(str(tmp_target))
                     del pix
+                    tmp_target.replace(target_img)
         except Exception as exc:
             print(f"[Page Render Error] Failed rendering page {page_num} for {doc_id}: {exc}")
 
-    if not target_img.exists():
+    if not target_img.exists() or target_img.stat().st_size == 0:
         raise HTTPException(status_code=404, detail=f"Page {page_num} could not be rendered.")
 
     return FileResponse(
@@ -316,12 +350,17 @@ def get_document_page_image(doc_id: str, page_num: int):
 
 
 @app.get("/api/documents/{doc_id}/history")
-def get_document_history(doc_id: str) -> dict[str, Any]:
+def get_document_history(
+    doc_id: str,
+    x_user_id: str | None = Header(None, alias="X-User-ID"),
+    user_id: str | None = Query(None),
+) -> dict[str, Any]:
     """Retrieve full conversation history stored in the LangGraph checkpointer for this document."""
     clean_id = (doc_id or "").strip().lower()
     if not clean_id:
         return {"status": "success", "doc_id": "", "thread_id": "", "total_messages": 0, "messages": []}
-    thread_id = f"doc_{clean_id}"
+    uid = sanitize_user_id(x_user_id or user_id)
+    thread_id = f"user_{uid}_doc_{clean_id}"
     config = {"configurable": {"thread_id": thread_id}}
 
     try:
@@ -355,12 +394,17 @@ def get_document_history(doc_id: str) -> dict[str, Any]:
 
 
 @app.delete("/api/documents/{doc_id}/history")
-def clear_document_history(doc_id: str) -> dict[str, Any]:
+def clear_document_history(
+    doc_id: str,
+    x_user_id: str | None = Header(None, alias="X-User-ID"),
+    user_id: str | None = Query(None),
+) -> dict[str, Any]:
     """Purge stored conversation checkpoints for a document thread."""
     clean_id = (doc_id or "").strip().lower()
     if not clean_id:
         raise HTTPException(status_code=400, detail="Document ID required.")
-    thread_id = f"doc_{clean_id}"
+    uid = sanitize_user_id(x_user_id or user_id)
+    thread_id = f"user_{uid}_doc_{clean_id}"
     try:
         from rag.graph.workflow import DB_PATH
         import sqlite3
@@ -371,7 +415,7 @@ def clear_document_history(doc_id: str) -> dict[str, Any]:
         print(f"[Checkpointer] Cleared conversation thread '{thread_id}'.")
         return {"status": "success", "message": f"Cleared chat history for {clean_id}."}
     except Exception as exc:
-        print(f"[Error clearing checkpointer]: {exc}")
+        print(f"[Checkpointer Error] Failed clearing thread {thread_id}: {exc}")
         raise HTTPException(status_code=500, detail=str(exc))
 
 
@@ -379,6 +423,7 @@ def clear_document_history(doc_id: str) -> dict[str, Any]:
 def submit_question(
     payload: ChatRequest,
     x_groq_api_key: str | None = Header(None, alias="X-Groq-Api-Key"),
+    x_user_id: str | None = Header(None, alias="X-User-ID"),
 ) -> dict[str, Any]:
     """Execute question answering via the Multimodal LangGraph agent with conversational memory."""
     question = (payload.question or "").strip()
@@ -396,11 +441,14 @@ def submit_question(
     doc_id = (payload.doc_id or "").strip().lower()
     if not doc_id:
         raise HTTPException(status_code=400, detail="No document selected. Please select a document to chat with.")
-    thread_id = payload.thread_id or f"doc_{doc_id}"
-    pdf_path = RAW_DATA_DIR / f"{doc_id}.pdf"
+    uid = sanitize_user_id(x_user_id or payload.user_id)
+    thread_id = payload.thread_id or f"user_{uid}_doc_{doc_id}"
+    paths = get_document_paths(doc_id, user_id=uid)
+    raw_dir: Path = paths["raw_dir"]
+    pdf_path = raw_dir / f"{doc_id}.pdf"
     if not pdf_path.exists():
-        matches = list(RAW_DATA_DIR.glob(f"{doc_id}*.pdf"))
-        pdf_path = matches[0] if matches else (RAW_DATA_DIR / f"{doc_id}.pdf")
+        matches = list(raw_dir.glob(f"{doc_id}*.pdf"))
+        pdf_path = matches[0] if matches else (raw_dir / f"{doc_id}.pdf")
 
     token = set_request_groq_key(effective_key)
     try:
@@ -409,6 +457,7 @@ def submit_question(
             pdf_path=pdf_path,
             thread_id=thread_id,
             groq_api_key=effective_key,
+            user_id=uid,
         )
 
         # Normalize image paths in sources for frontend rendering
@@ -443,6 +492,7 @@ def submit_question(
 def stream_chat_question(
     payload: ChatRequest,
     x_groq_api_key: str | None = Header(None, alias="X-Groq-Api-Key"),
+    x_user_id: str | None = Header(None, alias="X-User-ID"),
 ):
     """Execute question answering with real-time SSE token and pipeline status streaming."""
     question = (payload.question or "").strip()
@@ -460,11 +510,14 @@ def stream_chat_question(
     doc_id = (payload.doc_id or "").strip().lower()
     if not doc_id:
         raise HTTPException(status_code=400, detail="No document selected. Please select a document to chat with.")
-    thread_id = payload.thread_id or f"doc_{doc_id}"
-    pdf_path = RAW_DATA_DIR / f"{doc_id}.pdf"
+    uid = sanitize_user_id(x_user_id or payload.user_id)
+    thread_id = payload.thread_id or f"user_{uid}_doc_{doc_id}"
+    paths = get_document_paths(doc_id, user_id=uid)
+    raw_dir: Path = paths["raw_dir"]
+    pdf_path = raw_dir / f"{doc_id}.pdf"
     if not pdf_path.exists():
-        matches = list(RAW_DATA_DIR.glob(f"{doc_id}*.pdf"))
-        pdf_path = matches[0] if matches else (RAW_DATA_DIR / f"{doc_id}.pdf")
+        matches = list(raw_dir.glob(f"{doc_id}*.pdf"))
+        pdf_path = matches[0] if matches else (raw_dir / f"{doc_id}.pdf")
 
     def event_stream():
         token = set_request_groq_key(effective_key)
@@ -474,6 +527,7 @@ def stream_chat_question(
                 pdf_path=pdf_path,
                 thread_id=thread_id,
                 groq_api_key=effective_key,
+                user_id=uid,
             ):
                 if event.get("type") == "metadata":
                     for src in event.get("sources", []):
@@ -508,10 +562,10 @@ _INGEST_JOBS: dict[str, dict[str, Any]] = {}
 _INGEST_LOCK = threading.Lock()
 
 
-def _run_ingest_job(job_id: str, target_pdf: Path) -> None:
+def _run_ingest_job(job_id: str, target_pdf: Path, user_id: str | None = None) -> None:
     """Execute document ingestion in a background daemon thread updating job progress."""
     try:
-        for event in stream_ingest_document(target_pdf):
+        for event in stream_ingest_document(target_pdf, user_id=user_id):
             with _INGEST_LOCK:
                 job = _INGEST_JOBS.get(job_id)
                 if job is not None:
@@ -575,10 +629,19 @@ def compute_file_sha256(path: Path) -> str:
 async def upload_document(
     file: UploadFile = File(...),
     stream: bool = False,
+    x_user_id: str | None = Header(None, alias="X-User-ID"),
+    user_id: str | None = Form(None),
 ):
     """Upload a new PDF file and initiate automated ingestion (async background job by default)."""
     if not file.filename.lower().endswith(".pdf"):
         raise HTTPException(status_code=400, detail="Only PDF files are accepted.")
+
+    uid = sanitize_user_id(x_user_id or user_id)
+    paths = get_document_paths(file.filename, user_id=uid)
+    raw_dir: Path = paths["raw_dir"]
+    chunks_dir: Path = paths["chunks_dir"]
+    raw_dir.mkdir(parents=True, exist_ok=True)
+    chunks_dir.mkdir(parents=True, exist_ok=True)
 
     # Sanitize document ID from filename
     raw_stem = Path(file.filename).stem.lower()
@@ -586,8 +649,7 @@ async def upload_document(
     if not base_id:
         base_id = f"doc_{Path(file.filename).stem[:8]}"
 
-    temp_pdf = RAW_DATA_DIR / f".tmp_{uuid.uuid4().hex[:8]}_{base_id}.pdf"
-    RAW_DATA_DIR.mkdir(parents=True, exist_ok=True)
+    temp_pdf = raw_dir / f".tmp_{uuid.uuid4().hex[:8]}_{base_id}.pdf"
 
     max_mb, max_pages = get_upload_limits()
     max_bytes = int(max_mb * 1024 * 1024)
@@ -631,8 +693,8 @@ async def upload_document(
         temp_hash = compute_file_sha256(temp_pdf)
 
         doc_id = base_id
-        target_pdf = RAW_DATA_DIR / f"{doc_id}.pdf"
-        chunks_file = CHUNKS_DIR / f"{doc_id}_chunks.jsonl"
+        target_pdf = raw_dir / f"{doc_id}.pdf"
+        chunks_file = chunks_dir / f"{doc_id}_chunks.jsonl"
 
         is_identical = False
         if target_pdf.exists():
@@ -645,7 +707,7 @@ async def upload_document(
             if is_identical:
                 # Same file re-uploaded! Reuse existing document ID without duplicate storage
                 temp_pdf.unlink(missing_ok=True)
-                print(f"[Upload] Identical content match for '{file.filename}' -> reusing existing doc_id='{doc_id}'")
+                print(f"[Upload] Identical content match for '{file.filename}' -> reusing existing doc_id='{doc_id}' (user_id={uid})")
             else:
                 # Content differs! Auto-increment doc_id to avoid overwriting or mixing
                 import re
@@ -656,8 +718,8 @@ async def upload_document(
                 counter = start_num
                 while True:
                     candidate_id = f"{clean_base}_{counter}"
-                    cand_pdf = RAW_DATA_DIR / f"{candidate_id}.pdf"
-                    cand_chunks = CHUNKS_DIR / f"{candidate_id}_chunks.jsonl"
+                    cand_pdf = raw_dir / f"{candidate_id}.pdf"
+                    cand_chunks = chunks_dir / f"{candidate_id}_chunks.jsonl"
 
                     if cand_pdf.exists():
                         try:
@@ -666,7 +728,7 @@ async def upload_document(
                                 target_pdf = cand_pdf
                                 is_identical = True
                                 temp_pdf.unlink(missing_ok=True)
-                                print(f"[Upload] Identical content match for '{file.filename}' -> reusing existing doc_id='{doc_id}'")
+                                print(f"[Upload] Identical content match for '{file.filename}' -> reusing existing doc_id='{doc_id}' (user_id={uid})")
                                 break
                         except Exception:
                             pass
@@ -675,7 +737,7 @@ async def upload_document(
                         doc_id = candidate_id
                         target_pdf = cand_pdf
                         temp_pdf.replace(target_pdf)
-                        print(f"[Upload] Auto-incremented duplicate filename '{file.filename}' -> doc_id='{doc_id}' ({target_pdf.name})")
+                        print(f"[Upload] Auto-incremented duplicate filename '{file.filename}' -> doc_id='{doc_id}' ({target_pdf.name}) (user_id={uid})")
                         break
                     counter += 1
         else:
@@ -694,7 +756,7 @@ async def upload_document(
         init_msg += f" (auto-assigned as {display_name})"
     init_msg += ". Initializing pipeline..."
 
-    print(f"[Upload] Saved '{file.filename}' to '{target_pdf}' (doc_id={doc_id}, pages={page_count}, size={bytes_written}B)")
+    print(f"[Upload] Saved '{file.filename}' to '{target_pdf}' (doc_id={doc_id}, pages={page_count}, size={bytes_written}B, user_id={uid})")
 
     if stream:
         # SSE streaming mode with 4s keep-alive heartbeats via worker queue
@@ -702,7 +764,7 @@ async def upload_document(
 
         def worker():
             try:
-                for event in stream_ingest_document(target_pdf):
+                for event in stream_ingest_document(target_pdf, user_id=uid):
                     q.put(event)
             except Exception as exc:
                 q.put({"stage": "error", "progress": 100, "message": str(exc)})
@@ -751,7 +813,7 @@ async def upload_document(
             "error": None,
         }
 
-    threading.Thread(target=_run_ingest_job, args=(job_id, target_pdf), daemon=True).start()
+    threading.Thread(target=_run_ingest_job, args=(job_id, target_pdf, uid), daemon=True).start()
 
     return {
         "status": "accepted",
@@ -763,12 +825,17 @@ async def upload_document(
 
 
 @app.delete("/api/documents/{doc_id}")
-def purge_document(doc_id: str) -> dict[str, Any]:
+def purge_document(
+    doc_id: str,
+    x_user_id: str | None = Header(None, alias="X-User-ID"),
+    user_id: str | None = Query(None),
+) -> dict[str, Any]:
     """Purge document assets, Qdrant vectors, cloud embeddings, and conversation checkpoints."""
     clean_id = (doc_id or "").strip().lower()
     if not clean_id:
         raise HTTPException(status_code=400, detail="Document ID required.")
-    thread_id = f"doc_{clean_id}"
+    uid = sanitize_user_id(x_user_id or user_id)
+    thread_id = f"user_{uid}_doc_{clean_id}"
     try:
         from rag.graph.workflow import DB_PATH
         import sqlite3
@@ -778,7 +845,7 @@ def purge_document(doc_id: str) -> dict[str, Any]:
             conn.execute("DELETE FROM writes WHERE thread_id = ?", (thread_id,))
     except Exception as exc:
         print(f"[Warning] Failed to clean checkpointer for {clean_id}: {exc}")
-    return delete_document(doc_id, delete_raw_pdf=True)
+    return delete_document(doc_id, delete_raw_pdf=True, user_id=uid)
 
 
 if __name__ == "__main__":

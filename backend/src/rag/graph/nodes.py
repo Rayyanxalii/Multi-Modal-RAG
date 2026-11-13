@@ -93,7 +93,7 @@ def check_doc_status_node(state: RAGState) -> dict[str, Any]:
     """
     raw_pdf = state.get("pdf_path") or str(DEFAULT_PDF_PATH)
     pdf_path = Path(raw_pdf)
-    doc_paths = get_document_paths(pdf_path)
+    doc_paths = get_document_paths(pdf_path, user_id=state.get("user_id"))
 
     # Check key artifacts
     rendered_pages_exist = (
@@ -114,6 +114,7 @@ def check_doc_status_node(state: RAGState) -> dict[str, Any]:
     return {
         "pdf_path": str(pdf_path),
         "doc_name": doc_paths["doc_name"],
+        "user_id": state.get("user_id"),
         "is_ingested": is_ingested,
     }
 
@@ -122,7 +123,7 @@ def render_pages_node(state: RAGState) -> dict[str, Any]:
     """Render PDF pages into high-resolution images via PyMuPDF."""
     from rag.doc_loader import render_pdf_to_images
     pdf_path = Path(state.get("pdf_path") or DEFAULT_PDF_PATH)
-    doc_paths = get_document_paths(pdf_path)
+    doc_paths = get_document_paths(pdf_path, user_id=state.get("user_id"))
     print(f"[Ingestion] Rendering pages for: {pdf_path.name}")
     render_pdf_to_images(pdf_path, output_dir=doc_paths["rendered_pages_dir"])
     return {}
@@ -132,7 +133,7 @@ def parse_document_node(state: RAGState) -> dict[str, Any]:
     """Parse PDF layout hierarchy & extract text chunks (PyMuPDF Lite by default, Docling only if USE_DOCLING=1)."""
     from rag.fast_pdf_parser import is_low_memory_env, parse_pdf_fast
     pdf_path = Path(state.get("pdf_path") or DEFAULT_PDF_PATH)
-    doc_paths = get_document_paths(pdf_path)
+    doc_paths = get_document_paths(pdf_path, user_id=state.get("user_id"))
 
     use_docling = os.getenv("USE_DOCLING", "").strip().lower() in ("1", "true", "yes")
     if not use_docling or is_low_memory_env():
@@ -157,7 +158,7 @@ def extract_and_crop_node(state: RAGState) -> dict[str, Any]:
     from rag.visual_retrieval.preprocess.table_cropper import crop_tables
 
     pdf_path = Path(state.get("pdf_path") or DEFAULT_PDF_PATH)
-    doc_paths = get_document_paths(pdf_path)
+    doc_paths = get_document_paths(pdf_path, user_id=state.get("user_id"))
     doc_name = doc_paths["doc_name"]
 
     print(f"[Ingestion] Extracting & cropping visual assets for: {doc_name}")
@@ -192,24 +193,31 @@ def extract_and_crop_node(state: RAGState) -> dict[str, Any]:
     return {}
 
 
-def check_qdrant_doc_exists(doc_name: str) -> int:
-    """Check how many points for doc_name already exist in Qdrant omni_documents collection."""
+def check_qdrant_doc_exists(doc_name: str, user_id: str | None = None) -> int:
+    """Check how many points for doc_name and user_id already exist in Qdrant omni_documents collection."""
     try:
         from qdrant_client import models
         from rag.text_retrieval.index_chunks import get_client
         client = get_client()
         if not client.collection_exists(TEXT_COLLECTION_NAME):
             return 0
+        must_conditions = [
+            models.FieldCondition(
+                key="document_id",
+                match=models.MatchValue(value=str(doc_name).strip().lower()),
+            )
+        ]
+        clean_user = str(user_id or "").strip()
+        if clean_user and clean_user != "default":
+            must_conditions.append(
+                models.FieldCondition(
+                    key="user_id",
+                    match=models.MatchValue(value=clean_user),
+                )
+            )
         return client.count(
             collection_name=TEXT_COLLECTION_NAME,
-            count_filter=models.Filter(
-                must=[
-                    models.FieldCondition(
-                        key="document_id",
-                        match=models.MatchValue(value=str(doc_name).strip().lower()),
-                    )
-                ]
-            ),
+            count_filter=models.Filter(must=must_conditions),
             exact=True,
         ).count
     except Exception:
@@ -220,20 +228,22 @@ def index_vectors_node(state: RAGState) -> dict[str, Any]:
     """Index text chunks into Qdrant using Google Gemini embeddings (skipping if already indexed)."""
     from rag.text_retrieval.index_chunks import index_text_chunks
     pdf_path = Path(state.get("pdf_path") or DEFAULT_PDF_PATH)
-    doc_paths = get_document_paths(pdf_path)
+    uid = state.get("user_id")
+    doc_paths = get_document_paths(pdf_path, user_id=uid)
     doc_name = doc_paths["doc_name"]
 
-    existing_count = check_qdrant_doc_exists(doc_name)
+    existing_count = check_qdrant_doc_exists(doc_name, user_id=uid)
     if existing_count > 0:
         print(f"[Ingestion] Qdrant vectors for '{doc_name}' already exist ({existing_count} chunks). Reusing index.")
         return {"qdrant_existed": True, "qdrant_points": existing_count}
 
-    print(f"[Ingestion] Indexing text chunks into Qdrant: {TEXT_COLLECTION_NAME} (doc_id={doc_name})")
+    print(f"[Ingestion] Indexing text chunks into Qdrant: {TEXT_COLLECTION_NAME} (doc_id={doc_name}, user_id={uid})")
     try:
         index_text_chunks(
             chunks_file_path=doc_paths["chunks_path"],
             collection_name=TEXT_COLLECTION_NAME,
             doc_id=doc_name,
+            user_id=uid,
         )
     except Exception as exc:
         print(f"[Warning] Dense vector indexing skipped ({exc}). Document remains fully searchable via Okapi BM25 and ColPali visual embeddings.")
@@ -244,7 +254,8 @@ def index_colpali_node(state: RAGState) -> dict[str, Any]:
     """Send rendered page images to Hugging Face ZeroGPU Space (reusing if already indexed)."""
     from rag.visual_retrieval.colpali_client import get_colpali_cloud_client
     pdf_path = Path(state.get("pdf_path") or DEFAULT_PDF_PATH)
-    doc_paths = get_document_paths(pdf_path)
+    uid = state.get("user_id")
+    doc_paths = get_document_paths(pdf_path, user_id=uid)
     doc_name = doc_paths["doc_name"]
 
     page_images = sorted(list(doc_paths["rendered_pages_dir"].glob("*.png")))
@@ -412,17 +423,21 @@ def dense_retriever_node(state: RAGState) -> dict[str, Any]:
     """Execute dense semantic vector search via Qdrant & nomic-embed-text."""
     query = state["question"].strip()
     pdf_path = Path(state.get("pdf_path") or DEFAULT_PDF_PATH)
-    doc_paths = get_document_paths(pdf_path)
+    uid = state.get("user_id")
+    doc_paths = get_document_paths(pdf_path, user_id=uid)
     doc_id = (state.get("doc_name") or doc_paths.get("doc_name") or pdf_path.stem).strip().lower()
 
     try:
-        results = search_chunks(query, top_k=5, doc_id=doc_id)
+        if uid:
+            results = search_chunks(query, top_k=5, doc_id=doc_id, user_id=uid)
+        else:
+            results = search_chunks(query, top_k=5, doc_id=doc_id)
         # Defense-in-depth: Discard any point that does not belong to this document
         filtered = [
             r for r in results
             if not r.get("document_id") or str(r.get("document_id")).strip().lower() == doc_id
         ]
-        print(f"  [Dense Retriever] Found {len(filtered)} isolated candidate chunks for '{doc_id}' in Qdrant.")
+        print(f"  [Dense Retriever] Found {len(filtered)} isolated candidate chunks for '{doc_id}' in Qdrant (user_id={uid}).")
     except Exception as exc:
         print(f"[Warning] Dense retriever error: {exc}")
         filtered = []
@@ -434,7 +449,8 @@ def bm25_retriever_node(state: RAGState) -> dict[str, Any]:
     from rag.text_retrieval.bm25_retriever import search_bm25
     query = state["question"].strip()
     pdf_path = Path(state.get("pdf_path") or DEFAULT_PDF_PATH)
-    doc_paths = get_document_paths(pdf_path)
+    uid = state.get("user_id")
+    doc_paths = get_document_paths(pdf_path, user_id=uid)
     try:
         results = search_bm25(query=query, top_k=5, chunks_path=doc_paths["chunks_path"])
         print(f"  [BM25 Retriever] Found {len(results)} lexical matches via Okapi BM25.")
@@ -474,7 +490,7 @@ def text_fusion_node(state: RAGState) -> dict[str, Any]:
     q_to_check = state.get("original_question") or state.get("question", "")
     if is_overview_query(q_to_check):
         pdf_path = Path(state.get("pdf_path") or DEFAULT_PDF_PATH)
-        doc_paths = get_document_paths(pdf_path)
+        doc_paths = get_document_paths(pdf_path, user_id=state.get("user_id"))
         chunks_file = doc_paths.get("chunks_path")
         if chunks_file and chunks_file.exists():
             try:
@@ -501,7 +517,7 @@ def colpali_retriever_node(state: RAGState) -> dict[str, Any]:
     """Execute ColPali multi-vector late-interaction MaxSim search via Hugging Face Space."""
     query = state["question"].strip()
     pdf_path = Path(state.get("pdf_path") or DEFAULT_PDF_PATH)
-    doc_paths = get_document_paths(pdf_path)
+    doc_paths = get_document_paths(pdf_path, user_id=state.get("user_id"))
     doc_name = doc_paths["doc_name"]
 
     try:
@@ -520,7 +536,7 @@ def visual_hydration_node(state: RAGState) -> dict[str, Any]:
     """Map top ColPali pages and targeted table/figure requests to cropped figures and structured Markdown tables."""
     page_results = state.get("colpali_top_pages", [])
     pdf_path = Path(state.get("pdf_path") or DEFAULT_PDF_PATH)
-    doc_paths = get_document_paths(pdf_path)
+    doc_paths = get_document_paths(pdf_path, user_id=state.get("user_id"))
 
     query = state.get("original_question") or state.get("question", "")
     target_table_nums = [int(m) for m in re.findall(r"\btable\s*(\d+)\b", query, re.IGNORECASE)]
@@ -807,7 +823,7 @@ def rewrite_query_node(state: RAGState) -> dict[str, Any]:
     original_query = state.get("original_question") or state["question"]
     current_retry = state.get("retry_count", 0)
     pdf_path = Path(state.get("pdf_path") or DEFAULT_PDF_PATH)
-    doc_paths = get_document_paths(pdf_path)
+    doc_paths = get_document_paths(pdf_path, user_id=state.get("user_id"))
     doc_name = doc_paths["doc_name"]
 
     # Rule 1: Overview questions -> Expand with executive summary, abstract, and core topic domain terms

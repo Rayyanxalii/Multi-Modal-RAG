@@ -33,12 +33,14 @@ from rag.visual_retrieval.colpali_client import get_colpali_cloud_client
 def delete_document(
     doc_id: str,
     delete_raw_pdf: bool = False,
+    user_id: str | None = None,
 ) -> dict[str, Any]:
     """Purge all data, vectors, visual assets, and cloud embeddings for a document."""
     doc_id = (doc_id or "").strip().lower()
     if not doc_id:
         return {"status": "error", "message": "Document ID cannot be empty."}
 
+    doc_paths = get_document_paths(doc_id, user_id=user_id)
     deleted_items: list[str] = []
     errors: list[str] = []
 
@@ -46,7 +48,7 @@ def delete_document(
     # 1. Delete Local Asset Folders
     # -------------------------------------------------------------------------
     # Rendered pages directory
-    pages_dir = RENDERED_PAGES_DIR / doc_id
+    pages_dir = doc_paths["rendered_pages_dir"]
     if pages_dir.exists() and pages_dir.is_dir():
         try:
             shutil.rmtree(pages_dir)
@@ -55,7 +57,7 @@ def delete_document(
             errors.append(f"Failed deleting pages dir: {exc}")
 
     # Cropped figures directory
-    fig_dir = FIGURES_DIR / doc_id
+    fig_dir = doc_paths["figures_dir"]
     if fig_dir.exists() and fig_dir.is_dir():
         try:
             shutil.rmtree(fig_dir)
@@ -64,7 +66,7 @@ def delete_document(
             errors.append(f"Failed deleting figures dir: {exc}")
 
     # Cropped tables directory
-    tbl_dir = TABLES_DIR / doc_id
+    tbl_dir = doc_paths["tables_dir"]
     if tbl_dir.exists() and tbl_dir.is_dir():
         try:
             shutil.rmtree(tbl_dir)
@@ -75,6 +77,7 @@ def delete_document(
     # -------------------------------------------------------------------------
     # 2. Delete Local Chunk & Metadata Files
     # -------------------------------------------------------------------------
+    chunks_dir = doc_paths["chunks_dir"]
     chunk_patterns = [
         f"{doc_id}_chunks.jsonl",
         f"{doc_id}_document.json",
@@ -85,7 +88,7 @@ def delete_document(
         f"{doc_id}_tables.jsonl",
     ]
     for pattern in chunk_patterns:
-        target_file = CHUNKS_DIR / pattern
+        target_file = chunks_dir / pattern
         if target_file.exists():
             try:
                 target_file.unlink()
@@ -94,7 +97,7 @@ def delete_document(
                 errors.append(f"Failed deleting {pattern}: {exc}")
 
     # Local embeddings cache (if any)
-    emb_file = EMBEDDINGS_DIR / f"{doc_id}.pt"
+    emb_file = doc_paths["colpali_embeddings_path"]
     if emb_file.exists():
         try:
             emb_file.unlink()
@@ -104,7 +107,7 @@ def delete_document(
 
     # Optional: Delete uploaded raw PDF
     if delete_raw_pdf:
-        raw_pdf = RAW_DATA_DIR / f"{doc_id}.pdf"
+        raw_pdf = doc_paths["raw_dir"] / f"{doc_id}.pdf"
         if raw_pdf.exists():
             try:
                 raw_pdf.unlink()
@@ -118,17 +121,25 @@ def delete_document(
     qdrant_deleted = False
     try:
         client = get_qdrant_client()
+        must_filters = [
+            models.FieldCondition(
+                key="document_id",
+                match=models.MatchValue(value=doc_id),
+            )
+        ]
+        clean_user = doc_paths.get("user_id")
+        if clean_user and clean_user != "default":
+            must_filters.append(
+                models.FieldCondition(
+                    key="user_id",
+                    match=models.MatchValue(value=clean_user),
+                )
+            )
+
         client.delete(
             collection_name=TEXT_COLLECTION_NAME,
             points_selector=models.FilterSelector(
-                filter=models.Filter(
-                    must=[
-                        models.FieldCondition(
-                            key="document_id",
-                            match=models.MatchValue(value=doc_id),
-                        )
-                    ]
-                )
+                filter=models.Filter(must=must_filters)
             ),
         )
         qdrant_deleted = True
@@ -168,13 +179,24 @@ def delete_document(
     }
 
 
-def list_all_documents() -> list[dict[str, Any]]:
-    """Scan and list all documents currently ingested and available in the system."""
+def list_all_documents(user_id: str | None = None) -> list[dict[str, Any]]:
+    """Scan and list all documents currently ingested and available for this user (or default)."""
     docs = []
     seen = set()
 
+    clean_user = "".join(c for c in (user_id or "") if c.isalnum() or c in ("-", "_")).strip()
+    if clean_user and clean_user != "default":
+        chunks_dir = DATA_DIR / "users" / clean_user / "chunks"
+        rendered_root = DATA_DIR / "users" / clean_user / "rendered_pages"
+    else:
+        chunks_dir = CHUNKS_DIR
+        rendered_root = RENDERED_PAGES_DIR
+
+    if not chunks_dir.exists():
+        return []
+
     # Discover from chunks directory
-    for chunk_file in sorted(CHUNKS_DIR.glob("*_chunks.jsonl")):
+    for chunk_file in sorted(chunks_dir.glob("*_chunks.jsonl")):
         stem = chunk_file.stem.replace("_chunks", "")
         if stem in seen:
             continue
@@ -189,9 +211,9 @@ def list_all_documents() -> list[dict[str, Any]]:
 
         # Count figures
         fig_count = 0
-        fig_file = CHUNKS_DIR / f"{stem}_figures_cleaned.jsonl"
+        fig_file = chunks_dir / f"{stem}_figures_cleaned.jsonl"
         if not fig_file.exists():
-            fig_file = CHUNKS_DIR / f"{stem}_figures.jsonl"
+            fig_file = chunks_dir / f"{stem}_figures.jsonl"
         if fig_file.exists():
             try:
                 with fig_file.open("r", encoding="utf-8") as f:
@@ -201,7 +223,7 @@ def list_all_documents() -> list[dict[str, Any]]:
 
         # Count tables
         tbl_count = 0
-        tbl_file = CHUNKS_DIR / f"{stem}_tables.jsonl"
+        tbl_file = chunks_dir / f"{stem}_tables.jsonl"
         if tbl_file.exists():
             try:
                 with tbl_file.open("r", encoding="utf-8") as f:
@@ -210,7 +232,7 @@ def list_all_documents() -> list[dict[str, Any]]:
                 pass
 
         # Count rendered pages
-        pages_dir = RENDERED_PAGES_DIR if stem == "attention" else RENDERED_PAGES_DIR / stem
+        pages_dir = rendered_root if (clean_user == "default" and stem == "attention") else rendered_root / stem
         page_count = len(list(pages_dir.glob("*.png"))) if pages_dir.exists() else 0
 
         docs.append({
