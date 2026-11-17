@@ -625,6 +625,54 @@ def compute_file_sha256(path: Path) -> str:
     return hasher.hexdigest()
 
 
+def convert_txt_to_pdf_file(txt_bytes: bytes, target_pdf: Path) -> int:
+    """Convert raw text file bytes into a clean, formatted paginated PDF using PyMuPDF."""
+    import pymupdf
+
+    txt_text = txt_bytes.decode("utf-8", errors="replace")
+    doc = pymupdf.open()
+    width, height = 595, 842  # A4 standard
+    margin_x = 54
+    top_margin = 60
+    line_height = 14
+    max_lines_per_page = int((height - top_margin - 54) // line_height)
+
+    raw_lines = txt_text.splitlines()
+    if not raw_lines:
+        raw_lines = [""]
+
+    max_chars = 85
+    wrapped_lines: list[str] = []
+    for l in raw_lines:
+        if len(l) <= max_chars:
+            wrapped_lines.append(l)
+        else:
+            words = l.split(" ")
+            cur = ""
+            for w in words:
+                if len(cur) + len(w) + 1 <= max_chars:
+                    cur = f"{cur} {w}".strip()
+                else:
+                    if cur:
+                        wrapped_lines.append(cur)
+                    cur = w
+            if cur:
+                wrapped_lines.append(cur)
+
+    for i in range(0, len(wrapped_lines), max_lines_per_page):
+        page_lines = wrapped_lines[i : i + max_lines_per_page]
+        page = doc.new_page(width=width, height=height)
+        y = top_margin
+        for line in page_lines:
+            page.insert_text((margin_x, y), line, fontsize=10.5, fontname="helv", color=(0.1, 0.1, 0.1))
+            y += line_height
+
+    doc.save(target_pdf)
+    num_pages = len(doc)
+    doc.close()
+    return num_pages
+
+
 @app.post("/api/upload")
 async def upload_document(
     file: UploadFile = File(...),
@@ -632,9 +680,12 @@ async def upload_document(
     x_user_id: str | None = Header(None, alias="X-User-ID"),
     user_id: str | None = Form(None),
 ):
-    """Upload a new PDF file and initiate automated ingestion (async background job by default)."""
-    if not file.filename.lower().endswith(".pdf"):
-        raise HTTPException(status_code=400, detail="Only PDF files are accepted.")
+    """Upload a new PDF or TXT file and initiate automated ingestion (async background job by default)."""
+    fname_lower = file.filename.lower()
+    is_txt = fname_lower.endswith(".txt")
+    is_pdf = fname_lower.endswith(".pdf")
+    if not (is_pdf or is_txt):
+        raise HTTPException(status_code=400, detail="Only PDF and TXT files are accepted.")
 
     uid = sanitize_user_id(x_user_id or user_id)
     paths = get_document_paths(file.filename, user_id=uid)
@@ -656,29 +707,45 @@ async def upload_document(
     bytes_written = 0
 
     try:
-        with temp_pdf.open("wb") as buffer:
-            while True:
-                chunk = await file.read(65536)
-                if not chunk:
-                    break
-                bytes_written += len(chunk)
-                if bytes_written > max_bytes:
-                    raise HTTPException(
-                        status_code=413,
-                        detail=(
-                            f"PDF exceeds the {max_mb:g} MB limit "
-                            f"({bytes_written / (1024 * 1024):.1f} MB uploaded). "
-                            f"Please upload a PDF smaller than {max_mb:g} MB."
-                        ),
-                    )
-                buffer.write(chunk)
+        if is_txt:
+            raw_bytes = await file.read()
+            if len(raw_bytes) > max_bytes:
+                raise HTTPException(
+                    status_code=413,
+                    detail=(
+                        f"File exceeds the {max_mb:g} MB limit "
+                        f"({len(raw_bytes) / (1024 * 1024):.1f} MB uploaded). "
+                        f"Please upload a file smaller than {max_mb:g} MB."
+                    ),
+                )
+            try:
+                page_count = convert_txt_to_pdf_file(raw_bytes, temp_pdf)
+            except Exception as exc:
+                raise HTTPException(status_code=400, detail=f"Could not convert TXT file to document: {exc}") from exc
+        else:
+            with temp_pdf.open("wb") as buffer:
+                while True:
+                    chunk = await file.read(65536)
+                    if not chunk:
+                        break
+                    bytes_written += len(chunk)
+                    if bytes_written > max_bytes:
+                        raise HTTPException(
+                            status_code=413,
+                            detail=(
+                                f"PDF exceeds the {max_mb:g} MB limit "
+                                f"({bytes_written / (1024 * 1024):.1f} MB uploaded). "
+                                f"Please upload a PDF smaller than {max_mb:g} MB."
+                            ),
+                        )
+                    buffer.write(chunk)
 
-        try:
-            import pymupdf
-            with pymupdf.open(temp_pdf) as pdf_doc:
-                page_count = len(pdf_doc)
-        except Exception as exc:
-            raise HTTPException(status_code=400, detail=f"Invalid or corrupted PDF file: {exc}") from exc
+            try:
+                import pymupdf
+                with pymupdf.open(temp_pdf) as pdf_doc:
+                    page_count = len(pdf_doc)
+            except Exception as exc:
+                raise HTTPException(status_code=400, detail=f"Invalid or corrupted PDF file: {exc}") from exc
 
         if page_count > max_pages:
             raise HTTPException(

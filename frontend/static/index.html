@@ -94,7 +94,7 @@
             <div id="chatEmptyState" class="chat-empty-state">
               <div class="empty-icon">📄</div>
               <h2 class="empty-title">Welcome to Omni Retrieve</h2>
-              <p class="empty-subtitle">Upload any document (PDF) containing text, equations, figures, or tables using the <strong>+ Upload Document</strong> button to begin asking questions.</p>
+              <p class="empty-subtitle">Upload any document (PDF or TXT) containing text, equations, figures, or tables using the <strong>+ Upload Document</strong> button to begin asking questions.</p>
             </div>
 
           </div>
@@ -201,14 +201,14 @@
         <h2 id="modalTitle" class="modal-title">Upload Technical Document</h2>
       </div>
       <p id="uploadLimitHint" class="modal-description">
-        Upload a PDF document (recommended: under 10 MB &amp; &le; 25 pages on free tier) to analyze its text, figures, and tables.
+        Upload a PDF or TXT document (recommended: under 10 MB &amp; &le; 25 pages on free tier) to analyze its text, figures, and tables.
       </p>
 
       <form id="uploadForm">
         <input 
           type="file" 
           id="pdfFileInput" 
-          accept=".pdf" 
+          accept=".pdf,.txt" 
           required 
           class="file-input-mono"
         >

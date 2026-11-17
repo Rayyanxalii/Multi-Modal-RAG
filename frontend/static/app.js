@@ -1411,7 +1411,7 @@ function initUploadModal() {
         if (typeof data.max_upload_mb === "number") maxUploadMb = data.max_upload_mb;
         if (typeof data.max_upload_pages === "number") maxUploadPages = data.max_upload_pages;
         if (limitHint) {
-          limitHint.textContent = `Upload a PDF document (max ${maxUploadMb} MB, ${maxUploadPages} pages) to analyze its text, figures, and tables.`;
+          limitHint.textContent = `Upload a PDF or TXT document (max ${maxUploadMb} MB, ${maxUploadPages} pages) to analyze its text, figures, and tables.`;
         }
       }
     } catch (_) {}
@@ -1446,7 +1446,7 @@ function initUploadModal() {
     const file = fileInput.files[0];
     if (file.size > maxUploadMb * 1024 * 1024) {
       const sizeMb = (file.size / (1024 * 1024)).toFixed(1);
-      const errMsg = `PDF exceeds the ${maxUploadMb} MB limit (${sizeMb} MB selected). Please choose a smaller PDF.`;
+      const errMsg = `File exceeds the ${maxUploadMb} MB limit (${sizeMb} MB selected). Please choose a smaller file.`;
       showUploadError(errMsg);
       return;
     }
