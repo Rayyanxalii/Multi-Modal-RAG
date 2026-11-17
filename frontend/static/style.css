@@ -364,6 +364,59 @@ body {
   border-color: var(--dp-color-ink);
 }
 
+/* Export Chat Dropdown */
+.export-dropdown {
+  position: relative;
+  display: inline-flex;
+  align-items: stretch;
+}
+
+.export-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 50;
+  min-width: 250px;
+  padding: 4px;
+  background-color: var(--dp-color-paper);
+  border: var(--dp-border-rule-thin) solid var(--dp-color-ink);
+}
+
+.export-menu-item {
+  display: block;
+  width: 100%;
+  padding: 10px 12px;
+  background-color: var(--dp-color-paper);
+  color: var(--dp-color-ink);
+  border: none;
+  border-bottom: var(--dp-border-rule-thin) solid var(--dp-color-quiet);
+  font-family: var(--dp-typography-text);
+  font-size: 13px;
+  font-weight: 600;
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.export-menu-item:last-child {
+  border-bottom: none;
+}
+
+.export-menu-item:hover {
+  background-color: var(--dp-color-ink);
+  color: var(--dp-color-paper);
+}
+
+.btn-clear-chat:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.btn-clear-chat:disabled:hover {
+  background-color: var(--dp-color-paper);
+  color: var(--dp-color-ink);
+}
+
 /* Ruled Status Strip in Upright IBM Plex Mono */
 .status-paper-strip {
   background-color: var(--dp-color-paper);
@@ -1357,6 +1410,17 @@ body {
   text-transform: uppercase;
   letter-spacing: var(--dp-typography-label-tracking);
   color: var(--dp-color-ink);
+}
+
+.source-doc-pill {
+  font-family: var(--dp-typography-mono);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--dp-color-secondary);
+  background-color: var(--dp-color-wash, #f4f4f2);
+  border: var(--dp-border-rule-thin) solid var(--dp-color-border, #d8d8d4);
+  padding: 1px 6px;
+  letter-spacing: 0.02em;
 }
 
 .sources-prefix {

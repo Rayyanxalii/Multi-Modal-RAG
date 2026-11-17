@@ -7,6 +7,7 @@ const savedActiveDoc = typeof localStorage !== "undefined" ? localStorage.getIte
 let currentDocId = savedActiveDoc || null;
 let allDocuments = [];
 const chatHistories = {}; // doc_id -> in-memory HTML snapshot
+let isChatBusy = false; // prevents concurrent questions / summarize runs
 
 // ============================================================================
 // Anonymous Multi-Tenant User Session (Isolated personal workspace per device)
@@ -56,6 +57,8 @@ document.addEventListener("DOMContentLoaded", () => {
   initApiKeyModal();
   initDocumentLedger();
   initChatForm();
+  initSummarizeButton();
+  initExportChat();
   initClearChatButton();
   initUploadModal();
   initDocViewer();
@@ -177,7 +180,7 @@ async function loadDocumentHistory(docId) {
           appendUserMessage(msg.content);
         } else if (msg.role === "assistant") {
           appendAssistantMessage(
-            { answer: msg.content, sources: msg.sources || [] },
+            { answer: msg.content, sources: msg.sources || [], doc_id: data.doc_id || docId },
             { immediate: true }
           );
         }
@@ -199,6 +202,44 @@ function getDocDisplayName(docId) {
   const found = allDocuments.find((d) => d.doc_id.toLowerCase() === docId.toLowerCase());
   if (found && found.title) return found.title;
   return docId.replace(/[_-]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+/**
+ * Resolve the stored filename for a document (every upload is normalized to "{doc_id}.pdf").
+ */
+function getDocFileName(docId) {
+  const clean = (docId || "").trim();
+  if (!clean) return "";
+  if (/\.(pdf|txt)$/i.test(clean)) return clean;
+  const found = allDocuments.find((d) => d.doc_id.toLowerCase() === clean.toLowerCase());
+  if (found && found.filename) return found.filename;
+  return `${clean}.pdf`;
+}
+
+/**
+ * Enable/disable workspace actions and close transient menus on document changes.
+ */
+function updateWorkspaceActions() {
+  const hasDoc = Boolean(currentDocId);
+  const btnSummarize = document.getElementById("btnSummarize");
+  const btnExport = document.getElementById("btnExport");
+
+  if (btnSummarize) btnSummarize.disabled = !hasDoc || isChatBusy;
+  if (btnExport) btnExport.disabled = !hasDoc || isChatBusy;
+
+  if (!hasDoc) closeExportMenu();
+}
+
+/**
+ * Toggle the shared busy state for chat submission and the summarize action.
+ */
+function setChatBusy(busy) {
+  isChatBusy = Boolean(busy);
+
+  const btnSubmit = document.getElementById("btnSubmit");
+  if (btnSubmit) btnSubmit.disabled = isChatBusy;
+
+  updateWorkspaceActions();
 }
 
 function updateInputPlaceholder() {
@@ -226,6 +267,7 @@ async function switchDocument(docId, forceReload = false) {
   }
   updateActiveBadge();
   updateInputPlaceholder();
+  closeExportMenu();
 
   if (chatHistories[docId] && !forceReload) {
     chatStream.innerHTML = chatHistories[docId];
@@ -335,6 +377,8 @@ function updateActiveBadge() {
     badge.textContent = currentDocId ? `DOC: ${currentDocId.toUpperCase()}` : "";
     badge.style.display = currentDocId ? "inline-block" : "none";
   }
+
+  updateWorkspaceActions();
 }
 
 async function handleDeleteDoc(event, docId) {
@@ -375,10 +419,10 @@ async function handleDeleteDoc(event, docId) {
 function initChatForm() {
   const chatForm = document.getElementById("chatForm");
   const questionInput = document.getElementById("questionInput");
-  const btnSubmit = document.getElementById("btnSubmit");
 
   chatForm.addEventListener("submit", async (e) => {
     e.preventDefault();
+    if (isChatBusy) return;
     if (!currentDocId) {
       alert("Please upload or select a document from the left sidebar before asking questions.");
       return;
@@ -387,13 +431,273 @@ function initChatForm() {
     if (!query) return;
 
     questionInput.value = "";
-    btnSubmit.disabled = true;
-
-    appendUserMessage(query);
-    await handleStreamingChat(query);
-    btnSubmit.disabled = false;
-    questionInput.focus();
+    await submitQuestion(query);
   });
+}
+
+/**
+ * Submit a question through the streaming RAG pipeline.
+ * Used by both the chat form and the one-click Summarize Document action.
+ */
+async function submitQuestion(query, displayText = null) {
+  if (!currentDocId) {
+    alert("Please upload or select a document from the left sidebar before asking questions.");
+    return;
+  }
+  if (isChatBusy) return;
+
+  const questionInput = document.getElementById("questionInput");
+  setChatBusy(true);
+  appendUserMessage(displayText || query);
+
+  try {
+    await handleStreamingChat(query);
+  } finally {
+    setChatBusy(false);
+    if (questionInput) questionInput.focus();
+  }
+}
+
+/**
+ * Bonus Feature 1: One-click Executive Summary of the active document.
+ * Delegates to the existing agentic RAG pipeline so citations and visual
+ * references are produced exactly like a normal question.
+ */
+function initSummarizeButton() {
+  const btn = document.getElementById("btnSummarize");
+  if (!btn) return;
+
+  btn.addEventListener("click", async () => {
+    if (!currentDocId) {
+      alert("Please select a document before requesting a summary.");
+      return;
+    }
+    if (isChatBusy) return;
+
+    const prompt =
+      "Summarize this document with a structured executive summary covering its core objective, " +
+      "key highlights and methodology, major results or financial highlights, and conclusion.";
+
+    await submitQuestion(prompt, "⚡ Summarize this document");
+  });
+}
+
+// ============================================================================
+// Bonus Feature 2: Export Conversation as Markdown / JSON
+// ============================================================================
+let isExportMenuOpen = false;
+
+function initExportChat() {
+  const btnExport = document.getElementById("btnExport");
+  const btnExportMd = document.getElementById("btnExportMd");
+  const btnExportJson = document.getElementById("btnExportJson");
+  const dropdown = document.getElementById("exportDropdown");
+
+  if (!btnExport || !dropdown) return;
+
+  btnExport.addEventListener("click", (e) => {
+    e.stopPropagation();
+    setExportMenuOpen(!isExportMenuOpen);
+  });
+
+  // Keep clicks inside the dropdown from immediately closing it.
+  dropdown.addEventListener("click", (e) => e.stopPropagation());
+
+  if (btnExportMd) {
+    btnExportMd.addEventListener("click", () => {
+      closeExportMenu();
+      exportChat("markdown");
+    });
+  }
+
+  if (btnExportJson) {
+    btnExportJson.addEventListener("click", () => {
+      closeExportMenu();
+      exportChat("json");
+    });
+  }
+
+  document.addEventListener("click", () => closeExportMenu());
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") closeExportMenu();
+  });
+}
+
+function setExportMenuOpen(open) {
+  const menu = document.getElementById("exportMenu");
+  const btnExport = document.getElementById("btnExport");
+  if (!menu || !btnExport) return;
+
+  isExportMenuOpen = Boolean(open);
+  menu.style.display = isExportMenuOpen ? "block" : "none";
+  btnExport.setAttribute("aria-expanded", isExportMenuOpen ? "true" : "false");
+}
+
+function closeExportMenu() {
+  if (isExportMenuOpen) setExportMenuOpen(false);
+}
+
+async function fetchConversationMessages(docId) {
+  const res = await fetch(
+    `/api/documents/${encodeURIComponent(docId)}/history?user_id=${encodeURIComponent(currentUserId)}`,
+    { headers: getAuthHeaders() }
+  );
+  if (!res.ok) {
+    const detail = await res.json().catch(() => ({}));
+    throw new Error(detail.detail || `Server error: ${res.status}`);
+  }
+  const data = await res.json();
+  return Array.isArray(data.messages) ? data.messages : [];
+}
+
+function buildExportFilename(docId, extension) {
+  const stamp = new Date()
+    .toISOString()
+    .replace(/[:.]/g, "-")
+    .replace("T", "_")
+    .slice(0, 19);
+  const stem = getDocFileName(docId)
+    .replace(/\.[^.]+$/, "")
+    .replace(/[^a-zA-Z0-9_-]+/g, "_")
+    .replace(/^_+|_+$/g, "") || "document";
+  return `${stem}_chat_${stamp}.${extension}`;
+}
+
+function buildChatMarkdown(docId, messages, exportedAt) {
+  const filename = getDocFileName(docId);
+  const title = getDocDisplayName(docId);
+  const lines = [
+    "# Omni Retrieve — Chat Export",
+    "",
+    `- **Document:** ${filename}`,
+    `- **Title:** ${title}`,
+    `- **Document ID:** \`${docId}\``,
+    `- **Exported:** ${exportedAt.toISOString()}`,
+    `- **Messages:** ${messages.length}`,
+    "",
+    "---",
+    "",
+  ];
+
+  messages.forEach((msg) => {
+    const role = msg.role === "user" ? "You" : "Assistant";
+    lines.push(`## ${role}`, "");
+
+    if (msg.role === "user") {
+      lines.push(String(msg.content || "").trim() || "_(empty message)_");
+    } else {
+      const { cleanText, pages } = cleanAnswerTextAndExtractPages(
+        msg.content || "",
+        msg.sources || []
+      );
+      lines.push(cleanText || "_(no answer content)_");
+
+      if (pages.length > 0) {
+        lines.push("", `**Sources:** [${filename}] Page ${pages.join(", ")}`);
+      } else if (Array.isArray(msg.sources) && msg.sources.length > 0) {
+        lines.push("", `**Sources:** [${filename}]`);
+      }
+
+      const visualSources = (msg.sources || []).filter((src) => {
+        const type = String(src.type || "").toLowerCase();
+        return type === "figure" || type === "table";
+      });
+      if (visualSources.length > 0) {
+        const refs = visualSources.map((src) => {
+          const label = String(src.type || "visual").toUpperCase();
+          const page = (src.pages || []).join(", ") || "?";
+          return `${label} (Page ${page})`;
+        });
+        lines.push("", `**Figures & Tables:** ${refs.join("; ")}`);
+      }
+    }
+
+    lines.push("", "---", "");
+  });
+
+  return lines.join("\n");
+}
+
+function buildChatJsonPayload(docId, messages, exportedAt) {
+  return {
+    application: "Omni Retrieve",
+    exported_at: exportedAt.toISOString(),
+    document: {
+      doc_id: docId,
+      filename: getDocFileName(docId),
+      title: getDocDisplayName(docId),
+    },
+    message_count: messages.length,
+    messages: messages.map((msg) => {
+      if (msg.role === "user") {
+        return { role: "user", content: String(msg.content || "") };
+      }
+
+      const { cleanText, pages } = cleanAnswerTextAndExtractPages(
+        msg.content || "",
+        msg.sources || []
+      );
+      return {
+        role: msg.role || "assistant",
+        content: cleanText,
+        cited_pages: pages,
+        sources: Array.isArray(msg.sources) ? msg.sources : [],
+      };
+    }),
+  };
+}
+
+function downloadTextFile(content, filename, mimeType) {
+  const blob = new Blob([content], { type: `${mimeType};charset=utf-8` });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.style.display = "none";
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1500);
+}
+
+async function exportChat(format) {
+  if (!currentDocId) {
+    alert("Please select a document before exporting a conversation.");
+    return;
+  }
+
+  const docId = currentDocId;
+  const btnExport = document.getElementById("btnExport");
+  if (btnExport) btnExport.disabled = true;
+
+  try {
+    const messages = await fetchConversationMessages(docId);
+    if (messages.length === 0) {
+      alert("There is no conversation to export yet. Ask a question first.");
+      return;
+    }
+
+    const exportedAt = new Date();
+    if (format === "json") {
+      const payload = buildChatJsonPayload(docId, messages, exportedAt);
+      downloadTextFile(
+        JSON.stringify(payload, null, 2),
+        buildExportFilename(docId, "json"),
+        "application/json"
+      );
+    } else {
+      downloadTextFile(
+        buildChatMarkdown(docId, messages, exportedAt),
+        buildExportFilename(docId, "md"),
+        "text/markdown"
+      );
+    }
+  } catch (err) {
+    console.error("Failed to export chat:", err);
+    alert(`Could not export the conversation: ${err.message || err}`);
+  } finally {
+    updateWorkspaceActions();
+  }
 }
 
 /**
@@ -511,7 +815,8 @@ async function handleStreamingChat(query) {
     renderMathInElementSafely(answerBody);
 
     if (pages.length > 0) {
-      workingSheet.appendChild(renderSourcesBar(pages));
+      const docLabel = (metadata && metadata.doc_id) || (sources[0] && sources[0].doc_id) || currentDocId;
+      workingSheet.appendChild(renderSourcesBar(pages, docLabel));
     }
 
     const visualSources = getRelevantVisualSources(sources, fullAnswerText);
@@ -622,7 +927,8 @@ function appendAssistantMessage(data, options = {}) {
   renderMathInElementSafely(answerBody);
 
   if (pages.length > 0) {
-    workingSheet.appendChild(renderSourcesBar(pages));
+    const docLabel = (data && data.doc_id) || (data.sources && data.sources[0] && data.sources[0].doc_id) || currentDocId;
+    workingSheet.appendChild(renderSourcesBar(pages, docLabel));
   }
 
   const visualSources = getRelevantVisualSources(data.sources, data.answer);
@@ -689,7 +995,8 @@ function streamAssistantResponse(data) {
 
     // 2. Attach unified end-of-answer sources provenance bar: Sources: Page 10, 12, 15...
     if (pages.length > 0) {
-      workingSheet.appendChild(renderSourcesBar(pages));
+      const docLabel = (data && data.doc_id) || (data.sources && data.sources[0] && data.sources[0].doc_id) || currentDocId;
+      workingSheet.appendChild(renderSourcesBar(pages, docLabel));
     }
 
     // 3. Attach visual references deck
@@ -968,10 +1275,10 @@ function parseMarkdownToHtml(rawText) {
 }
 
 /**
- * End-of-Answer Sources Bar: "Sources: Page 10, 12, 15..."
- * Formatted with interactive jump pills for each referenced page.
+ * End-of-Answer Sources Bar: "Sources: [filename.pdf] Page 10, 12, 15..."
+ * Formatted with the source document pill and interactive jump pills for each referenced page.
  */
-function renderSourcesBar(pages) {
+function renderSourcesBar(pages, docName) {
   const bar = document.createElement("div");
   bar.className = "sources-provenance-bar";
 
@@ -980,33 +1287,47 @@ function renderSourcesBar(pages) {
   label.textContent = "Sources:";
   bar.appendChild(label);
 
-  const prefix = document.createElement("span");
-  prefix.className = "sources-prefix";
-  prefix.textContent = "Page";
-  bar.appendChild(prefix);
+  const cleanDoc = (docName || currentDocId || "").trim();
+  if (cleanDoc) {
+    const docSpan = document.createElement("span");
+    docSpan.className = "source-doc-pill";
+    const displayDoc = getDocFileName(cleanDoc);
+    docSpan.textContent = `[${displayDoc}]`;
+    docSpan.title = `Document: ${displayDoc}`;
+    docSpan.setAttribute("data-doc-id", cleanDoc);
+    bar.appendChild(docSpan);
+  }
 
-  const listSpan = document.createElement("span");
-  listSpan.className = "sources-list";
+  if (pages && pages.length > 0) {
+    const prefix = document.createElement("span");
+    prefix.className = "sources-prefix";
+    prefix.textContent = "Page";
+    bar.appendChild(prefix);
 
-  pages.forEach((p, idx) => {
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "source-page-pill";
-    btn.textContent = `${p}`;
-    btn.title = `View Page ${p} beside chat`;
-    btn.onclick = (e) => {
-      e.stopPropagation();
-      openAndJumpToPage(p);
-    };
-    listSpan.appendChild(btn);
+    const listSpan = document.createElement("span");
+    listSpan.className = "sources-list";
 
-    if (idx < pages.length - 1) {
-      const sep = document.createTextNode(", ");
-      listSpan.appendChild(sep);
-    }
-  });
+    pages.forEach((p, idx) => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "source-page-pill";
+      btn.textContent = `${p}`;
+      btn.title = `View Page ${p} beside chat`;
+      btn.onclick = (e) => {
+        e.stopPropagation();
+        openAndJumpToPage(p);
+      };
+      listSpan.appendChild(btn);
 
-  bar.appendChild(listSpan);
+      if (idx < pages.length - 1) {
+        const sep = document.createTextNode(", ");
+        listSpan.appendChild(sep);
+      }
+    });
+
+    bar.appendChild(listSpan);
+  }
+
   return bar;
 }
 
@@ -1076,7 +1397,8 @@ function formatMathFallback(code, isBlock) {
 function renderTapedMount(src) {
   const isTable = (src.type || "").toLowerCase() === "table" || Boolean(src.table_markdown);
   const pages = (src.pages || []).join(", ") || "?";
-  const badgeText = isTable ? `TABLE [PAGE ${pages}]` : `FIGURE [PAGE ${pages}]`;
+  const docTag = (src.doc_id || currentDocId) ? `[${getDocFileName(src.doc_id || currentDocId)}] ` : "";
+  const badgeText = isTable ? `${docTag}TABLE [PAGE ${pages}]` : `${docTag}FIGURE [PAGE ${pages}]`;
   const caption = src.caption || src.panel_caption || "Visual asset extracted from document";
   const targetPage = (src.pages && src.pages.length > 0 && parseInt(src.pages[0], 10)) || 1;
 

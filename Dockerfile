@@ -21,7 +21,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Install uv binary from official Astral image
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv 
 
 # Copy package definitions and source tree
 COPY pyproject.toml /app/
@@ -34,12 +34,12 @@ RUN uv pip install --system -e .
 
 # Prepare persistent data mount points with full write permissions (for Hugging Face Spaces user 1000)
 RUN mkdir -p /app/data/raw \
-             /app/data/rendered_pages \
-             /app/data/chunks \
-             /app/data/figures \
-             /app/data/tables \
-             /app/data/embeddings \
-             /app/data/retrieval_runs \
+    /app/data/rendered_pages \
+    /app/data/chunks \
+    /app/data/figures \
+    /app/data/tables \
+    /app/data/embeddings \
+    /app/data/retrieval_runs \
     && chmod -R 777 /app/data
 
 ENV PYTHONPATH="/app/backend:/app/backend/src:/app:$PYTHONPATH"
