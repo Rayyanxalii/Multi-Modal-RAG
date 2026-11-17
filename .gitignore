@@ -16,6 +16,7 @@ deploy/
 data/chat_history.db*
 
 # Generated Ingestion & Visual Assets
+data/users/
 data/rendered_pages/
 data/figures/
 data/tables/
