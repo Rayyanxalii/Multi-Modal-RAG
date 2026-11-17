@@ -432,7 +432,7 @@ def stream_agentic_rag(
     messages, user_blocks, system_prompt, user_dialogue_question, selected_text = build_vlm_messages(state)
 
     if not messages:
-        yield {"type": "token", "delta": "I don't have information about that in the document."}
+        yield {"type": "token", "delta": "I could not find this information in the provided documents."}
         yield {
             "type": "metadata",
             "doc_id": clean_doc,
@@ -440,7 +440,7 @@ def stream_agentic_rag(
             "question": user_dialogue_question,
             "sources": [],
             "route": state.get("route", "both"),
-            "full_answer": "I don't have information about that in the document.",
+            "full_answer": "I could not find this information in the provided documents.",
         }
         yield {"type": "done"}
         return
@@ -497,7 +497,7 @@ def stream_agentic_rag(
     if is_error_answer:
         sources = []
     elif _is_unanswerable_response(full_answer):
-        full_answer = "I don't have information about that in the document."
+        full_answer = "I could not find this information in the provided documents."
         sources = []
     else:
         raw_sources = state.get("sources", [])

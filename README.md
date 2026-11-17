@@ -79,7 +79,7 @@ graph TD;
 3. **Deterministic Unanswerable Guardrails**:
    - If a question falls outside the active document corpus (e.g. asking about unrelated topics not discussed in the document), the system prompt and deterministic server-side classifier enforce an immediate, clean response:
      ```
-     I don't have information about that in the document.
+     I could not find this information in the provided documents.
      ```
    - **Zero Meta-Clutter**: Completely eliminates verbose explanations (*"The provided text chunks exclusively discuss..."*).
    - **Source Purging**: Automatically clears context sources (`sources = []`) so no irrelevant figure mounts or citation bars appear.

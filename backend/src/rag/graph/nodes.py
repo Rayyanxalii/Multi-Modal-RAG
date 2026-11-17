@@ -340,7 +340,10 @@ def contextualize_query(
         role = "User" if turn.get("role") == "user" else "Assistant"
         content = str(turn.get("content", "")).strip()
         # Skip unanswerable boilerplate or error responses
-        if "I don't have information about that in the document" in content:
+        if (
+            "I could not find this information in the provided documents" in content
+            or "I don't have information about that in the document" in content
+        ):
             continue
         if len(content) > 300:
             content = content[:300] + "..."
@@ -927,6 +930,8 @@ def _is_unanswerable_response(text: str) -> bool:
     lower = text.lower().strip()
 
     # Exact or prefix match
+    if lower.startswith("i could not find this information") or lower.startswith("i cannot find this information"):
+        return True
     if lower.startswith("i don't have information") or lower.startswith("i do not have information"):
         return True
     if lower.startswith("there is no information") or lower.startswith("there's no information"):
@@ -940,6 +945,8 @@ def _is_unanswerable_response(text: str) -> bool:
 
     # Substring checks
     unanswerable_phrases = [
+        "could not find this information in the provided documents",
+        "cannot find this information in the provided documents",
         "the provided text chunks exclusively discuss",
         "the provided text chunks do not contain",
         "not contain any information regarding",
@@ -1083,7 +1090,7 @@ def build_vlm_messages(state: RAGState) -> tuple[list[ChatMessage], list[Any], s
         "   - Use inline math '$...$' for variables, dimensions, and short expressions (e.g. '$d_k$', '$d_v$', '$Q$', '$K$', '$V$', '$\\sqrt{d_k}$', '$O(n^2 \\cdot d)$'). Do NOT wrap financial currency figures, prices, or dollar amounts in LaTeX syntax (write '$1,773 million' or '$50' directly as standard text).\n"
         "5. Citations: Ground your statements with concise source citations [Source N, Page P] placed at the end of sentences where facts are introduced. Do not interrupt formulas or insert citations between words.\n"
         "6. Visual References: When referencing figures or tables, explicitly mention them (e.g. 'as illustrated in Figure 2 [Source N, Page P]' or 'detailed in Table 1 [Source N, Page P]').\n"
-        "7. Unanswerable Questions: ONLY if the user asks about an external, unrelated topic or specific fact that has genuinely zero basis or mention in the document (e.g. an unrelated company, external person, or topic completely outside the document), respond ONLY with: 'I don't have information about that in the document.'\n"
+        "7. Unanswerable Questions: ONLY if the user asks about an external, unrelated topic or specific fact that has genuinely zero basis or mention in the document (e.g. an unrelated company, external person, or topic completely outside the document), respond ONLY with: 'I could not find this information in the provided documents.'\n"
         "   - Do NOT trigger this for document summaries, overviews, or high-level explanations of the document itself.\n"
         "   - When triggered, stop immediately without extra commentary or explanation."
     )
@@ -1212,7 +1219,7 @@ def generate_answer_node(state: RAGState) -> dict[str, Any]:
     messages, user_blocks, system_prompt, user_dialogue_question, selected_text_results = build_vlm_messages(state)
 
     if not messages:
-        ans = "I don't have information about that in the document."
+        ans = "I could not find this information in the provided documents."
         return {
             "answer": ans,
             "chat_history": [
@@ -1247,7 +1254,7 @@ def generate_answer_node(state: RAGState) -> dict[str, Any]:
 
     # If response indicates unanswerable topic, enforce clean single-sentence response and purge sources
     if _is_unanswerable_response(response):
-        response = "I don't have information about that in the document."
+        response = "I could not find this information in the provided documents."
         sources = []
     else:
         raw_sources = state.get("sources", [])
