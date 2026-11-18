@@ -29,6 +29,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field
 
 import sys
+from PIL import Image
 from llama_index.core.llms import ChatMessage, ImageBlock, MessageRole, TextBlock
 
 try:
@@ -49,6 +50,7 @@ from rag.config import (
     DEFAULT_PDF_PATH,
     FIGURES_CLEANED_JSONL,
     FIGURES_DIR,
+    MIN_VISION_IMAGE_DIM,
     TABLES_DIR,
     TABLES_JSONL,
     TEXT_COLLECTION_NAME,
@@ -900,6 +902,29 @@ Expanded Query:"""
 
 
 
+def _is_vision_compatible_image(path: Path | None) -> bool:
+    """Check that an asset is readable and large enough for the vision API.
+
+    Groq rejects images smaller than 32 px on either dimension, so tiny crops
+    (icons, bullets, stray fragments) must never be attached to the payload.
+    """
+    if path is None:
+        return False
+    try:
+        with Image.open(path) as img:
+            width, height = img.size
+    except Exception as exc:
+        print(f"[Vision] Skipping unreadable image asset '{path.name}': {exc}")
+        return False
+    if width < MIN_VISION_IMAGE_DIM or height < MIN_VISION_IMAGE_DIM:
+        print(
+            f"[Vision] Skipping image asset '{path.name}': "
+            f"{width}x{height} is below the {MIN_VISION_IMAGE_DIM}px minimum."
+        )
+        return False
+    return True
+
+
 def _resolve_image_path(raw_path: str, record_type: str = "figure") -> Path | None:
     """Resolve an asset image path, checking raw path and canonical data directories."""
     if not raw_path:
@@ -1150,7 +1175,12 @@ def build_vlm_messages(state: RAGState) -> tuple[list[ChatMessage], list[Any], s
                 block_content = "\n".join(lines)
                 user_blocks.append(TextBlock(text=block_content))
                 # Tables with text markdown do not need redundant heavy image tokens
-                if resolved_img and not table_md and attached_images < max_images:
+                if (
+                    resolved_img
+                    and not table_md
+                    and attached_images < max_images
+                    and _is_vision_compatible_image(resolved_img)
+                ):
                     user_blocks.append(ImageBlock(path=resolved_img))
                     attached_images += 1
             else:
@@ -1168,7 +1198,11 @@ def build_vlm_messages(state: RAGState) -> tuple[list[ChatMessage], list[Any], s
                     lines.append(f"Caption: {caption}")
                 block_content = "\n".join(lines)
                 user_blocks.append(TextBlock(text=block_content))
-                if resolved_img and attached_images < max_images:
+                if (
+                    resolved_img
+                    and attached_images < max_images
+                    and _is_vision_compatible_image(resolved_img)
+                ):
                     user_blocks.append(ImageBlock(path=resolved_img))
                     attached_images += 1
             source_idx += 1

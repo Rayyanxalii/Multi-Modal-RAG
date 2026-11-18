@@ -7,6 +7,7 @@ from PIL import Image
 from rag.config import (
     PROJECT_ROOT,
     DEFAULT_PDF_PATH as PDF_PATH,
+    MIN_VISION_IMAGE_DIM,
     RENDERED_PAGES_DIR,
     TABLES_JSONL,
     TABLES_DIR,
@@ -120,6 +121,21 @@ def crop_tables(
                 cropped = page_image.crop((x0, y0, x1, y1))
 
                 output_path = output_dir / f"{table_id}.png"
+
+                # Tiny crops (icons, bullets, stray glyphs) are unusable by the
+                # vision API and only waste tokens, so drop them at the source.
+                if min(cropped.size) < MIN_VISION_IMAGE_DIM:
+                    output_path.unlink(missing_ok=True)
+                    table.pop("image_path", None)
+                    table.pop("image_width", None)
+                    table.pop("image_height", None)
+                    print(
+                        f"Skipping {table_id}: crop {cropped.size} is below "
+                        f"the {MIN_VISION_IMAGE_DIM}px vision minimum."
+                    )
+                    updated_tables.append(table)
+                    continue
+
                 cropped.save(output_path)
 
                 table["image_path"] = str(

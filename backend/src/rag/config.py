@@ -41,6 +41,9 @@ DEFAULT_TEXT_TOP_K = 5
 DEFAULT_FIGURE_TABLE_TOP_K = 10
 DEFAULT_CANDIDATE_K = 10
 
+# Vision APIs reject images smaller than this on either dimension.
+MIN_VISION_IMAGE_DIM = 32
+
 # Environment variables
 ENV_PATH = PROJECT_ROOT / ".env"
 load_dotenv(ENV_PATH, override=True)
