@@ -102,6 +102,8 @@ graph TD;
    - **Consolidated Provenance Bar**: Interactive `Sources: Page 10, 12, 15...` pills that open the viewer and jump to the exact page.
    - **Persistent Conversational Memory**: LangGraph `SqliteSaver` checkpoints in `data/chat_history.db` preserve dialogues across reloads.
    - **Granular Session Control**: One-click **"Clear Chat"** button permanently resets the SQLite conversation state for the active document.
+   - **One-Click Document Summary**: The **"⚡ Summarize Document"** button streams a structured executive summary (purpose, key findings, figures, and tables) through the same adaptive RAG pipeline, with page-level citations rendered inline.
+   - **Conversation Export**: The **"📥 Export Chat"** menu downloads the authoritative saved conversation from `/api/documents/{doc_id}/history` as a formatted Markdown file (`.md`) or a structured JSON transcript (`.json`), including per-message sources and document metadata.
    - **Self-Healing Visual Assets**: Canonical asset URL resolution (`/data/figures/...`, `/data/tables/...`) with automatic client-side fallback.
    - **Real-Time Ingestion Progress Bar**: Multi-stage animated loading bar with live percentage, stage telemetry (page rendering, Docling layout parsing, visual cropping, vector indexing), and a persistent top-strip progress banner.
 
@@ -269,6 +271,9 @@ Open your browser to:
 * **Mathematical Typography**: Rendered offline via KaTeX with standard LaTeX formatting.
 * **Multi-Document Memory**: Switch seamlessly between documents with isolated conversation history restored automatically from SQLite.
 * **Clear Chat**: Reset dialogue checkpoints for the active document with a single click.
+* **Summarize Document**: Generate a streaming, citation-backed executive summary of the active document in one click via `⚡ Summarize Document`.
+* **Export Chat**: Download the full conversation as a Markdown (`.md`) or JSON (`.json`) transcript from the saved history with `📥 Export Chat`.
+* **Resilient Ingestion**: Automatic resume-and-retry if the backend restarts mid-ingestion; completed stages are cached on disk and reused.
 
 ---
 
