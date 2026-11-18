@@ -1073,3 +1073,17 @@ This document captures every major architectural, technical, algorithmic, and en
 - **Outcome**: 100% compliant, zero-install-overhead Ragas evaluation suite supporting text, tabular, and multimodal visual evaluation with detailed attribution diagnostics.
 
 
+## 40. Runtime Memory Detection & Adaptive Parser Selection
+
+### Decision 40.1: Select Docling or PyMuPDF Lite from the Detected Memory Budget
+- **Context & Problem**: A 512 MB Render container cannot run IBM Docling without risking an OOM kill, while a local workstation or larger paid instance can comfortably afford its ~1.2–1.5 GB memory footprint. Hard-coding `LOW_MEMORY_PARSER=true` in the Docker image also forced capable local Docker deployments into the slow, low-quality path.
+- **Decision**:
+  1. **Runtime Profile Detection** (`backend/src/rag/memory_utils.py`): Read cgroup v2/v1 limits (`memory.max` / `limit_in_bytes`) or host total/available RAM using standard-library APIs for Linux, Windows, and macOS. Use `min(host RAM, cgroup limit)` as the effective budget and the smaller of host/cgroup available memory for headroom.
+  2. **Automatic Selection**: Use Docling only when the budget is **≥ 3.5 GB usable** and **≥ 1.8 GB free**; otherwise use PyMuPDF Lite. If the budget cannot be read, or a cloud platform exposes no cgroup limit, fall back to the safe low-memory mode.
+  3. **Coupled Upload Caps**: Low-memory mode keeps `10 MB` / `25 pages`; full mode raises the defaults to `50 MB` / `150 pages`. The same profile drives `/api/auth/status`, so the upload dialog reflects the active caps.
+  4. **Explicit Overrides**: `USE_DOCLING=1/0` forces the parser, `LOW_MEMORY_PARSER=1/0` forces the memory mode, and `DOCLING_MIN_RAM_MB` / `DOCLING_MIN_AVAILABLE_MB` tune the thresholds. `MAX_UPLOAD_MB` / `MAX_UPLOAD_PAGES` remain hard user overrides.
+  5. **Observability**: Log `[Memory] Resource profile: ...` at startup and before each ingestion; expose `parser_mode`, `low_memory_mode`, `detected_ram_mb`, and `resource_reason` from `/api/auth/status`.
+- **Outcome**: A fresh clone on a normal workstation automatically uses Docling and accepts 100–120-page PDFs without configuration, while the 512 MB Render deployment still selects the OOM-safe PyMuPDF Lite path with small upload caps. The Dockerfile no longer hard-codes `LOW_MEMORY_PARSER` or `RENDER`, so local Docker inherits the same adaptive behavior.
+
+
+

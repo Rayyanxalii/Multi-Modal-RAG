@@ -273,6 +273,7 @@ Open your browser to:
 * **Clear Chat**: Reset dialogue checkpoints for the active document with a single click.
 * **Summarize Document**: Generate a streaming, citation-backed executive summary of the active document in one click via `⚡ Summarize Document`.
 * **Export Chat**: Download the full conversation as a Markdown (`.md`) or JSON (`.json`) transcript from the saved history with `📥 Export Chat`.
+* **Adaptive Resource Detection**: Automatically selects IBM Docling with 50 MB / 150-page uploads on machines with sufficient RAM, or PyMuPDF Lite with 10 MB / 25-page caps on 512 MB containers.
 * **Resilient Ingestion**: Automatic resume-and-retry if the backend restarts mid-ingestion; completed stages are cached on disk and reused.
 
 ---
