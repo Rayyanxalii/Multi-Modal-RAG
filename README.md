@@ -12,6 +12,11 @@ Powered by **LangGraph**, the system orchestrates an adaptive, self-correcting s
 
 **Live App**: **[https://multi-modal-rag-fxw5.onrender.com/](https://multi-modal-rag-fxw5.onrender.com/)**
 
+**Docker Hub**: **[rayyan555/multi-modal-rag](https://hub.docker.com/r/rayyan555/multi-modal-rag)** — run locally with no clone:
+```bash
+docker run -d --name rag-app -p 8000:7860 -v rag_data:/app/data --env-file .env rayyan555/multi-modal-rag:latest
+```
+
 > [!IMPORTANT]
 > **Hosting & Resource Constraints (Render Free Tier)**
 > * **Memory & Cold Starts**: The live demo is hosted on **Render's Free Tier (512 MB RAM, shared CPU)**. If the service has been idle, the first page load may take **30–50 seconds** to wake up.
