@@ -1733,7 +1733,14 @@ function initUploadModal() {
         if (typeof data.max_upload_mb === "number") maxUploadMb = data.max_upload_mb;
         if (typeof data.max_upload_pages === "number") maxUploadPages = data.max_upload_pages;
         if (limitHint) {
-          limitHint.textContent = `Upload a PDF or TXT document (max ${maxUploadMb} MB, ${maxUploadPages} pages) to analyze its text, figures, and tables.`;
+          const parserLabel =
+            data.parser_mode === "docling"
+              ? "Docling"
+              : data.parser_mode === "pymupdf_lite"
+                ? "PyMuPDF Lite"
+                : "";
+          const parserNote = parserLabel ? ` Parser: ${parserLabel}.` : "";
+          limitHint.textContent = `Upload a PDF or TXT document (max ${maxUploadMb} MB, ${maxUploadPages} pages) to analyze its text, figures, and tables.${parserNote}`;
         }
       }
     } catch (_) {}

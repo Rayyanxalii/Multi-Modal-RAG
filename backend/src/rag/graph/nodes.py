@@ -23,7 +23,6 @@ Implements all stages of the system as first-class LangGraph nodes:
 """
 
 import json
-import os
 import re
 from pathlib import Path
 from typing import Any, Literal
@@ -130,13 +129,17 @@ def render_pages_node(state: RAGState) -> dict[str, Any]:
 
 
 def parse_document_node(state: RAGState) -> dict[str, Any]:
-    """Parse PDF layout hierarchy & extract text chunks (PyMuPDF Lite by default, Docling only if USE_DOCLING=1)."""
-    from rag.fast_pdf_parser import is_low_memory_env, parse_pdf_fast
+    """Parse PDF layout hierarchy & extract text chunks using the RAM-aware parser."""
+    from rag.fast_pdf_parser import parse_pdf_fast
+    from rag.memory_utils import get_resource_profile
+
     pdf_path = Path(state.get("pdf_path") or DEFAULT_PDF_PATH)
     doc_paths = get_document_paths(pdf_path, user_id=state.get("user_id"))
 
-    use_docling = os.getenv("USE_DOCLING", "").strip().lower() in ("1", "true", "yes")
-    if not use_docling or is_low_memory_env():
+    profile = get_resource_profile()
+    print(f"[Ingestion] Parser selection: {profile.summary()}", flush=True)
+
+    if not profile.use_docling:
         print(f"[Ingestion] Parsing '{pdf_path.name}' with high-speed PyMuPDF Lite engine (low-RAM mode)...")
         parse_pdf_fast(pdf_path, doc_paths=doc_paths)
         return {}

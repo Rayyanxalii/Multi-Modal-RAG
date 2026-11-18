@@ -16,69 +16,25 @@ from rag.config import DEFAULT_PDF_PATH, get_document_paths
 from rag.memory_utils import (
     configure_mupdf_low_memory,
     current_rss_mb,
+    get_resource_profile,
     log_memory,
     release_mupdf_caches,
 )
 
 
 def is_low_memory_env() -> bool:
-    """Detect constrained environments or default to lightweight PyMuPDF parser to protect against OOM."""
-    # 1. Explicit user opt-in for heavy IBM Docling
-    if os.getenv("USE_DOCLING", "").strip().lower() in ("1", "true", "yes"):
-        return False
+    """Return True when the detected memory budget cannot safely run Docling.
 
-    # 2. Explicit flag for low-memory parser
-    low_flag = os.getenv("LOW_MEMORY_PARSER", "").strip().lower()
-    if low_flag in ("1", "true", "yes"):
-        return True
-    if low_flag in ("0", "false", "no"):
-        return False
+    Detection uses the container cgroup limit when present, otherwise host RAM.
+    Set ``LOW_MEMORY_PARSER=1/0`` to force a mode, or ``USE_DOCLING=1/0`` to
+    force only the parser.
+    """
+    return get_resource_profile().low_memory
 
-    # 3. Cloud / container platform detection
-    cloud_vars = (
-        "RENDER",
-        "RENDER_SERVICE_ID",
-        "RENDER_INSTANCE_ID",
-        "SPACE_ID",
-        "K_SERVICE",
-        "FLY_APP_NAME",
-        "DYNO",
-        "AWS_EXECUTION_ENV",
-    )
-    if any(os.getenv(v) for v in cloud_vars):
-        return True
 
-    # Docker container environment
-    if Path("/.dockerenv").exists():
-        return True
-
-    # 4. Check Linux cgroup memory ceiling (Docker, Render, Cloud Run, HF CPU Basic)
-    for cgroup_path in (
-        "/sys/fs/cgroup/memory.max",
-        "/sys/fs/cgroup/memory/memory.limit_in_bytes",
-    ):
-        try:
-            p = Path(cgroup_path)
-            if p.exists():
-                val = p.read_text(encoding="utf-8").strip()
-                if val.isdigit():
-                    limit_mb = int(val) / (1024 * 1024)
-                    if 0 < limit_mb < 3500:
-                        return True
-        except Exception:
-            pass
-
-    # 5. Check host total RAM
-    try:
-        import psutil
-        total_mb = psutil.virtual_memory().total / (1024 * 1024)
-        if total_mb < 3500:
-            return True
-    except Exception:
-        pass
-
-    # Default to lightweight parser for maximum stability and speed
-    return True
+def should_use_docling() -> bool:
+    """Return True when Docling should be used for the current memory budget."""
+    return get_resource_profile().use_docling
 
 
 def is_fast_parsed_doc(document_json_path: Path) -> bool:
@@ -215,7 +171,9 @@ def parse_pdf_fast(
     extract_tables = should_extract_tables(low_mem)
     if extract_tables:
         rss = current_rss_mb()
-        if rss is not None and rss > 320:
+        # The 320 MB guard only applies to the 512 MB cloud profile. On a
+        # high-RAM host, a larger baseline RSS is not a reason to skip tables.
+        if low_mem and rss is not None and rss > 320:
             print(
                 f"[FastPDF] RSS already {rss:.0f} MB — skipping table detection to protect the container "
                 "(set ENABLE_TABLE_DETECTION=1 on an instance with more RAM to re-enable it)."

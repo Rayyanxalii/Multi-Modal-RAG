@@ -48,10 +48,11 @@ from rag.graph import (
     stream_ingest_document,
 )
 from rag.document_manager import list_all_documents, delete_document
-from rag.memory_utils import log_memory
+from rag.memory_utils import get_resource_profile, log_memory, log_resource_profile
 
 app = FastAPI(title="Omni Retrieve")
 log_memory("server:startup")
+log_resource_profile()
 
 # Enable CORS
 app.add_middleware(
@@ -161,12 +162,17 @@ def get_auth_status(
     has_server_key = bool(server_key and server_key.strip())
     has_user_key = bool(isinstance(x_groq_api_key, str) and x_groq_api_key.strip())
     max_mb, max_pages = get_upload_limits()
+    profile = get_resource_profile()
     return {
         "status": "ready" if (has_server_key or has_user_key) else "needs_key",
         "has_server_key": has_server_key,
         "has_user_key": has_user_key,
         "max_upload_mb": max_mb,
         "max_upload_pages": max_pages,
+        "parser_mode": "docling" if profile.use_docling else "pymupdf_lite",
+        "low_memory_mode": profile.low_memory,
+        "detected_ram_mb": round(profile.total_mb) if profile.total_mb is not None else None,
+        "resource_reason": profile.reason,
     }
 
 

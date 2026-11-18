@@ -19,7 +19,7 @@ The system is decoupled into cloud microservices and local execution runtimes:
 +-----------------------------------------------------------------------------------+
 |                            FASTAPI APPLICATION CONTAINER                          |
 |                                                                                   |
-|  - Ingestion Pipeline: PyMuPDF Page Renderer + IBM Docling Layout Parsing        |
+|  - Ingestion Pipeline: PyMuPDF Page Renderer + RAM-aware PyMuPDF/Docling Parsing |
 |  - Agentic State Machine: LangGraph Workflow + SQLite Checkpointer                |
 |  - Retrieval Engine: Reciprocal Rank Fusion (RRF) + Corrective RAG (CRAG)         |
 |  - Storage Mount: /app/data (SQLite DB, Rendered Pages, Chunks, Cropped PNGs)     |
@@ -238,11 +238,13 @@ When deploying to containerized platforms like Railway or Render:
    Configure `GROQ_API`, `QDRANT_URL`, `QDRANT_API_KEY`, `COLPALI_SPACE`, `HF_TOKEN`, and `OLLAMA_HOST` in the platform's Environment dashboard.
    *(For Ollama, you can either host Ollama on an external instance or deploy a companion Ollama service on the platform).*
 4. **Memory / Instance Size**:
-   The FastAPI + LangGraph baseline uses roughly 200–260 MB RSS, so a 512 MB instance is tight while a PDF is being parsed. The Docker image therefore defaults to `LOW_MEMORY_PARSER=true` and `ENABLE_TABLE_DETECTION=false`.
-   - Keep table detection **off** on a 512 MB plan. Table text is still extracted from normal text blocks and indexed; page images remain searchable through ColPali.
-   - On a **1 GB or larger** instance you can set `ENABLE_TABLE_DETECTION=true` to add structured GFM table chunks (low-memory instances then use PyMuPDF's cheaper text strategy).
+   The FastAPI + LangGraph baseline uses roughly 200–260 MB RSS. At startup the backend reads the cgroup memory limit (or host RAM) and automatically selects the parser and upload caps:
+   - **< 3.5 GB usable RAM** (including the 512 MB free tier): PyMuPDF Lite, **10 MB / 25 pages**, table detection off.
+   - **≥ 3.5 GB usable RAM and ≥ 1.8 GB free**: IBM Docling, **50 MB / 150 pages**, TableFormer tables.
+   - If the memory budget cannot be read, or a cloud platform exposes no cgroup limit, the safe low-memory mode is used.
+   - Override with `USE_DOCLING=1/0`, `LOW_MEMORY_PARSER=1/0`, `MAX_UPLOAD_MB`, or `MAX_UPLOAD_PAGES`. Tune the automatic switch with `DOCLING_MIN_RAM_MB` (default `3500`) and `DOCLING_MIN_AVAILABLE_MB` (default `1800`).
+   - Watch the `[Memory] Resource profile: ...` line in the Render logs to confirm which mode was selected, plus `[Memory] ...` RSS telemetry at each ingestion stage.
    - Ingestion is serialized per instance, so concurrent uploads queue instead of doubling peak memory.
-   - Watch `[Memory] ...` lines in the Render logs to see current/peak RSS at each ingestion stage.
 
 ---
 

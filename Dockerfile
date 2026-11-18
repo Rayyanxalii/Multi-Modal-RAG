@@ -7,10 +7,11 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     MALLOC_ARENA_MAX=2 \
     MALLOC_TRIM_THRESHOLD_=32768 \
-    LOW_MEMORY_PARSER=true \
-    ENABLE_TABLE_DETECTION=false \
-    PYMUPDF_SUGGEST_LAYOUT_ANALYZER=0 \
-    RENDER=true
+    PYMUPDF_SUGGEST_LAYOUT_ANALYZER=0
+
+# Parser mode, table detection, and upload limits are detected at runtime from
+# the cgroup/host memory budget. Do not force LOW_MEMORY_PARSER here: a local
+# Docker container on a high-RAM machine should still be able to use Docling.
 
 WORKDIR /app
 

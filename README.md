@@ -15,7 +15,7 @@ Powered by **LangGraph**, the system orchestrates an adaptive, self-correcting s
 > [!IMPORTANT]
 > **Hosting & Resource Constraints (Render Free Tier)**
 > * **Memory & Cold Starts**: The live demo is hosted on **Render's Free Tier (512 MB RAM, shared CPU)**. If the service has been idle, the first page load may take **30–50 seconds** to wake up.
-> * **PDF Size & Page Limits (Enforced)**: Because of the **512 MB RAM ceiling** on Render's free tier, uploads on the hosted instance are **strictly limited to `10 MB` and `25 pages` maximum** (`MAX_UPLOAD_MB` / `MAX_UPLOAD_PAGES`). Larger files are automatically rejected before ingestion to protect server stability. *(In low-memory cloud environments, the backend automatically switches from heavy IBM Docling deep-learning models to the lightweight PyMuPDF parser [`fast_pdf_parser.py`](backend/src/rag/fast_pdf_parser.py) to stay safely under 512 MB RAM.)*
+> * **PDF Size & Page Limits (Auto-Detected)**: The backend measures the container cgroup limit or host RAM at runtime. On the **512 MB Render free tier** it automatically selects the lightweight PyMuPDF parser ([`fast_pdf_parser.py`](backend/src/rag/fast_pdf_parser.py)) and caps uploads at **`10 MB` / `25 pages`**. On a local machine or paid plan with roughly **3.5 GB+ usable RAM** it automatically enables IBM Docling and raises the defaults to **`50 MB` / `150 pages`**. Override the caps with `MAX_UPLOAD_MB` / `MAX_UPLOAD_PAGES`; force the parser with `USE_DOCLING=1` / `0` or `LOW_MEMORY_PARSER=1` / `0`.
 > * **Bring Your Own Vision LLM Key (BYOK)**: For security and quota protection, visitors supply their own free **Groq API Key** via the **🔑 Vision LLM Key** button in the top navigation bar. Your key is stored solely in your browser's `localStorage` and is never persisted on the server—you can grab a free key in 30 seconds at [console.groq.com/keys](https://console.groq.com/keys).
 > * **Cloud Visual Search**: Late-interaction ColPali page indexing and MaxSim search run remotely on a **Hugging Face ZeroGPU Space**; heavy visual indexing may take a brief moment if the Space is waking from sleep.
 
@@ -345,9 +345,23 @@ The automated pipeline executes four unified stages for any ingested document:
 
 #### Adaptive Parser Trade-Off (Docling vs. PyMuPDF Lite)
 
-To operate cleanly across both high-RAM workstations and 512 MB free-tier containers without out-of-memory crashes, `parse_document_node` selects the parser dynamically based on available RAM (`USE_DOCLING=1` forces Docling):
+To operate cleanly across both high-RAM workstations and 512 MB free-tier containers without out-of-memory crashes, `parse_document_node` selects the parser dynamically from the **effective memory budget** (`min(host RAM, cgroup limit)`):
 
-| Feature | IBM Docling (`docling_parser.py`, ≥ 2.5 GB RAM) | PyMuPDF Lite (`fast_pdf_parser.py`, 512 MB Cloud) |
+| Detected budget | Parser selected | Default upload caps | Table extraction |
+| :--- | :--- | :--- | :--- |
+| **< 3.5 GB usable** or **< 1.8 GB free** | PyMuPDF Lite (`fast_pdf_parser.py`) | 10 MB / 25 pages | Off |
+| **≥ 3.5 GB usable** and **≥ 1.8 GB free** | IBM Docling (`docling_parser.py`) | 50 MB / 150 pages | On (TableFormer) |
+
+Detection priority:
+1. `USE_DOCLING=1` forces full mode and Docling; `USE_DOCLING=0` forces PyMuPDF Lite while keeping large caps on a capable host.
+2. `LOW_MEMORY_PARSER=1` forces low-memory mode; `LOW_MEMORY_PARSER=0` forces full mode.
+3. Otherwise the budget is read from cgroup v2/v1 (`memory.max` / `limit_in_bytes`) or host RAM. If the budget cannot be read, or a cloud platform exposes no cgroup limit, the safe low-memory mode is used.
+
+Tune the thresholds with `DOCLING_MIN_RAM_MB` (default `3500`) and `DOCLING_MIN_AVAILABLE_MB` (default `1800`). The resolved profile is printed at startup and before every ingestion as `[Memory] Resource profile: ...`, and the same profile drives `/api/auth/status`, so the upload UI reflects the active caps automatically.
+
+#### Feature Comparison
+
+| Feature | IBM Docling (`docling_parser.py`, ≥ 3.5 GB usable RAM) | PyMuPDF Lite (`fast_pdf_parser.py`, 512 MB Cloud) |
 | :--- | :--- | :--- |
 | **Memory & Speed** | ~1.2–1.5 GB RAM, ~25–60s cold load | ~30 MB RAM, ~1–4s total |
 | **Text & Headings** | Neural layout predictor + `HybridChunker` | Font-size/boldness heuristics + 380-word semantic chunks |
