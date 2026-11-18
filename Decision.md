@@ -1088,14 +1088,38 @@ This document captures every major architectural, technical, algorithmic, and en
 
 ## 41. Figure Quality Filtering
 
-### Decision 41.1: Reject Signature, Logo, and Icon Crops During Ingestion
-- **Context & Problem**: Docling labels every visual region as a `PictureItem`, including signatures, logos, bullets, and stray glyphs. On the 26-page `sazgar.pdf` financial report it produced 35 picture items, but 25 were small decorative fragments (the largest was `124x63`, area 7,812 px²). They added noise to visual retrieval and nine were below the vision API's 32 px minimum.
+### Decision 41.1: Filter Docling Picture Items Because Docling Cannot Classify Figures Semantically
+- **Context & Problem**: Docling is layout-aware, but it labels **every** visual region as a `PictureItem` — including signatures, company logos, seals, bullets, and stray glyphs. The installed Docling `2.140.0` pipeline exposes no picture-classification stage (`PictureClassificationOptions` is unavailable), so it cannot distinguish a real chart from a director's signature. On the 26-page `sazgar.pdf` financial report, Docling produced 35 picture items, but 25 were decorative fragments (the largest was `124x63`, area 7,812 px²). They polluted visual retrieval, and nine were even below the vision API's 32 px minimum. A second Docling limitation is that `PictureItem.get_image()` returned `None` for every item in this scanned/hybrid report, so the final usable image is created later by cropping the rendered page — meaning the true pixel dimensions are only known after cropping.
 - **Decision**:
-  1. **Single Quality Gate** (`backend/src/rag/visual_retrieval/preprocess/figure_cropper.py`): Apply the filter after the final crop from the rendered page, where the real pixel dimensions are known for both Docling and PyMuPDF Lite.
-  2. **Thresholds**: Keep a crop only when both dimensions are at least `32 px` (vision API minimum) and its area is at least `8,000 px²`. The default is overridable with `MIN_FIGURE_AREA_PX`.
-  3. **Exclude, Do Not Merely Hide**: Discarded figures are removed from the figures JSONL and their PNG files are deleted, so they cannot be hydrated as empty visual sources.
+  1. **Single Quality Gate** (`backend/src/rag/visual_retrieval/preprocess/figure_cropper.py`): Apply the filter after the final crop from the rendered page, where real pixel dimensions are known for both Docling and PyMuPDF Lite.
+  2. **Thresholds**: Keep a crop only when both dimensions are at least `32 px` (vision API minimum) and its area is at least `8,000 px²`. The default is overridable with `MIN_FIGURE_AREA_PX` for documents with genuinely small diagrams.
+  3. **Exclude, Do Not Merely Hide**: Discarded figures are removed from the figures JSONL and their PNG files are deleted, so they cannot be hydrated as empty visual sources or appear in the UI.
   4. **Observability**: Log every skipped crop with its dimensions and print `Figures kept` / `discarded as too small` totals.
-- **Measured Result**: `sazgar.pdf` went from 35 raw picture items to 10 meaningful figures (7 full-page/scan visuals, one chart, one tall strip, one banner) with zero signature/logo fragments, while all 11 Docling tables were preserved. PyMuPDF Lite alone found only 2 figures and 0 tables on the same document, confirming that the correct fix was filtering Docling output rather than replacing the parser.
+- **Measured Result**: `sazgar.pdf` went from 35 raw picture items to **10 meaningful figures** (7 full-page/scan visuals, one chart, one tall strip, one banner) with zero signature/logo fragments, while all 11 Docling tables were preserved.
+
+### Decision 41.2: Retain Docling Instead of Replacing It with PyMuPDF Lite
+- **Context & Problem**: The noisy figures raised the question of removing Docling entirely and using the faster PyMuPDF Lite parser for every document. A same-document benchmark was run before deciding.
+- **Benchmark on `sazgar.pdf` (26 pages)**:
+
+| Metric | Docling | PyMuPDF Lite |
+|---|---|---|
+| Ingestion time | ~5m 17s | **24.7s** |
+| Peak memory | ~1.9 GB | **~310 MB** |
+| Text chunks | 125 (124 with headings) | 48 |
+| Figures | 35 raw → **10 meaningful** after filtering | **2** |
+| Tables | **11 with structured Markdown** | **0** |
+| Captions / formula recovery | Yes | No |
+
+- **Why PyMuPDF Lite alone is not sufficient**:
+  1. It found **0 tables** even with `find_tables()` enabled on the high-RAM "lines" strategy. The financial tables in this report are borderless/scanned, and PyMuPDF's geometry heuristics miss them, while Docling exported clean Markdown with row labels, notes, and quarter/period columns.
+  2. It found only **2 figures** because its rule discards images covering more than 95% of a page as decorative backgrounds. Pages 3, 7, 9, 19, and 25 are full-page scans/charts, so they disappeared entirely.
+  3. It does not assign figure/table captions and performs no formula recovery, reducing both text and visual retrieval quality.
+- **Decision**:
+  1. **Keep Docling as the primary parser** on machines with sufficient RAM (the existing auto-selection threshold), and apply the figure-quality filter from Decision 41.1.
+  2. **Keep PyMuPDF Lite as the low-memory fallback** for 512 MB Render containers and as an explicit speed override (`USE_DOCLING=0`).
+  3. **Do not replace Docling globally**: its higher ingestion cost is paid once per document, not at query time, and it delivers materially better tables, headings, captions, and figure recall. On the 512 MB deployment the auto-selection already uses PyMuPDF Lite, so a global replacement would mainly degrade results on capable local machines.
+- **Rejected Alternative**: Global replacement with PyMuPDF Lite — faster ingestion, but permanently loses the financial tables and most visual assets on this document.
+- **Outcome**: Docling remains the quality path, the noise from its unclassified `PictureItem`s is removed, and the fast parser remains available where memory or ingestion speed demands it.
 
 
 
