@@ -49,6 +49,19 @@ ENV_PATH = PROJECT_ROOT / ".env"
 load_dotenv(ENV_PATH, override=True)
 
 
+def get_min_figure_area_px() -> int:
+    """Minimum pixel area for a cropped figure to be indexed.
+
+    Small signature/logo/icon fragments add noise to visual retrieval and can
+    be rejected by vision APIs, so they are dropped during cropping. Override
+    with ``MIN_FIGURE_AREA_PX`` when a document has genuinely tiny diagrams.
+    """
+    try:
+        return int(os.getenv("MIN_FIGURE_AREA_PX", "8000"))
+    except (TypeError, ValueError):
+        return 8000
+
+
 def get_qdrant_credentials() -> tuple[str, str]:
     """Retrieve Qdrant URL and API key from environment."""
     url = os.getenv("QDRANT_URL")

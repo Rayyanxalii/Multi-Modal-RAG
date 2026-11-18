@@ -11,6 +11,7 @@ from rag.config import (
     RENDERED_PAGES_DIR,
     FIGURES_JSONL,
     FIGURES_DIR,
+    get_min_figure_area_px,
 )
 
 
@@ -31,6 +32,9 @@ def crop_figures(
 
     pdf = fitz.open(pdf_path)
     updated_figures = []
+    min_figure_area = get_min_figure_area_px()
+    kept_crops = 0
+    discarded_small = 0
 
     try:
         for figure in figures:
@@ -116,21 +120,25 @@ def crop_figures(
 
                 output_path = output_dir / f"{figure_id}.png"
 
-                # Tiny crops (icons, bullets, stray glyphs) are unusable by the
-                # vision API and only waste tokens, so drop them at the source.
-                if min(cropped.size) < MIN_VISION_IMAGE_DIM:
+                # Drop signature/logo/icon fragments and anything below the
+                # vision API minimum. These are not useful visual evidence and
+                # only add retrieval noise, so exclude them from the index too.
+                crop_width, crop_height = cropped.size
+                if (
+                    min(crop_width, crop_height) < MIN_VISION_IMAGE_DIM
+                    or crop_width * crop_height < min_figure_area
+                ):
                     output_path.unlink(missing_ok=True)
-                    figure.pop("image_path", None)
-                    figure.pop("image_width", None)
-                    figure.pop("image_height", None)
+                    discarded_small += 1
                     print(
                         f"Skipping {figure_id}: crop {cropped.size} is below "
-                        f"the {MIN_VISION_IMAGE_DIM}px vision minimum."
+                        f"the relevance thresholds "
+                        f"(min {MIN_VISION_IMAGE_DIM}px, area {min_figure_area}px^2)."
                     )
-                    updated_figures.append(figure)
                     continue
 
                 cropped.save(output_path)
+                kept_crops += 1
 
                 figure["image_path"] = str(
                     output_path.relative_to(PROJECT_ROOT)
@@ -157,6 +165,9 @@ def crop_figures(
     temporary_path.replace(figures_jsonl)
 
     print(f"\nFinished. Crops saved in: {output_dir}")
+    print(
+        f"Figures kept: {kept_crops} | discarded as too small: {discarded_small}"
+    )
 
 
 if __name__ == "__main__":

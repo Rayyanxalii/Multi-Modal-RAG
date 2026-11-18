@@ -1086,4 +1086,16 @@ This document captures every major architectural, technical, algorithmic, and en
 - **Outcome**: A fresh clone on a normal workstation automatically uses Docling and accepts 100–120-page PDFs without configuration, while the 512 MB Render deployment still selects the OOM-safe PyMuPDF Lite path with small upload caps. The Dockerfile no longer hard-codes `LOW_MEMORY_PARSER` or `RENDER`, so local Docker inherits the same adaptive behavior.
 
 
+## 41. Figure Quality Filtering
+
+### Decision 41.1: Reject Signature, Logo, and Icon Crops During Ingestion
+- **Context & Problem**: Docling labels every visual region as a `PictureItem`, including signatures, logos, bullets, and stray glyphs. On the 26-page `sazgar.pdf` financial report it produced 35 picture items, but 25 were small decorative fragments (the largest was `124x63`, area 7,812 px²). They added noise to visual retrieval and nine were below the vision API's 32 px minimum.
+- **Decision**:
+  1. **Single Quality Gate** (`backend/src/rag/visual_retrieval/preprocess/figure_cropper.py`): Apply the filter after the final crop from the rendered page, where the real pixel dimensions are known for both Docling and PyMuPDF Lite.
+  2. **Thresholds**: Keep a crop only when both dimensions are at least `32 px` (vision API minimum) and its area is at least `8,000 px²`. The default is overridable with `MIN_FIGURE_AREA_PX`.
+  3. **Exclude, Do Not Merely Hide**: Discarded figures are removed from the figures JSONL and their PNG files are deleted, so they cannot be hydrated as empty visual sources.
+  4. **Observability**: Log every skipped crop with its dimensions and print `Figures kept` / `discarded as too small` totals.
+- **Measured Result**: `sazgar.pdf` went from 35 raw picture items to 10 meaningful figures (7 full-page/scan visuals, one chart, one tall strip, one banner) with zero signature/logo fragments, while all 11 Docling tables were preserved. PyMuPDF Lite alone found only 2 figures and 0 tables on the same document, confirming that the correct fix was filtering Docling output rather than replacing the parser.
+
+
 
