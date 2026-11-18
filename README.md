@@ -247,6 +247,29 @@ The repository includes pre-configured container definitions for immediate produ
 docker compose up -d --build
 ```
 
+### Run the Published Image (No Clone Required)
+
+The production image is published publicly on Docker Hub as
+[`rayyan555/multi-modal-rag`](https://hub.docker.com/r/rayyan555/multi-modal-rag):
+
+```bash
+docker run -d --name rag-app \
+  -p 8000:7860 \
+  -v rag_data:/app/data \
+  -e GROQ_API=your_groq_api_key \
+  -e QDRANT_URL=https://your-cluster.cloud.qdrant.io:6333 \
+  -e QDRANT_API_KEY=your_qdrant_api_key \
+  -e GEMINI_API_KEY=your_google_gemini_api_key \
+  -e COLPALI_SPACE=https://rayyan0-colpali.hf.space \
+  -e HF_TOKEN=your_huggingface_token \
+  rayyan555/multi-modal-rag:latest
+```
+
+Open **http://localhost:8000**. The named volume `rag_data` persists uploads, SQLite
+chat history, and generated figures across container replacements. `GROQ_API` powers
+the LLM and vision (VLM) calls; it can also be supplied per-user in the web UI
+(BYOK) instead of in the container environment.
+
 For complete deployment guides covering **Docker Compose**, **Linux Systemd**, **Nginx Reverse Proxy with SSL**, and **Cloud PaaS (Railway / Render)**, refer to:
 👉 **[`DEPLOYMENT.md`](DEPLOYMENT.md)**
 
