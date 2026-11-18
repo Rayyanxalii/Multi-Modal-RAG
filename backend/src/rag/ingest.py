@@ -1,19 +1,4 @@
-"""Unified Ingestion Pipeline for Multimodal RAG.
-
-This module coordinates document preprocessing and indexing end-to-end:
-1. Render PDF pages to images (PyMuPDF) -> data/rendered_pages/
-2. Parse layout and generate contextual text chunks (Docling) -> data/chunks/
-3. Extract figures and tables metadata (Docling) -> data/figures/, data/tables/
-4. Crop figure and table images from rendered pages -> data/figures/, data/tables/
-5. Clean captions and normalize visual assets -> data/figures/figures_cleaned.jsonl
-6. Index text chunks into Qdrant -> collection: text_chunks
-7. Index figures and tables into Qdrant -> collection: figures_tables
-
-Usage:
-    python -m rag.ingest --pdf data/raw/attention.pdf
-    python -m rag.ingest --skip-rendering
-    python -m rag.ingest --only-indexing
-"""
+"""Unified ingestion pipeline for multimodal RAG."""
 
 import argparse
 from pathlib import Path
@@ -59,21 +44,18 @@ def run_pipeline(
     print(f"Starting Multimodal Ingestion Pipeline for: {pdf_path.name}")
     print("=" * 60)
 
-    # Stage 1: Render PDF pages
     if not skip_rendering:
         print("\n[Stage 1/5] Rendering PDF pages as images...")
         render_pdf_images(pdf_path, output_dir=RENDERED_PAGES_DIR)
     else:
         print("\n[Stage 1/5] Skipping PDF page rendering.")
 
-    # Stage 2: Parse layout and create chunks with Docling
     if not skip_parsing:
         print("\n[Stage 2/5] Parsing document layout and creating text chunks...")
         create_chunks(pdf_path, chunks_path=TEXT_CHUNKS_PATH)
     else:
         print("\n[Stage 2/5] Skipping Docling parsing.")
 
-    # Stage 3: Extract figures and tables metadata
     if not skip_cropping:
         print("\n[Stage 3/5] Extracting figure and table metadata...")
         if not DOCUMENT_JSON_PATH.exists():
@@ -107,7 +89,6 @@ def run_pipeline(
     else:
         print("\n[Stage 3/5 & 4/5] Skipping visual extraction and cropping.")
 
-    # Stage 5: Vector Indexing in Qdrant
     if not skip_indexing:
         print("\n[Stage 5/5] Indexing text chunks in Qdrant...")
         try:
@@ -129,6 +110,7 @@ def run_pipeline(
 
 
 def main():
+    """Parse CLI arguments and run the ingestion pipeline."""
     parser = argparse.ArgumentParser(
         description="Ingest a PDF document into the multimodal RAG system."
     )

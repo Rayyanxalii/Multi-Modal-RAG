@@ -1,3 +1,5 @@
+"""BM25-based text retrieval helpers for chunked documents."""
+
 import json
 import re
 from pathlib import Path
@@ -8,6 +10,7 @@ from rag.config import TEXT_CHUNKS_PATH as CHUNKS_PATH
 
 
 def load_chunks(chunks_path: Path = CHUNKS_PATH) -> list[dict]:
+    """Load text chunks from a JSONL file."""
     chunks_path = Path(chunks_path)
     if not chunks_path.exists():
         raise FileNotFoundError(
@@ -28,6 +31,7 @@ def load_chunks(chunks_path: Path = CHUNKS_PATH) -> list[dict]:
 
 
 def tokenize(text: str) -> list[str]:
+    """Tokenize text into lowercase alphanumeric tokens."""
     return re.findall(
         r"[a-zA-Z0-9]+(?:_[a-zA-Z0-9]+)*",
         text.lower(),
@@ -82,7 +86,6 @@ def search_headings(
     results = []
 
     for index in ranked_indices:
-        # Don't return chunks with no heading-term match.
         if scores[index] <= 0:
             continue
 

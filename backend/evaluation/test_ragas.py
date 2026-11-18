@@ -1,21 +1,4 @@
-"""test_ragas.py
-
-
-Evaluates RAG pipeline performance across all 8 official Ragas RAG metrics:
-  1. Context Precision         (context_precision)
-  2. Context Recall            (context_recall)
-  3. Context Entities Recall   (context_entity_recall)
-  4. Noise Sensitivity         (NoiseSensitivity)
-  5. Response Relevancy        (answer_relevancy)
-  6. Faithfulness              (faithfulness)
-  7. Multimodal Faithfulness   (multimodal_faithness)
-  8. Multimodal Relevance      (multimodal_relevance)
-
-Target Document: data/raw/nestle_financial_report.pdf (or configured PDF)
-Dataset: 69 curated benchmark samples from backend/evaluation/create_dataset.py
-
-
-"""
+"""Ragas evaluation harness for the RAG pipeline."""
 
 from __future__ import annotations
 
@@ -29,14 +12,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-# Ensure UTF-8 output on Windows consoles
 if sys.stdout.encoding and sys.stdout.encoding.lower() != "utf-8":
     try:
         sys.stdout.reconfigure(encoding="utf-8")
     except Exception:
         pass
 
-# Add backend and backend/src to sys.path
 EVAL_DIR = Path(__file__).resolve().parent
 BACKEND_DIR = EVAL_DIR.parent
 PROJECT_ROOT = BACKEND_DIR.parent
@@ -55,13 +36,11 @@ from datasets import Dataset as HFDataset
 from langchain_openai import ChatOpenAI
 from langchain_core.embeddings import Embeddings
 
-# Official Ragas evaluation imports
 from ragas import evaluate
 from ragas.llms import LangchainLLMWrapper
 from ragas.embeddings import LangchainEmbeddingsWrapper
 from ragas.run_config import RunConfig
 
-# All 8 Ragas RAG metrics
 from ragas.metrics import (
     context_precision,
     context_recall,
@@ -73,50 +52,44 @@ from ragas.metrics import (
     multimodal_relevance,
 )
 
-# Benchmark samples and RAG pipeline
 from backend.evaluation.create_dataset import SAMPLES
 from rag.graph import run_agentic_rag
 
 
-# ---------------------------------------------------------------------------
-# Default Constants & Paths
-# ---------------------------------------------------------------------------
 DEFAULT_PDF = PROJECT_ROOT / "data" / "raw" / "nestle_financial_report.pdf"
 DEFAULT_OUTPUT_DIR = PROJECT_ROOT / "data" / "experiments"
 DEFAULT_EVAL_MODEL = "openai/gpt-oss-120b"
 DEFAULT_EMBEDDING_MODEL = "all-MiniLM-L6-v2"
 
 
-# ---------------------------------------------------------------------------
-# Independent Embeddings Adapter (SentenceTransformers)
-# ---------------------------------------------------------------------------
 class IndependentSentenceTransformerEmbeddings(Embeddings):
     """Independent embedding model (all-MiniLM-L6-v2) for unbiased Ragas evaluation."""
 
     def __init__(self, model_name: str = DEFAULT_EMBEDDING_MODEL):
+        """Initialize the sentence transformer embedding client."""
         from sentence_transformers import SentenceTransformer
         self.model_name = model_name
         self.client = SentenceTransformer(model_name)
 
     def embed_documents(self, texts: list[str]) -> list[list[float]]:
+        """Embed a list of documents into vectors."""
         clean_texts = [str(t) if str(t).strip() else " " for t in texts]
         embeddings = self.client.encode(clean_texts, convert_to_numpy=True)
         return embeddings.tolist()
 
     def embed_query(self, text: str) -> list[float]:
+        """Embed a single query into a vector."""
         clean_text = str(text) if str(text).strip() else " "
         embedding = self.client.encode(clean_text, convert_to_numpy=True)
         return embedding.tolist()
 
 
-# ---------------------------------------------------------------------------
-# Resilient LLM Adapter (Groq with Automatic Rate-Limit Fallback)
-# ---------------------------------------------------------------------------
 class ResilientChatOpenAI(ChatOpenAI):
     """ChatOpenAI wrapper that automatically falls back to gpt-oss-20b if rate limited."""
     fallback_model: str = "openai/gpt-oss-20b"
 
     async def _agenerate(self, messages, stop=None, run_manager=None, **kwargs):
+        """Generate a chat completion with automatic rate-limit fallback."""
         try:
             return await super()._agenerate(messages, stop=stop, run_manager=run_manager, **kwargs)
         except Exception as e:
@@ -130,9 +103,6 @@ class ResilientChatOpenAI(ChatOpenAI):
             raise
 
 
-# ---------------------------------------------------------------------------
-# Evaluator Setup (LLM + Embeddings + 8 Metrics)
-# ---------------------------------------------------------------------------
 def setup_evaluator(
     eval_model: str = DEFAULT_EVAL_MODEL,
     embedding_model: str = DEFAULT_EMBEDDING_MODEL,
@@ -142,7 +112,6 @@ def setup_evaluator(
     if not groq_api_key:
         raise ValueError("GROQ_API key is missing in environment or .env file.")
 
-    # 1. Evaluator LLM (Groq with resilient fallback)
     eval_llm = LangchainLLMWrapper(
         ResilientChatOpenAI(
             base_url="https://api.groq.com/openai/v1",
@@ -155,15 +124,12 @@ def setup_evaluator(
         is_finished_parser=lambda _: True,
     )
 
-    # 2. Independent Evaluator Embeddings (all-MiniLM-L6-v2, independent from nomic-embed-text)
     eval_emb = LangchainEmbeddingsWrapper(
         IndependentSentenceTransformerEmbeddings(model_name=embedding_model)
     )
 
-    # 3. Instantiate NoiseSensitivity
     noise_sensitivity = NoiseSensitivity(mode="relevant")
 
-    # 4. Consolidated list of all 8 evaluation metrics
     metrics = [
         context_precision,
         context_recall,
@@ -178,9 +144,6 @@ def setup_evaluator(
     return eval_llm, eval_emb, metrics
 
 
-# ---------------------------------------------------------------------------
-# Context Extraction Helper
-# ---------------------------------------------------------------------------
 def extract_contexts_from_rag_result(result: dict[str, Any]) -> list[str]:
     """Extract grounded context passages (text, tables, figures) from RAG result."""
     contexts: list[str] = []
@@ -206,7 +169,6 @@ def extract_contexts_from_rag_result(result: dict[str, Any]) -> list[str]:
             if cap:
                 contexts.append(f"[Figure {s_id} | Page: {pages}]\nCaption: {cap}")
 
-    # Fallback or supplement with context_str blocks if contexts is empty or lean
     if result.get("context_str") and (not contexts or not any(len(c) > 80 for c in contexts)):
         raw_blocks = [b.strip() for b in result["context_str"].split("\n\n") if b.strip()]
         if raw_blocks:
@@ -218,9 +180,6 @@ def extract_contexts_from_rag_result(result: dict[str, Any]) -> list[str]:
     return contexts
 
 
-# ---------------------------------------------------------------------------
-# Main Evaluation Function
-# ---------------------------------------------------------------------------
 def run_evaluation(
     pdf_path: str | Path = DEFAULT_PDF,
     limit: int | None = None,
@@ -231,21 +190,11 @@ def run_evaluation(
     embedding_model: str = DEFAULT_EMBEDDING_MODEL,
     max_workers: int = 2,
 ) -> dict[str, Any]:
-    """Execute complete Ragas test evaluation across all 8 metrics.
-
-    Workflow:
-      1. Slices evaluation test dataset (from SAMPLES).
-      2. Executes Generalized Multimodal Agentic RAG for each question.
-      3. Captures query, generated answer, retrieved contexts, and expected answer.
-      4. Converts to Hugging Face Dataset format.
-      5. Runs official ragas.evaluate() across all 8 metrics.
-      6. Saves results to JSON & CSV and prints summary scorecard.
-    """
+    """Execute complete Ragas test evaluation across all 8 metrics."""
     pdf_path = Path(pdf_path)
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    # 1. Select samples
     selected_samples = SAMPLES[offset:]
     if limit is not None and limit > 0:
         selected_samples = selected_samples[:limit]
@@ -259,7 +208,6 @@ def run_evaluation(
     print(f"Evaluator Embeddings : {embedding_model} (Local Ollama)")
     print("=" * 75 + "\n")
 
-    # 2. Phase 1: Run RAG pipeline (with persistent caching)
     print("--- [Phase 1/2] Executing Multimodal Agentic RAG Pipeline ---")
     cache_file = PROJECT_ROOT / "data" / "experiments" / f".cache_rag_{tag}_off{offset}_lim{total}.json"
     cache_file.parent.mkdir(parents=True, exist_ok=True)
@@ -327,7 +275,6 @@ def run_evaluation(
                     "route": "error",
                 })
 
-        # Cache completed RAG records
         try:
             with cache_file.open("w", encoding="utf-8") as f:
                 json.dump(rag_records, f, ensure_ascii=False, indent=2)
@@ -340,7 +287,6 @@ def run_evaluation(
     else:
         print(f"Phase 1 Skipped: using {len(rag_records)} cached sample responses.\n")
 
-    # 3. Phase 2: Build HF Dataset & Run Ragas 8-Metric Evaluation
     print("--- [Phase 2/2] Running Ragas Evaluation across 8 Metrics ---")
     hf_dataset = HFDataset.from_dict({
         "user_input": [r["user_input"] for r in rag_records],
@@ -376,8 +322,8 @@ def run_evaluation(
 
     import numpy as np
 
-    # Normalize metric column lookups
     def get_column_value(df, row_idx: int, metric_name: str) -> float | None:
+        """Return a metric column value for a given row."""
         if df is None:
             return None
         matched_col = None
@@ -406,7 +352,6 @@ def run_evaluation(
                 return None
         return None
 
-    # Attach metric scores to each individual record
     metric_keys = [
         "context_precision",
         "context_recall",
@@ -423,13 +368,11 @@ def run_evaluation(
         for m in metric_keys:
             r["scores"][m] = get_column_value(df_results, i, m)
 
-    # Build clean overall scorecard dictionary
     clean_overall_scores = {}
     for m in metric_keys:
         vals = [r["scores"][m] for r in rag_records if r["scores"].get(m) is not None]
         clean_overall_scores[m] = round(float(np.mean(vals)), 4) if vals else 0.0
 
-    # 4. Save results directly to results.json (sample 4 to sample 10)
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     run_id = f"{tag}_{timestamp}"
     json_path = output_dir / f"{run_id}.json"
@@ -482,7 +425,6 @@ def run_evaluation(
                 r.get("latency_sec", 0.0),
             ])
 
-    # 5. Display Scorecard Summary
     print("\n" + "=" * 75)
     print("                      RAGAS 8-METRIC EVALUATION SCORECARD")
     print(f"               Evaluated Samples: {offset + 1} to {offset + total} (Total: {total})")
@@ -500,9 +442,6 @@ def run_evaluation(
     return export_data
 
 
-# ---------------------------------------------------------------------------
-# CLI Entrypoint
-# ---------------------------------------------------------------------------
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run Ragas 8-Metric Evaluation Test.")
     parser.add_argument("--pdf", type=str, default=str(DEFAULT_PDF), help="Target PDF document path.")

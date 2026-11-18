@@ -1,11 +1,4 @@
-"""Comprehensive document and chat lifecycle manager.
-
-Handles complete multi-tenant deletion across all layers:
-1. Local disk assets (rendered pages, cropped figures/tables, Docling chunks, metadata)
-2. Qdrant Cloud vector database points (filtered by document_id)
-3. Hugging Face Space visual embeddings (embeddings/{doc_id}.pt)
-4. In-memory BM25 index and LangGraph state caches
-"""
+"""Document and chat lifecycle manager."""
 
 import shutil
 from pathlib import Path
@@ -44,10 +37,6 @@ def delete_document(
     deleted_items: list[str] = []
     errors: list[str] = []
 
-    # -------------------------------------------------------------------------
-    # 1. Delete Local Asset Folders
-    # -------------------------------------------------------------------------
-    # Rendered pages directory
     pages_dir = doc_paths["rendered_pages_dir"]
     if pages_dir.exists() and pages_dir.is_dir():
         try:
@@ -56,7 +45,6 @@ def delete_document(
         except Exception as exc:
             errors.append(f"Failed deleting pages dir: {exc}")
 
-    # Cropped figures directory
     fig_dir = doc_paths["figures_dir"]
     if fig_dir.exists() and fig_dir.is_dir():
         try:
@@ -65,7 +53,6 @@ def delete_document(
         except Exception as exc:
             errors.append(f"Failed deleting figures dir: {exc}")
 
-    # Cropped tables directory
     tbl_dir = doc_paths["tables_dir"]
     if tbl_dir.exists() and tbl_dir.is_dir():
         try:
@@ -74,9 +61,6 @@ def delete_document(
         except Exception as exc:
             errors.append(f"Failed deleting tables dir: {exc}")
 
-    # -------------------------------------------------------------------------
-    # 2. Delete Local Chunk & Metadata Files
-    # -------------------------------------------------------------------------
     chunks_dir = doc_paths["chunks_dir"]
     chunk_patterns = [
         f"{doc_id}_chunks.jsonl",
@@ -96,7 +80,6 @@ def delete_document(
             except Exception as exc:
                 errors.append(f"Failed deleting {pattern}: {exc}")
 
-    # Local embeddings cache (if any)
     emb_file = doc_paths["colpali_embeddings_path"]
     if emb_file.exists():
         try:
@@ -105,7 +88,6 @@ def delete_document(
         except Exception as exc:
             errors.append(f"Failed deleting {doc_id}.pt: {exc}")
 
-    # Optional: Delete uploaded raw PDF
     if delete_raw_pdf:
         raw_pdf = doc_paths["raw_dir"] / f"{doc_id}.pdf"
         if raw_pdf.exists():
@@ -115,9 +97,6 @@ def delete_document(
             except Exception as exc:
                 errors.append(f"Failed deleting raw PDF: {exc}")
 
-    # -------------------------------------------------------------------------
-    # 3. Delete Points from Qdrant Cloud
-    # -------------------------------------------------------------------------
     qdrant_deleted = False
     try:
         client = get_qdrant_client()
@@ -147,9 +126,6 @@ def delete_document(
     except Exception as exc:
         errors.append(f"Qdrant deletion error: {exc}")
 
-    # -------------------------------------------------------------------------
-    # 4. Delete Embeddings from Hugging Face Space
-    # -------------------------------------------------------------------------
     cloud_deleted = False
     try:
         colpali_client = get_colpali_cloud_client()
@@ -160,9 +136,6 @@ def delete_document(
     except Exception as exc:
         errors.append(f"HF Space deletion notice: {exc}")
 
-    # -------------------------------------------------------------------------
-    # 5. Invalidate In-Memory Caches
-    # -------------------------------------------------------------------------
     try:
         get_bm25_index_for_file.cache_clear()
     except Exception:
@@ -195,21 +168,18 @@ def list_all_documents(user_id: str | None = None) -> list[dict[str, Any]]:
     if not chunks_dir.exists():
         return []
 
-    # Discover from chunks directory
     for chunk_file in sorted(chunks_dir.glob("*_chunks.jsonl")):
         stem = chunk_file.stem.replace("_chunks", "")
         if stem in seen:
             continue
         seen.add(stem)
 
-        # Count chunks
         try:
             with chunk_file.open("r", encoding="utf-8") as f:
                 chunk_count = sum(1 for line in f if line.strip())
         except Exception:
             chunk_count = 0
 
-        # Count figures
         fig_count = 0
         fig_file = chunks_dir / f"{stem}_figures_cleaned.jsonl"
         if not fig_file.exists():
@@ -221,7 +191,6 @@ def list_all_documents(user_id: str | None = None) -> list[dict[str, Any]]:
             except Exception:
                 pass
 
-        # Count tables
         tbl_count = 0
         tbl_file = chunks_dir / f"{stem}_tables.jsonl"
         if tbl_file.exists():
@@ -231,7 +200,6 @@ def list_all_documents(user_id: str | None = None) -> list[dict[str, Any]]:
             except Exception:
                 pass
 
-        # Count rendered pages
         pages_dir = rendered_root if (clean_user == "default" and stem == "attention") else rendered_root / stem
         page_count = len(list(pages_dir.glob("*.png"))) if pages_dir.exists() else 0
 

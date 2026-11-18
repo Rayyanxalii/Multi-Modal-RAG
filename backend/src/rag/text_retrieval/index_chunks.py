@@ -1,3 +1,5 @@
+"""Index text chunks into the Qdrant vector database."""
+
 import json
 import uuid
 from pathlib import Path
@@ -18,6 +20,7 @@ BATCH_SIZE = 16
 
 
 def load_chunks(chunks_path: Path = CHUNKS_PATH) -> list[dict]:
+    """Load text chunks from a JSONL file."""
     chunks_path = Path(chunks_path)
     if not chunks_path.exists():
         raise FileNotFoundError(
@@ -38,11 +41,13 @@ def load_chunks(chunks_path: Path = CHUNKS_PATH) -> list[dict]:
 
 
 def get_client() -> QdrantClient:
+    """Create a Qdrant client from configured credentials."""
     url, api_key = get_qdrant_credentials()
     return QdrantClient(url=url, api_key=api_key)
 
 
 def ensure_collection(client: QdrantClient, collection_name: str = COLLECTION_NAME) -> None:
+    """Ensure the Qdrant collection exists with the expected vector size."""
     if not client.collection_exists(collection_name):
         client.create_collection(
             collection_name=collection_name,

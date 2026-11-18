@@ -19,6 +19,7 @@ class ColPaliCloudClient:
     """Client for querying and indexing documents on the remote ColPali HF Space."""
 
     def __init__(self, space_name: str | None = None, hf_token: str | None = None):
+        """Initialize the cloud client with an optional space name and token."""
         target = space_name or os.getenv("COLPALI_SPACE", "https://rayyan0-colpali.hf.space")
         if "/" in target and not target.startswith("http"):
             user, repo = target.split("/", 1)
@@ -31,11 +32,12 @@ class ColPaliCloudClient:
 
     @property
     def page_names(self) -> list[str]:
-        """Virtual page names for backwards compatibility."""
+        """Return virtual page names for backwards compatibility."""
         return [f"page_{i}" for i in range(1, 100)]
 
     @property
     def client(self):
+        """Lazily create and return the underlying gradio client."""
         if self._client is None:
             if Client is None:
                 raise ImportError(
@@ -64,10 +66,7 @@ class ColPaliCloudClient:
         image_paths: list[Path | str],
         force: bool = False,
     ) -> dict[str, Any]:
-        """Upload and compute ColPali visual embeddings for page images on the HF Space GPU.
-
-        If embeddings for doc_id already exist on the Space (and force=False), skips redundant GPU encoding.
-        """
+        """Upload and compute ColPali visual embeddings for page images on the HF Space GPU."""
         doc_id = (doc_id or "").strip().lower()
         if not doc_id:
             raise ValueError("doc_id cannot be empty")
@@ -136,7 +135,6 @@ class ColPaliCloudClient:
         if not isinstance(raw_results, list):
             return []
 
-        # Check for error payload from server
         if raw_results and isinstance(raw_results[0], dict) and "error" in raw_results[0]:
             print(f"[ColPali Cloud] Space returned error: {raw_results[0]['error']}")
             return []
@@ -179,4 +177,6 @@ class ColPaliCloudClient:
 
 @lru_cache(maxsize=1)
 def get_colpali_cloud_client() -> ColPaliCloudClient:
+    """Return a cached cloud ColPali client instance."""
     return ColPaliCloudClient()
+

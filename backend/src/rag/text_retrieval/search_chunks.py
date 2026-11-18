@@ -1,3 +1,5 @@
+"""Dense vector search over indexed text chunks in Qdrant."""
+
 from pathlib import Path
 import ollama
 from qdrant_client import QdrantClient
@@ -11,6 +13,7 @@ from rag.config import (
 
 
 def get_client() -> QdrantClient:
+    """Create a Qdrant client from configured credentials."""
     url, api_key = get_qdrant_credentials()
     return QdrantClient(url=url, api_key=api_key)
 
@@ -21,6 +24,7 @@ def search_chunks(
     doc_id: str | None = None,
     user_id: str | None = None,
 ) -> list[dict]:
+    """Search Qdrant for chunks nearest to the question embedding."""
     if not question.strip():
         raise ValueError("Question cannot be empty.")
 
@@ -29,11 +33,9 @@ def search_chunks(
 
     client = get_client()
 
-    # 1. Convert the question into a 768-dim vector via unified embedding service.
     from rag.services.embedding_service import embed_query
     query_embedding = embed_query(question)
 
-    # Strict isolation by document_id and user_id
     query_filter = None
     must_conditions = []
     if doc_id:
@@ -62,7 +64,6 @@ def search_chunks(
         from qdrant_client import models
         query_filter = models.Filter(must=must_conditions)
 
-    # 2. Retrieve the closest vectors from Qdrant.
     response = client.query_points(
         collection_name=COLLECTION_NAME,
         query=query_embedding,
@@ -71,7 +72,6 @@ def search_chunks(
         with_payload=True,
     )
 
-    # 3. Return readable results.
     results = []
 
     for point in response.points:
@@ -93,6 +93,7 @@ def search_chunks(
 
 
 def main():
+    """Run interactive dense search and print ranked results."""
     client = get_client()
 
     if not client.collection_exists(COLLECTION_NAME):

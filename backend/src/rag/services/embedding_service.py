@@ -83,7 +83,6 @@ def embed_query(query: str) -> list[float]:
             raise ValueError(f"Expected {VECTOR_SIZE} dimensions, got {len(values)}")
         return values
 
-    # Fallback to Ollama if no Gemini API key configured
     ollama_client = get_ollama_client()
     res = ollama_client.embed(model="nomic-embed-text", input=clean_query)
     return res["embeddings"][0]
@@ -119,11 +118,10 @@ def embed_documents(texts: list[str]) -> list[list[float]]:
                 all_embeddings.append(vals)
 
             if start_idx + MAX_BATCH_SIZE < len(texts):
-                time.sleep(1.0)  # Gentle pacing between batches
+                time.sleep(1.0)
 
         return all_embeddings
 
-    # Fallback to Ollama
     ollama_client = get_ollama_client()
     res = ollama_client.embed(model="nomic-embed-text", input=texts)
     return res["embeddings"]

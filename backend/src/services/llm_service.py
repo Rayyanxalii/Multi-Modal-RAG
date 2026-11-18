@@ -1,3 +1,5 @@
+"""LLM service providing Groq-backed text and vision clients with per-request key support."""
+
 import os
 from contextvars import ContextVar, Token
 from typing import Any
@@ -6,10 +8,8 @@ from llama_index.llms.groq import Groq
 
 load_dotenv()
 
-# Thread-safe / async-safe context variable holding the caller's Groq API key
 _user_groq_key_ctx: ContextVar[str | None] = ContextVar("user_groq_key_ctx", default=None)
 
-# Cache initialized LLM instances by API key to avoid reconstruction overhead
 _LLM_CACHE: dict[str, Groq] = {}
 _VISION_CACHE: dict[str, Groq] = {}
 
@@ -77,12 +77,15 @@ class DynamicLLMProxy:
     """
 
     def __init__(self, is_vision: bool = False):
+        """Initialize the proxy with the given vision flag."""
         self._is_vision = is_vision
 
     def _target(self) -> Groq:
+        """Return the underlying Groq client for the active request."""
         return get_llm_vision() if self._is_vision else get_llm()
 
     def __getattr__(self, name: str) -> Any:
+        """Delegate attribute access to the underlying Groq client."""
         return getattr(self._target(), name)
 
 

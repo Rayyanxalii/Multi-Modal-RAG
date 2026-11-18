@@ -1,4 +1,4 @@
-"""FastAPI Web Server for the Multimodal Agentic RAG """
+"""FastAPI web server for the multimodal agentic RAG."""
 
 import gc
 import os
@@ -10,7 +10,6 @@ import uuid
 from pathlib import Path
 from typing import Any
 
-# Ensure project root, backend, and backend/src are available on sys.path
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 BACKEND_DIR = Path(__file__).resolve().parent
 BACKEND_SRC = PROJECT_ROOT / "backend" / "src"
@@ -54,7 +53,6 @@ app = FastAPI(title="Omni Retrieve")
 log_memory("server:startup")
 log_resource_profile()
 
-# Enable CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -65,11 +63,9 @@ app.add_middleware(
 
 STATIC_DIR = PROJECT_ROOT / "frontend" / "static"
 
-# Mount data directory so cropped figures, tables, and rendered pages can be rendered in UI
 if DATA_DIR.exists():
     app.mount("/data", StaticFiles(directory=str(DATA_DIR)), name="data")
 
-# Mount frontend static files
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 
@@ -82,13 +78,11 @@ def resolve_asset_url(image_path: str | None, doc_id: str = "attention", record_
     filename = Path(raw_path_str).name
     clean_doc = (doc_id or "attention").strip().lower()
 
-    # 1. If path is already a valid relative path under DATA_DIR
     direct_candidate = DATA_DIR / raw_path_str.lstrip("/")
     if direct_candidate.exists() and direct_candidate.is_file():
         rel = direct_candidate.relative_to(DATA_DIR).as_posix()
         return f"/data/{rel}"
 
-    # 2. Check document-specific folders first (for uploaded documents)
     if clean_doc != "attention":
         doc_cands = [
             FIGURES_DIR / clean_doc / filename,
@@ -99,7 +93,6 @@ def resolve_asset_url(image_path: str | None, doc_id: str = "attention", record_
                 rel = c.relative_to(DATA_DIR).as_posix()
                 return f"/data/{rel}"
 
-    # 3. Check canonical FIGURES_DIR and TABLES_DIR
     if record_type == "figure" or "fig" in filename.lower():
         fig_cand = FIGURES_DIR / filename
         if fig_cand.exists() and fig_cand.is_file():
@@ -109,13 +102,11 @@ def resolve_asset_url(image_path: str | None, doc_id: str = "attention", record_
         if tab_cand.exists() and tab_cand.is_file():
             return f"/data/tables/{filename}"
 
-    # 4. Check both folders regardless of type
     for d, folder_name in [(FIGURES_DIR, "figures"), (TABLES_DIR, "tables")]:
         cand = d / filename
         if cand.exists() and cand.is_file():
             return f"/data/{folder_name}/{filename}"
 
-    # 5. Recursive fallback search in DATA_DIR
     matches = list(DATA_DIR.glob(f"**/{filename}"))
     if matches and matches[0].is_file():
         rel = matches[0].relative_to(DATA_DIR).as_posix()
@@ -256,7 +247,6 @@ def get_document_pages(
     pages_dir: Path = paths["rendered_pages_dir"]
     pages_dir.mkdir(parents=True, exist_ok=True)
 
-    # Determine total expected pages from PDF directly
     try:
         import pymupdf
         with pymupdf.open(pdf_path) as doc_obj:
@@ -265,7 +255,6 @@ def get_document_pages(
         expected_pages = 0
 
     existing_pages = list(pages_dir.glob("page_*.png"))
-    # Render pages on demand if missing or incomplete
     if expected_pages > 0 and len(existing_pages) < expected_pages:
         from rag.doc_loader import render_pdf_to_images
         render_pdf_to_images(pdf_path=pdf_path, output_dir=pages_dir)
@@ -328,7 +317,6 @@ def get_document_page_image(
         if cand.exists() and cand.stat().st_size > 0:
             target_img = cand
 
-    # On-demand single page render if missing or incomplete (<40ms via PyMuPDF)
     if not target_img.exists() or target_img.stat().st_size == 0:
         try:
             import pymupdf
@@ -382,7 +370,6 @@ def get_document_history(
         print(f"[Warning] Failed to read checkpointer history for {thread_id}: {exc}")
         messages = []
 
-    # Format web_image_url for sources in messages
     for msg in messages:
         if msg.get("role") == "assistant" and "sources" in msg:
             for src in msg.get("sources", []):
@@ -468,7 +455,6 @@ def submit_question(
             user_id=uid,
         )
 
-        # Normalize image paths in sources for frontend rendering
         sources = result.get("sources", [])
         for src in sources:
             img = src.get("image_path")
@@ -528,6 +514,7 @@ def stream_chat_question(
         pdf_path = matches[0] if matches else (raw_dir / f"{doc_id}.pdf")
 
     def event_stream():
+        """Stream chat responses as server-sent events."""
         token = set_request_groq_key(effective_key)
         try:
             for event in stream_agentic_rag(
@@ -565,12 +552,9 @@ def stream_chat_question(
     )
 
 
-# In-memory background ingestion job registry (prevents Render/Cloudflare 100s proxy timeouts)
 _INGEST_JOBS: dict[str, dict[str, Any]] = {}
 _INGEST_LOCK = threading.Lock()
 
-# Only one ingestion may run per instance: parallel parsing doubles peak memory
-# and OOMs 512 MB containers.  Additional uploads wait in a FIFO queue.
 _INGEST_GATE = threading.Lock()
 try:
     _INGEST_GATE_TIMEOUT = max(60, int(os.getenv("INGEST_QUEUE_TIMEOUT_SECONDS", "900")))
@@ -674,7 +658,7 @@ def convert_txt_to_pdf_file(txt_bytes: bytes, target_pdf: Path) -> int:
 
     txt_text = txt_bytes.decode("utf-8", errors="replace")
     doc = pymupdf.open()
-    width, height = 595, 842  # A4 standard
+    width, height = 595, 842
     margin_x = 54
     top_margin = 60
     line_height = 14
@@ -737,7 +721,6 @@ async def upload_document(
     raw_dir.mkdir(parents=True, exist_ok=True)
     chunks_dir.mkdir(parents=True, exist_ok=True)
 
-    # Sanitize document ID from filename
     raw_stem = Path(file.filename).stem.lower()
     base_id = "".join(c if c.isalnum() or c in ("-", "_") else "_" for c in raw_stem).strip("_")
     if not base_id:
@@ -799,7 +782,6 @@ async def upload_document(
                 ),
             )
 
-        # Content-based hash comparison for deduplication vs collision auto-increment
         temp_hash = compute_file_sha256(temp_pdf)
 
         doc_id = base_id
@@ -815,11 +797,9 @@ async def upload_document(
 
         if target_pdf.exists() or chunks_file.exists():
             if is_identical:
-                # Same file re-uploaded! Reuse existing document ID without duplicate storage
                 temp_pdf.unlink(missing_ok=True)
                 print(f"[Upload] Identical content match for '{file.filename}' -> reusing existing doc_id='{doc_id}' (user_id={uid})")
             else:
-                # Content differs! Auto-increment doc_id to avoid overwriting or mixing
                 import re
                 m = re.match(r"^(.*?)(?:_(\d+))?$", base_id)
                 clean_base = m.group(1) if m else base_id
@@ -843,7 +823,6 @@ async def upload_document(
                         except Exception:
                             pass
                     elif not cand_chunks.exists():
-                        # Found first unused auto-incremented ID
                         doc_id = candidate_id
                         target_pdf = cand_pdf
                         temp_pdf.replace(target_pdf)
@@ -851,7 +830,6 @@ async def upload_document(
                         break
                     counter += 1
         else:
-            # First time seeing this document name
             temp_pdf.replace(target_pdf)
     except HTTPException:
         temp_pdf.unlink(missing_ok=True)
@@ -869,10 +847,10 @@ async def upload_document(
     print(f"[Upload] Saved '{file.filename}' to '{target_pdf}' (doc_id={doc_id}, pages={page_count}, size={bytes_written}B, user_id={uid})")
 
     if stream:
-        # SSE streaming mode with 4s keep-alive heartbeats via worker queue
         q: queue_mod.Queue = queue_mod.Queue()
 
         def worker():
+            """Run document ingestion in a background worker thread."""
             gate_acquired = _INGEST_GATE.acquire(timeout=_INGEST_GATE_TIMEOUT)
             if not gate_acquired:
                 q.put({
@@ -895,6 +873,7 @@ async def upload_document(
         threading.Thread(target=worker, daemon=True).start()
 
         def progress_stream():
+            """Yield ingestion progress events as server-sent events."""
             yield f"data: {json.dumps({'stage': 'uploaded', 'progress': 5, 'message': init_msg, 'doc_id': doc_id})}\n\n"
             while True:
                 try:
@@ -915,7 +894,6 @@ async def upload_document(
             },
         )
 
-    # Default asynchronous job mode: returns immediately so Cloudflare/Render proxies never time out
     job_id = uuid.uuid4().hex[:12]
     with _INGEST_LOCK:
         _INGEST_JOBS[job_id] = {
@@ -972,6 +950,5 @@ if __name__ == "__main__":
     import uvicorn
     import os
     port = int(os.getenv("PORT", 8000))
-    # Support both project root execution (backend.server:app) and backend dir execution (server:app)
     app_target = "server:app" if Path.cwd() == BACKEND_DIR else "backend.server:app"
     uvicorn.run(app_target, host="0.0.0.0", port=port, reload=False)

@@ -1,17 +1,12 @@
-/**
- * Document Research Assistant
- * Handles document switching, side-by-side inspection, streaming Q&A, and uploads.
- */
+// Frontend application logic for the document research assistant.
 
 const savedActiveDoc = typeof localStorage !== "undefined" ? localStorage.getItem("rag_active_doc_id") : null;
 let currentDocId = savedActiveDoc || null;
 let allDocuments = [];
-const chatHistories = {}; // doc_id -> in-memory HTML snapshot
-let isChatBusy = false; // prevents concurrent questions / summarize runs
+const chatHistories = {};
+let isChatBusy = false;
 
-// ============================================================================
-// Anonymous Multi-Tenant User Session (Isolated personal workspace per device)
-// ============================================================================
+// Creates or retrieves a persistent anonymous user ID from local storage.
 function getOrCreateUserId() {
   const STORAGE_KEY = "rag_user_id";
   let uid = null;
@@ -32,6 +27,7 @@ function getOrCreateUserId() {
 
 const currentUserId = getOrCreateUserId();
 
+// Builds request headers including the user ID and optional Groq API key.
 function getAuthHeaders(extraHeaders = {}) {
   const headers = {
     "X-User-ID": currentUserId,
@@ -44,14 +40,13 @@ function getAuthHeaders(extraHeaders = {}) {
   return headers;
 }
 
-// Document Viewer State
 let isDocViewerOpen = false;
 let currentViewerDoc = currentDocId;
 let currentPage = 1;
 let totalPages = 1;
 let docPagesList = [];
 let currentZoom = 1.0;
-let viewerMode = "pages"; // "pages" or "pdf"
+let viewerMode = "pages";
 
 document.addEventListener("DOMContentLoaded", () => {
   initApiKeyModal();
@@ -63,7 +58,6 @@ document.addEventListener("DOMContentLoaded", () => {
   initUploadModal();
   initDocViewer();
 
-  // Re-sweep any initial answer bodies with KaTeX
   if (window.renderMathInElement) {
     document.querySelectorAll(".answer-body").forEach((el) => {
       try {
@@ -80,15 +74,14 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 });
 
-// ============================================================================
-// 1. Document Ledger & Switching
-// ============================================================================
+// Initializes the document ledger and restores history for the active document.
 async function initDocumentLedger() {
   await loadDocuments();
-  // Restore conversational history from SQLite checkpointer for active document
+
   await loadDocumentHistory(currentDocId);
 }
 
+// Fetches the user's documents and renders them in the sidebar.
 async function loadDocuments() {
   const docList = document.getElementById("docList");
   try {
@@ -110,7 +103,6 @@ async function loadDocuments() {
       return;
     }
 
-    // Verify currentDocId exists among docs, otherwise fallback to first
     const docExists = currentDocId ? docs.some((d) => d.doc_id.toLowerCase() === currentDocId.toLowerCase()) : false;
     if (!docExists && docs.length > 0) {
       currentDocId = docs[0].doc_id;
@@ -143,9 +135,7 @@ async function loadDocuments() {
   }
 }
 
-/**
- * Load and restore conversation history from SQLite checkpointer.
- */
+// Loads and renders saved conversation history for a document.
 async function loadDocumentHistory(docId) {
   const chatStream = document.getElementById("chatStream");
   if (!chatStream) return;
@@ -197,6 +187,7 @@ async function loadDocumentHistory(docId) {
   chatStream.scrollTop = chatStream.scrollHeight;
 }
 
+// Returns a human-readable display name for a document ID.
 function getDocDisplayName(docId) {
   if (!docId) return "";
   const found = allDocuments.find((d) => d.doc_id.toLowerCase() === docId.toLowerCase());
@@ -204,9 +195,7 @@ function getDocDisplayName(docId) {
   return docId.replace(/[_-]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
-/**
- * Resolve the stored filename for a document (every upload is normalized to "{doc_id}.pdf").
- */
+// Resolves the stored filename for a document.
 function getDocFileName(docId) {
   const clean = (docId || "").trim();
   if (!clean) return "";
@@ -216,9 +205,7 @@ function getDocFileName(docId) {
   return `${clean}.pdf`;
 }
 
-/**
- * Enable/disable workspace actions and close transient menus on document changes.
- */
+// Enables or disables workspace actions based on document and busy state.
 function updateWorkspaceActions() {
   const hasDoc = Boolean(currentDocId);
   const btnSummarize = document.getElementById("btnSummarize");
@@ -230,9 +217,7 @@ function updateWorkspaceActions() {
   if (!hasDoc) closeExportMenu();
 }
 
-/**
- * Toggle the shared busy state for chat submission and the summarize action.
- */
+// Sets the shared busy state and updates dependent controls.
 function setChatBusy(busy) {
   isChatBusy = Boolean(busy);
 
@@ -242,6 +227,7 @@ function setChatBusy(busy) {
   updateWorkspaceActions();
 }
 
+// Updates the question input placeholder for the active document.
 function updateInputPlaceholder() {
   const input = document.getElementById("questionInput");
   if (!input) return;
@@ -252,6 +238,7 @@ function updateInputPlaceholder() {
   }
 }
 
+// Switches the active document and restores its chat view.
 async function switchDocument(docId, forceReload = false) {
   if (docId === currentDocId && !forceReload) return;
 
@@ -278,7 +265,6 @@ async function switchDocument(docId, forceReload = false) {
 
   updateDocListHighlight();
 
-  // If document viewer is currently open beside chat, update its content
   if (docId) {
     if (isDocViewerOpen) {
       loadDocumentPages(docId);
@@ -289,6 +275,7 @@ async function switchDocument(docId, forceReload = false) {
   }
 }
 
+// Updates sidebar highlighting to reflect the active document.
 function updateDocListHighlight() {
   document.querySelectorAll(".doc-item-scrap").forEach((el) => {
     const docName = el.querySelector(".doc-name")?.textContent.trim().toLowerCase();
@@ -298,6 +285,7 @@ function updateDocListHighlight() {
   });
 }
 
+// Wires up the clear chat button and its confirmation flow.
 function initClearChatButton() {
   const btn = document.getElementById("btnClearChat");
   if (!btn) return;
@@ -339,6 +327,7 @@ function initClearChatButton() {
   });
 }
 
+// Renders the initial greeting or empty state for a document.
 function renderInitialGreeting(docId) {
   const chatStream = document.getElementById("chatStream");
   if (!chatStream) return;
@@ -371,6 +360,7 @@ function renderInitialGreeting(docId) {
   chatHistories[docId] = chatStream.innerHTML;
 }
 
+// Updates the active document badge in the header.
 function updateActiveBadge() {
   const badge = document.getElementById("activeDocBadge");
   if (badge) {
@@ -381,6 +371,7 @@ function updateActiveBadge() {
   updateWorkspaceActions();
 }
 
+// Deletes a document after confirmation and refreshes the list.
 async function handleDeleteDoc(event, docId) {
   event.stopPropagation();
   const displayName = getDocDisplayName(docId);
@@ -413,9 +404,7 @@ async function handleDeleteDoc(event, docId) {
   }
 }
 
-// ============================================================================
-// 2. Chat Q&A Interaction
-// ============================================================================
+// Initializes the chat form submission handler.
 function initChatForm() {
   const chatForm = document.getElementById("chatForm");
   const questionInput = document.getElementById("questionInput");
@@ -435,10 +424,7 @@ function initChatForm() {
   });
 }
 
-/**
- * Submit a question through the streaming RAG pipeline.
- * Used by both the chat form and the one-click Summarize Document action.
- */
+// Submits a question through the streaming RAG pipeline.
 async function submitQuestion(query, displayText = null) {
   if (!currentDocId) {
     alert("Please upload or select a document from the left sidebar before asking questions.");
@@ -458,11 +444,7 @@ async function submitQuestion(query, displayText = null) {
   }
 }
 
-/**
- * Bonus Feature 1: One-click Executive Summary of the active document.
- * Delegates to the existing agentic RAG pipeline so citations and visual
- * references are produced exactly like a normal question.
- */
+// Wires up the one-click document summarize button.
 function initSummarizeButton() {
   const btn = document.getElementById("btnSummarize");
   if (!btn) return;
@@ -482,11 +464,9 @@ function initSummarizeButton() {
   });
 }
 
-// ============================================================================
-// Bonus Feature 2: Export Conversation as Markdown / JSON
-// ============================================================================
 let isExportMenuOpen = false;
 
+// Initializes export menu interactions.
 function initExportChat() {
   const btnExport = document.getElementById("btnExport");
   const btnExportMd = document.getElementById("btnExportMd");
@@ -500,7 +480,6 @@ function initExportChat() {
     setExportMenuOpen(!isExportMenuOpen);
   });
 
-  // Keep clicks inside the dropdown from immediately closing it.
   dropdown.addEventListener("click", (e) => e.stopPropagation());
 
   if (btnExportMd) {
@@ -523,6 +502,7 @@ function initExportChat() {
   });
 }
 
+// Opens or closes the export dropdown menu.
 function setExportMenuOpen(open) {
   const menu = document.getElementById("exportMenu");
   const btnExport = document.getElementById("btnExport");
@@ -533,10 +513,12 @@ function setExportMenuOpen(open) {
   btnExport.setAttribute("aria-expanded", isExportMenuOpen ? "true" : "false");
 }
 
+// Closes the export dropdown if it is open.
 function closeExportMenu() {
   if (isExportMenuOpen) setExportMenuOpen(false);
 }
 
+// Fetches conversation messages for a document.
 async function fetchConversationMessages(docId) {
   const res = await fetch(
     `/api/documents/${encodeURIComponent(docId)}/history?user_id=${encodeURIComponent(currentUserId)}`,
@@ -550,6 +532,7 @@ async function fetchConversationMessages(docId) {
   return Array.isArray(data.messages) ? data.messages : [];
 }
 
+// Builds a timestamped filename for an exported chat.
 function buildExportFilename(docId, extension) {
   const stamp = new Date()
     .toISOString()
@@ -563,6 +546,7 @@ function buildExportFilename(docId, extension) {
   return `${stem}_chat_${stamp}.${extension}`;
 }
 
+// Builds a Markdown representation of the conversation.
 function buildChatMarkdown(docId, messages, exportedAt) {
   const filename = getDocFileName(docId);
   const title = getDocDisplayName(docId);
@@ -618,6 +602,7 @@ function buildChatMarkdown(docId, messages, exportedAt) {
   return lines.join("\n");
 }
 
+// Builds a JSON payload of the conversation.
 function buildChatJsonPayload(docId, messages, exportedAt) {
   return {
     application: "Omni Retrieve",
@@ -647,6 +632,7 @@ function buildChatJsonPayload(docId, messages, exportedAt) {
   };
 }
 
+// Downloads text content as a file in the browser.
 function downloadTextFile(content, filename, mimeType) {
   const blob = new Blob([content], { type: `${mimeType};charset=utf-8` });
   const url = URL.createObjectURL(blob);
@@ -660,6 +646,7 @@ function downloadTextFile(content, filename, mimeType) {
   setTimeout(() => URL.revokeObjectURL(url), 1500);
 }
 
+// Exports the current conversation in the requested format.
 async function exportChat(format) {
   if (!currentDocId) {
     alert("Please select a document before exporting a conversation.");
@@ -700,9 +687,7 @@ async function exportChat(format) {
   }
 }
 
-/**
- * Real-time SSE Token Streaming & Status Pipeline Handler
- */
+// Handles streaming chat responses and renders the answer.
 async function handleStreamingChat(query) {
   const stream = document.getElementById("chatStream");
 
@@ -844,6 +829,7 @@ async function handleStreamingChat(query) {
   }
 }
 
+// Appends a user message to the chat stream.
 function appendUserMessage(text) {
   const stream = document.getElementById("chatStream");
   const emptyState = stream.querySelector(".chat-empty-state");
@@ -861,6 +847,7 @@ function appendUserMessage(text) {
   stream.scrollTop = stream.scrollHeight;
 }
 
+// Appends a temporary thinking indicator to the chat.
 function appendThinkingIndicator() {
   const stream = document.getElementById("chatStream");
   const entry = document.createElement("article");
@@ -877,6 +864,7 @@ function appendThinkingIndicator() {
   return entry;
 }
 
+// Filters and deduplicates visual sources for display.
 function getRelevantVisualSources(sources = [], answerText = "") {
   if (!Array.isArray(sources) || sources.length === 0) return [];
 
@@ -885,7 +873,6 @@ function getRelevantVisualSources(sources = [], answerText = "") {
   );
   if (candidates.length === 0) return [];
 
-  // Deduplicate by unique asset ID or URL
   const seen = new Set();
   const deduped = [];
   for (const c of candidates) {
@@ -896,26 +883,23 @@ function getRelevantVisualSources(sources = [], answerText = "") {
     }
   }
 
-  // Strictly cap at at most 2 relevant visual assets to avoid visual clutter
   return deduped.slice(0, 2);
 }
 
 let activeStreamingTimer = null;
 
+// Appends an assistant message with optional streaming.
 function appendAssistantMessage(data, options = {}) {
   if (!options.immediate) {
     return streamAssistantResponse(data);
   }
 
-  // Immediate rendering path (e.g. for restored history)
   const stream = document.getElementById("chatStream");
   const entry = document.createElement("article");
   entry.className = "message-entry assistant";
 
   const workingSheet = document.createElement("div");
   workingSheet.className = "assistant-working-sheet";
-
-
 
   const answerBody = document.createElement("div");
   answerBody.className = "answer-body";
@@ -948,10 +932,7 @@ function appendAssistantMessage(data, options = {}) {
   if (routeBadge) routeBadge.textContent = `ROUTE: ${(data.route || "both").toUpperCase()}`;
 }
 
-/**
- * Progressive Typewriter Streaming Effect
- * Streams tokens word-by-word with a blinking cursor before settling into rich markdown.
- */
+// Streams an assistant response with a typewriter effect.
 function streamAssistantResponse(data) {
   const stream = document.getElementById("chatStream");
   const entry = document.createElement("article");
@@ -961,8 +942,6 @@ function streamAssistantResponse(data) {
   workingSheet.className = "assistant-working-sheet";
   workingSheet.style.cursor = "pointer";
 
-
-
   const answerBody = document.createElement("div");
   answerBody.className = "answer-body";
   workingSheet.appendChild(answerBody);
@@ -971,13 +950,13 @@ function streamAssistantResponse(data) {
   stream.appendChild(entry);
   stream.scrollTop = stream.scrollHeight;
 
-  // 1. Clean answer text and extract cited pages
   const { cleanText, pages } = cleanAnswerTextAndExtractPages(data.answer || "", data.sources || []);
 
   const visualSources = getRelevantVisualSources(data.sources, data.answer);
 
   let isFinalized = false;
 
+  // Finalizes the streamed assistant response rendering.
   const finalize = () => {
     if (isFinalized) return;
     isFinalized = true;
@@ -989,17 +968,14 @@ function streamAssistantResponse(data) {
 
     workingSheet.style.cursor = "default";
 
-    // 1. Render complete rich markdown with KaTeX
     answerBody.innerHTML = parseMarkdownToHtml(cleanText);
     renderMathInElementSafely(answerBody);
 
-    // 2. Attach unified end-of-answer sources provenance bar: Sources: Page 10, 12, 15...
     if (pages.length > 0) {
       const docLabel = (data && data.doc_id) || (data.sources && data.sources[0] && data.sources[0].doc_id) || currentDocId;
       workingSheet.appendChild(renderSourcesBar(pages, docLabel));
     }
 
-    // 3. Attach visual references deck
     if (visualSources.length > 0) {
       const deckContainer = document.createElement("div");
       deckContainer.innerHTML = renderVisualDeckHtml(visualSources);
@@ -1014,10 +990,8 @@ function streamAssistantResponse(data) {
     stream.scrollTop = stream.scrollHeight;
   };
 
-  // Allow clicking anywhere on the card to instantly skip animation
   workingSheet.addEventListener("click", finalize, { once: true });
 
-  // Tokenize text into words and spaces for progressive streaming
   const tokens = cleanText.split(/(\s+)/);
   if (tokens.length <= 1) {
     finalize();
@@ -1027,7 +1001,6 @@ function streamAssistantResponse(data) {
   let tokenIdx = 0;
   let displayedText = "";
 
-  // Dynamic pacing: ~15-20ms per tick, batch tokens if response is long
   const batchSize = tokens.length > 350 ? 3 : (tokens.length > 180 ? 2 : 1);
   const intervalMs = 16;
 
@@ -1048,10 +1021,7 @@ function streamAssistantResponse(data) {
   }, intervalMs);
 }
 
-/**
- * Robust Citation Extractor & Body Cleaner
- * Strips all inline bracket tags [Source N, Page P] and extracts unique pages.
- */
+// Cleans answer text and extracts cited page numbers.
 function cleanAnswerTextAndExtractPages(rawText, sources = []) {
   if (!rawText) return { cleanText: "", pages: [] };
 
@@ -1059,10 +1029,8 @@ function cleanAnswerTextAndExtractPages(rawText, sources = []) {
   const mathPlaceholders = [];
   let text = rawText;
 
-  // Disambiguate financial currency amounts ($100, $1,773, $(1,427), $ 50) before math regexes run
   text = text.replace(/(?<![\\$])\$(?!\$)(?=\s*\(?[\d\.])/g, "___CURRENCY_DOLLAR___");
 
-  // Stash math blocks and inlines so regexes don't touch them
   text = text.replace(/\$\$([\s\S]+?)\$\$/g, (m, eq) => {
     const idx = mathPlaceholders.length;
     mathPlaceholders.push({ type: "block", code: eq.trim() });
@@ -1086,7 +1054,6 @@ function cleanAnswerTextAndExtractPages(rawText, sources = []) {
     return `___MATH_INLINE_${idx}___`;
   });
 
-  // Extract page numbers from compound or single citations e.g. [Source 1, Page 1; Source 2, Page 10], [Page 4]
   text = text.replace(/\[([^\]]*?Page[s]?\s*\d+[^\]]*?)\]/gi, (match) => {
     const pageMatches = [...match.matchAll(/Page[s]?\s*(\d+)/gi)];
     pageMatches.forEach((m) => {
@@ -1096,7 +1063,6 @@ function cleanAnswerTextAndExtractPages(rawText, sources = []) {
     return "";
   });
 
-  // Extract from [Source N] using sources metadata
   text = text.replace(/\[Source\s*(\d+)\]/gi, (match, srcNum) => {
     const idx = parseInt(srcNum, 10) - 1;
     if (sources && sources[idx] && Array.isArray(sources[idx].pages)) {
@@ -1108,15 +1074,12 @@ function cleanAnswerTextAndExtractPages(rawText, sources = []) {
     return "";
   });
 
-  // Strip standalone brackets like [1, 2] or [Source 1]
   text = text.replace(/\[(?:Source\s*)?\d+(?:\s*,\s*\d+)*\]/gi, "");
 
-  // Clean trailing spaces before punctuation: " (£) ." -> " (£)."
   text = text.replace(/\s+([.,;:!?])/g, "$1");
-  // Normalize whitespace
+
   text = text.replace(/[ \t]{2,}/g, " ");
 
-  // Fallback to sources metadata if no pages cited in text
   if (citedPages.size === 0 && Array.isArray(sources)) {
     sources.forEach((src) => {
       if (Array.isArray(src.pages)) {
@@ -1128,7 +1091,6 @@ function cleanAnswerTextAndExtractPages(rawText, sources = []) {
     });
   }
 
-  // Restore math placeholders and protected currency
   text = text.replace(/___MATH_BLOCK_(\d+)___/g, (m, idx) => `$$${mathPlaceholders[idx].code}$$`);
   text = text.replace(/___MATH_INLINE_(\d+)___/g, (m, idx) => `$${mathPlaceholders[idx].code}$`);
   text = text.replace(/___CURRENCY_DOLLAR___/g, "$");
@@ -1137,24 +1099,18 @@ function cleanAnswerTextAndExtractPages(rawText, sources = []) {
   return { cleanText: text.trim(), pages: sortedPages };
 }
 
-/**
- * Rich Semantic Markdown & LaTeX Math Parser
- * Converts **bold**, headings, lists, inline code, and formulas into structured semantic HTML.
- */
+// Parses Markdown and LaTeX into HTML.
 function parseMarkdownToHtml(rawText) {
   if (!rawText) return "";
 
   const mathTokens = [];
   let s = rawText;
 
-  // Defensive pre-clean: Repair any legacy or corrupted math token remnants from previous turns
   s = s.replace(/_{1,3}MATH_TOKEN_\d+_{1,3}/g, "$");
   s = s.replace(/_{1,3}CURRENCY_DOLLAR_{1,3}/g, "$");
 
-  // Disambiguate financial currency amounts ($100, $1,773, $(1,427), $ 50) before LaTeX parsing
   s = s.replace(/(?<![\\$])\$(?!\$)(?=\s*\(?[\d\.])/g, "@@@CURRENCY_DOLLAR@@@");
 
-  // Stash display/block math ($$ ... $$ and \[ ... \])
   s = s.replace(/\$\$([\s\S]+?)\$\$/g, (m, eq) => {
     const idx = mathTokens.length;
     mathTokens.push({ type: "block", code: eq.trim() });
@@ -1166,22 +1122,19 @@ function parseMarkdownToHtml(rawText) {
     return `@@@MATH_TOKEN_${idx}@@@`;
   });
 
-  // Stash LaTeX parentheses \( ... \)
   s = s.replace(/\\\(([\s\S]+?)\\\)/g, (m, eq) => {
     const idx = mathTokens.length;
     mathTokens.push({ type: "inline", code: eq.trim() });
     return `@@@MATH_TOKEN_${idx}@@@`;
   });
 
-  // Stash inline math ($ ... $) with strict currency disambiguation
   s = s.replace(/(?<!\$)\$([^\$\n]+?)\$(?!\$)/g, (fullMatch, content) => {
     const trimmed = content.trim();
     if (/\*\*|__/.test(trimmed)) {
       return fullMatch;
     }
     const words = trimmed.split(/\s+/);
-    // If the content contains multiple English words without LaTeX commands or operators,
-    // it represents separate currency values (e.g. "$1,773 million and $2,938 million"), not a formula
+
     const hasMathSymbols = /[\\=+^_{}[\]<>~/|]/.test(trimmed) || /^[a-zA-Z]$/.test(trimmed);
     if (!hasMathSymbols && words.length > 2) {
       return fullMatch;
@@ -1191,43 +1144,33 @@ function parseMarkdownToHtml(rawText) {
     return `@@@MATH_TOKEN_${idx}@@@`;
   });
 
-  // Pre-process inline sub-bullets like ": * **" or ". * **" -> newline with indent
   s = s.replace(/([.:;])\s*[\*\-]\s+(?=\*\*|[a-zA-Z])/g, "$1\n   * ");
 
-  // Escape HTML
   s = escapeHtml(s);
 
-  // Fenced Code Blocks (```lang ... ```)
   s = s.replace(/```([a-zA-Z0-9_-]*)\n([\s\S]+?)```/g, (m, lang, code) => {
     return `<pre class="md-code-block"><code class="language-${lang}">${code.trim()}</code></pre>`;
   });
 
-  // Inline Code (`code`)
   s = s.replace(/`([^`\n]+)`/g, '<code class="md-code">$1</code>');
 
-  // Headings
   s = s.replace(/^####\s+(.+)$/gm, '<h5 class="md-subheading">$1</h5>');
   s = s.replace(/^###\s+(.+)$/gm, '<h4 class="md-subheading">$1</h4>');
   s = s.replace(/^##\s+(.+)$/gm, '<h3 class="md-heading">$1</h3>');
   s = s.replace(/^#\s+(.+)$/gm, '<h2 class="md-title">$1</h2>');
 
-  // Bold (**text** or __text__)
   s = s.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
   s = s.replace(/__(.+?)__/g, '<strong>$1</strong>');
 
-  // Italic (*text* or _text_)
   s = s.replace(/(?<!\*)\*([^\*\n]+?)\*(?!\*)/g, '<em>$1</em>');
   s = s.replace(/(^|[\s(])_([^\s_][^_]*?[^\s_]|[^_\s])_([)\s.,;:!?]|$)/g, '$1<em>$2</em>$3');
 
-  // Lists
-  // Sub-bullets (indented with 2+ spaces: "   * item")
   s = s.replace(/^[ \t]{2,}[\*\-]\s+(.+)$/gm, '<li class="md-sublist-item">$1</li>');
-  // Top-level bullets ("* item" or "- item")
+
   s = s.replace(/^[ \t]*[\*\-]\s+(.+)$/gm, '<li class="md-list-item">$1</li>');
-  // Numbered items ("1. item")
+
   s = s.replace(/^[ \t]*(\d+)\.\s+(.+)$/gm, '<li class="md-ordered-item" data-num="$1">$2</li>');
 
-  // Wrap lists
   s = s.replace(/((?:<li class="md-sublist-item">[\s\S]+?<\/li>\s*)+)/g, '<ul class="md-sublist">$1</ul>');
   s = s.replace(/((?:<li class="md-list-item">[\s\S]+?<\/li>\s*)+)/g, '<ul class="md-list">$1</ul>');
   s = s.replace(/((?:<li class="md-ordered-item"[^>]*>[\s\S]+?<\/li>\s*)+)/g, '<ol class="md-ordered-list">$1</ol>');
@@ -1235,17 +1178,14 @@ function parseMarkdownToHtml(rawText) {
   s = s.replace(/<\/ul>\s*<ul class="md-list">/g, '');
   s = s.replace(/<\/ol>\s*<ol class="md-ordered-list">/g, '');
 
-  // Paragraph breaks
   s = s.replace(/\n{2,}/g, '<br><br>');
-  // Single newlines
+
   s = s.replace(/([^>])\n([^<])/g, '$1<br>$2');
 
-  // Render & Re-inject math expressions (using safe @@@ tokens unaffected by markdown bold/italic)
   s = s.replace(/@@@MATH_TOKEN_(\d+)@@@/g, (match, idxStr) => {
     const token = mathTokens[parseInt(idxStr, 10)];
     if (!token) return match;
 
-    // Bare numeric values like "$1,773$" or "$1.70$" restore as clean currency amounts
     if (/^[\d,.]+$/.test(token.code)) {
       return `$${token.code}`;
     }
@@ -1268,16 +1208,12 @@ function parseMarkdownToHtml(rawText) {
     return formatMathFallback(token.code, token.type === "block");
   });
 
-  // Restore protected currency dollar signs
   s = s.replace(/@@@CURRENCY_DOLLAR@@@/g, "$");
 
   return s;
 }
 
-/**
- * End-of-Answer Sources Bar: "Sources: [filename.pdf] Page 10, 12, 15..."
- * Formatted with the source document pill and interactive jump pills for each referenced page.
- */
+// Renders the sources bar with page jump buttons.
 function renderSourcesBar(pages, docName) {
   const bar = document.createElement("div");
   bar.className = "sources-provenance-bar";
@@ -1331,6 +1267,7 @@ function renderSourcesBar(pages, docName) {
   return bar;
 }
 
+// Renders HTML for the visual references deck.
 function renderVisualDeckHtml(visualSources) {
   if (!visualSources || visualSources.length === 0) return "";
   return `
@@ -1345,6 +1282,7 @@ function renderVisualDeckHtml(visualSources) {
   `;
 }
 
+// Safely renders math in an element with KaTeX.
 function renderMathInElementSafely(element) {
   if (!element || !window.renderMathInElement) return;
   try {
@@ -1361,6 +1299,7 @@ function renderMathInElementSafely(element) {
   }
 }
 
+// Formats a math expression as fallback text.
 function formatMathFallback(code, isBlock) {
   let s = code
     .replace(/\\text\{([^\}]+)\}/g, "$1")
@@ -1394,6 +1333,7 @@ function formatMathFallback(code, isBlock) {
   return `<span class="math-inline math-fallback">${s}</span>`;
 }
 
+// Renders a taped mount card for a visual source.
 function renderTapedMount(src) {
   const isTable = (src.type || "").toLowerCase() === "table" || Boolean(src.table_markdown);
   const pages = (src.pages || []).join(", ") || "?";
@@ -1402,7 +1342,6 @@ function renderTapedMount(src) {
   const caption = src.caption || src.panel_caption || "Visual asset extracted from document";
   const targetPage = (src.pages && src.pages.length > 0 && parseInt(src.pages[0], 10)) || 1;
 
-  // Resolve image URL with resilient fallback
   let imgUrl = src.web_image_url;
   if (!imgUrl && src.image_path) {
     const rawPath = String(src.image_path).replace(/\\/g, "/");
@@ -1435,6 +1374,7 @@ function renderTapedMount(src) {
   `;
 }
 
+// Appends an error message to the chat stream.
 function appendErrorMessage(errText) {
   const stream = document.getElementById("chatStream");
   const entry = document.createElement("article");
@@ -1450,9 +1390,7 @@ function appendErrorMessage(errText) {
   stream.scrollTop = stream.scrollHeight;
 }
 
-// ============================================================================
-// 3. Upload Document Modal & Ingestion Progress Bar
-// ============================================================================
+// Updates ingestion progress UI elements.
 function updateIngestionUI(pct, text, filename) {
   const box = document.getElementById("uploadProgressBox");
   const stageText = document.getElementById("progressStageText");
@@ -1479,10 +1417,12 @@ function updateIngestionUI(pct, text, filename) {
   }
 }
 
+// Initializes ingestion progress UI.
 function startIngestionProgress(filename) {
   updateIngestionUI(2, "Uploading PDF & initializing workspace...", filename);
 }
 
+// Marks ingestion progress as complete or failed.
 function completeIngestionProgress(success = true, message = "") {
   const stageText = document.getElementById("progressStageText");
   const percentText = document.getElementById("progressPercent");
@@ -1515,11 +1455,9 @@ function completeIngestionProgress(success = true, message = "") {
   }
 }
 
-// ============================================================================
-// API Key Management (BYOK - Bring Your Own Groq Key)
-// ============================================================================
 let isApiKeyModalOpen = false;
 
+// Opens the API key modal.
 function openApiKeyModal(noticeMessage = "") {
   const modal = document.getElementById("apiKeyModal");
   const input = document.getElementById("groqApiKeyInput");
@@ -1559,6 +1497,7 @@ function openApiKeyModal(noticeMessage = "") {
   }
 }
 
+// Closes the API key modal.
 function closeApiKeyModal() {
   const modal = document.getElementById("apiKeyModal");
   if (modal) {
@@ -1567,6 +1506,7 @@ function closeApiKeyModal() {
   }
 }
 
+// Updates the API key status indicator.
 async function updateApiKeyStatusUI() {
   const statusDot = document.getElementById("apiKeyStatusDot");
   const btnLabel = document.getElementById("btnApiKeyLabel");
@@ -1583,7 +1523,6 @@ async function updateApiKeyStatusUI() {
     return;
   }
 
-  // Check if backend has a server-side default key
   try {
     const res = await fetch("/api/auth/status");
     if (res.ok) {
@@ -1612,6 +1551,7 @@ async function updateApiKeyStatusUI() {
   }
 }
 
+// Initializes API key modal interactions.
 function initApiKeyModal() {
   const modal = document.getElementById("apiKeyModal");
   const btnOpen = document.getElementById("btnOpenApiKeyModal");
@@ -1698,6 +1638,7 @@ function initApiKeyModal() {
   updateApiKeyStatusUI();
 }
 
+// Initializes the upload modal and ingestion flow.
 function initUploadModal() {
   const modal = document.getElementById("uploadModal");
   const btnOpen = document.getElementById("btnOpenUpload");
@@ -1711,6 +1652,7 @@ function initUploadModal() {
   let maxUploadMb = 10;
   let maxUploadPages = 25;
 
+  // Shows an upload error message.
   const showUploadError = (msg) => {
     if (errorNotice) {
       errorNotice.textContent = msg;
@@ -1718,6 +1660,7 @@ function initUploadModal() {
     }
   };
 
+  // Clears the upload error message.
   const clearUploadError = () => {
     if (errorNotice) {
       errorNotice.style.display = "none";
@@ -1725,6 +1668,7 @@ function initUploadModal() {
     }
   };
 
+  // Syncs upload size and page limits from the server.
   const syncUploadLimits = async () => {
     try {
       const res = await fetch("/api/auth/status");
@@ -1780,8 +1724,10 @@ function initUploadModal() {
       return;
     }
 
+    // Delays execution for the given milliseconds.
     const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+    // Builds form data for an upload request.
     const buildUploadFormData = () => {
       const fd = new FormData();
       fd.append("file", file);
@@ -1789,8 +1735,7 @@ function initUploadModal() {
       return fd;
     };
 
-    // POST with a bounded retry window so an in-progress Render restart does not
-    // surface as an immediate failure. Only 4xx validation errors are fatal.
+    // Starts an ingestion job with retries.
     const startIngestJob = async () => {
       let lastError = null;
       for (let attempt = 0; attempt < 30; attempt += 1) {
@@ -1825,6 +1770,7 @@ function initUploadModal() {
       );
     };
 
+    // Polls an ingestion job until completion.
     const pollIngestJob = async (jobId) => {
       let transientErrors = 0;
       while (true) {
@@ -1890,7 +1836,7 @@ function initUploadModal() {
     btnCloseUpload.disabled = true;
 
     try {
-      // Launch asynchronous background ingestion job (avoids Cloudflare/Render 100s timeouts)
+
       let initData = await startIngestJob();
       let finalDocId = initData.doc_id || null;
       let finalMessage = "";
@@ -1939,14 +1885,12 @@ function initUploadModal() {
 
       completeIngestionProgress(true, finalMessage || `Successfully ingested ${file.name}`);
 
-      // Allow extra time for user to read notice when document/pages already existed
       const delayMs = alreadyExisted ? 1800 : 750;
       await new Promise((resolve) => setTimeout(resolve, delayMs));
 
       modal.classList.remove("open");
       uploadForm.reset();
 
-      // Refresh documents and switch to newly ingested document
       await loadDocuments();
       if (finalDocId) {
         await switchDocument(finalDocId, true);
@@ -1987,9 +1931,7 @@ function initUploadModal() {
   });
 }
 
-// ============================================================================
-// Utility Helpers
-// ============================================================================
+// Escapes HTML special characters in text.
 function escapeHtml(text) {
   if (!text) return "";
   const map = {
@@ -2002,9 +1944,7 @@ function escapeHtml(text) {
   return String(text).replace(/[&<>"']/g, (m) => map[m]);
 }
 
-// ============================================================================
-// 4. Side-by-Side Document Inspection Panel
-// ============================================================================
+// Initializes the document viewer controls.
 function initDocViewer() {
   const btnToggle = document.getElementById("btnToggleDocViewer");
   const btnClose = document.getElementById("btnCloseViewer");
@@ -2073,6 +2013,7 @@ function initDocViewer() {
   }
 }
 
+// Toggles the document viewer panel.
 async function toggleDocViewer(forceState) {
   const column = document.getElementById("docViewerColumn");
   const btn = document.getElementById("btnToggleDocViewer");
@@ -2096,6 +2037,7 @@ async function toggleDocViewer(forceState) {
   }
 }
 
+// Loads page images and metadata for the viewer.
 async function loadDocumentPages(docId) {
   currentViewerDoc = docId;
   const titleEl = document.getElementById("viewerDocTitle");
@@ -2128,6 +2070,7 @@ async function loadDocumentPages(docId) {
   }
 }
 
+// Navigates the viewer to a specific page.
 function goToPage(pageNum) {
   if (totalPages <= 0) return;
   currentPage = Math.max(1, Math.min(pageNum, totalPages));
@@ -2138,7 +2081,6 @@ function goToPage(pageNum) {
   if (imgEl && docPagesList.length >= currentPage) {
     const pageItem = docPagesList[currentPage - 1];
 
-    // Hide image and fallback card immediately during page load to avoid showing empty alt-text box
     imgEl.style.display = "none";
     if (fallback) fallback.style.display = "none";
 
@@ -2150,7 +2092,7 @@ function goToPage(pageNum) {
     };
     imgEl.onerror = () => {
       console.warn(`[Viewer] Failed loading page preview: ${imgEl.src}`);
-      // Retry with direct static asset URL if the dynamic API endpoint failed
+
       if (!triedStatic && pageItem.static_url) {
         triedStatic = true;
         imgEl.src = pageItem.static_url;
@@ -2179,6 +2121,7 @@ function goToPage(pageNum) {
   });
 }
 
+// Opens the viewer and jumps to a page.
 async function openAndJumpToPage(pageNum) {
   if (!isDocViewerOpen) {
     currentPage = pageNum;
@@ -2192,6 +2135,7 @@ async function openAndJumpToPage(pageNum) {
 }
 window.openAndJumpToPage = openAndJumpToPage;
 
+// Sets the viewer zoom level.
 function setZoom(level) {
   currentZoom = Math.max(0.5, Math.min(2.5, Math.round(level * 100) / 100));
   const wrapper = document.getElementById("pageImageWrapper");
@@ -2204,6 +2148,7 @@ function setZoom(level) {
   }
 }
 
+// Switches the viewer between page and PDF modes.
 function setViewerMode(mode) {
   viewerMode = mode;
   const tabPages = document.getElementById("tabPagesMode");
@@ -2230,6 +2175,7 @@ function setViewerMode(mode) {
   }
 }
 
+// Renders thumbnail chips for document pages.
 function renderThumbnails() {
   const strip = document.getElementById("thumbnailStrip");
   if (!strip) return;

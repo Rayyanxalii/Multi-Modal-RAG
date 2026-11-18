@@ -1,3 +1,5 @@
+"""Hybrid retrieval combining dense vector search and BM25 headings via RRF."""
+
 from rag.config import RRF_K
 from rag.text_retrieval.search_chunks import search_chunks
 from rag.text_retrieval.bm25_retriever import (
@@ -43,7 +45,6 @@ def reciprocal_rank_fusion(
                     "is missing chunk_id."
                 )
 
-            # Prevent duplicate contributions from one retriever.
             if chunk_id in seen_in_source:
                 continue
 
@@ -60,13 +61,11 @@ def reciprocal_rank_fusion(
 
             item = fused[chunk_id]
 
-            # Reciprocal Rank Fusion score.
             item["rrf_score"] += 1.0 / (k + rank)
 
             item["retrieved_by"].append(source)
             item["source_ranks"][source] = rank
 
-            # Preserve useful metadata from each retriever.
             for key, value in result.items():
                 if key == "page_numbers":
                     existing_pages = item.get("page_numbers") or []
@@ -79,7 +78,6 @@ def reciprocal_rank_fusion(
                 elif key not in item or item[key] is None:
                     item[key] = value
 
-    # Highest RRF score first.
     fused_results = sorted(
         fused.values(),
         key=lambda item: item["rrf_score"],
@@ -121,6 +119,7 @@ def retrieve_and_fuse(
 
 
 def main():
+    """Run interactive hybrid retrieval and print fused results."""
     question = input(
         "Ask a question about the paper: "
     ).strip()

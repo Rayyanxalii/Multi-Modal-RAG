@@ -1,26 +1,4 @@
-"""Modular nodes for the Generalized Multimodal Agentic RAG workflow.
-
-Implements all stages of the system as first-class LangGraph nodes:
-1. Ingestion Check & Pipeline:
-   - check_doc_status_node
-   - render_pages_node
-   - parse_document_node
-   - extract_and_crop_node
-   - index_vectors_node
-2. Query Routing:
-   - route_query_node
-3. Granular Multimodal Retrieval:
-   - dense_retriever_node (Qdrant nomic-embed-text)
-   - bm25_retriever_node (Heading-aware Okapi BM25)
-   - text_fusion_node (Reciprocal Rank Fusion - RRF)
-   - colpali_retriever_node (ColPali MaxSim on Page Embeddings)
-   - visual_hydration_node (Map Top Pages to Cropped Figures & Tables)
-4. Context Formatting & CRAG Correction:
-   - format_context_node
-   - grade_context_node
-   - rewrite_query_node
-   - generate_answer_node
-"""
+"""Nodes for the Multimodal Agentic RAG workflow."""
 
 import json
 import re
@@ -69,12 +47,12 @@ from rag.visual_retrieval.search.colpali_retriever import extract_page_number, l
 from services.llm_service import get_llm, get_llm_vision
 
 
-# Module-level BM25 cache for high-speed repeated queries
 _CACHED_CHUNKS: list[dict[str, Any]] | None = None
 _CACHED_HEADING_BM25: Any | None = None
 
 
 def _get_bm25_index(chunks_path: Path | None = None) -> tuple[list[dict[str, Any]], Any]:
+    """Return cached BM25 chunks and heading index, building them on first use."""
     global _CACHED_CHUNKS, _CACHED_HEADING_BM25
     if _CACHED_CHUNKS is None or _CACHED_HEADING_BM25 is None:
         _CACHED_CHUNKS = load_chunks(chunks_path) if chunks_path else load_chunks()
@@ -82,9 +60,6 @@ def _get_bm25_index(chunks_path: Path | None = None) -> tuple[list[dict[str, Any
     return _CACHED_CHUNKS, _CACHED_HEADING_BM25
 
 
-# =============================================================================
-# 1. Document Status & Ingestion Nodes
-# =============================================================================
 
 def check_doc_status_node(state: RAGState) -> dict[str, Any]:
     """Check if the target document has already been ingested.
@@ -96,7 +71,6 @@ def check_doc_status_node(state: RAGState) -> dict[str, Any]:
     pdf_path = Path(raw_pdf)
     doc_paths = get_document_paths(pdf_path, user_id=state.get("user_id"))
 
-    # Check key artifacts
     rendered_pages_exist = (
         doc_paths["rendered_pages_dir"].exists()
         and any(doc_paths["rendered_pages_dir"].glob("*.png"))
@@ -282,9 +256,6 @@ def index_colpali_node(state: RAGState) -> dict[str, Any]:
     return {"is_ingested": True, "colpali_existed": colpali_existed}
 
 
-# =============================================================================
-# 2. Intent Routing Node (LLM-Based Structured Classification)
-# =============================================================================
 
 class QueryIntent(BaseModel):
     """Structured classification of user query intent."""
@@ -330,21 +301,17 @@ def contextualize_query(
 
     clean_q = question.strip()
 
-    # Rule 1: Check if the question contains anaphoric pronouns or relative references
     coref_pattern = r"\b(it|its|they|them|their|theirs|this|that|these|those|the former|the latter|above|previous|earlier|same|another|also|too|again)\b"
     elliptical_pattern = r"^(what about|how about|why\b|and for|explain more)\b"
     has_coref = bool(re.search(coref_pattern, clean_q, re.IGNORECASE) or re.search(elliptical_pattern, clean_q, re.IGNORECASE))
 
-    # If the question does not contain coreference markers, it is self-contained. Keep it verbatim!
     if not has_coref:
         return clean_q
 
-    # Rule 2: Filter out uninformative or error responses from history
     meaningful_turns = []
     for turn in history[-6:]:
         role = "User" if turn.get("role") == "user" else "Assistant"
         content = str(turn.get("content", "")).strip()
-        # Skip unanswerable boilerplate or error responses
         if (
             "I could not find this information in the provided documents" in content
             or "I don't have information about that in the document" in content
@@ -378,7 +345,6 @@ Standalone Question:"""
     try:
         reformulated = get_llm(api_key).complete(prompt).text.strip()
         reformulated = reformulated.strip('"').strip("'").strip()
-        # Prevent repeating old questions if the user asked something new
         prev_user_questions = [
             str(t.get("content", "")).strip().lower()
             for t in history
@@ -403,7 +369,6 @@ def route_query_node(state: RAGState) -> dict[str, Any]:
     history = state.get("chat_history", [])
     api_key = state.get("groq_api_key")
 
-    # If this is a retry within the CRAG loop, do NOT re-contextualize the original question!
     if retry_count > 0:
         active_question = state["question"].strip()
     else:
@@ -423,9 +388,6 @@ def route_query_node(state: RAGState) -> dict[str, Any]:
     }
 
 
-# =============================================================================
-# 3. Granular Retrieval Nodes
-# =============================================================================
 
 def dense_retriever_node(state: RAGState) -> dict[str, Any]:
     """Execute dense semantic vector search via Qdrant & nomic-embed-text."""
@@ -440,7 +402,6 @@ def dense_retriever_node(state: RAGState) -> dict[str, Any]:
             results = search_chunks(query, top_k=5, doc_id=doc_id, user_id=uid)
         else:
             results = search_chunks(query, top_k=5, doc_id=doc_id)
-        # Defense-in-depth: Discard any point that does not belong to this document
         filtered = [
             r for r in results
             if not r.get("document_id") or str(r.get("document_id")).strip().lower() == doc_id
@@ -477,7 +438,6 @@ def text_fusion_node(state: RAGState) -> dict[str, Any]:
     dense_matches = state.get("dense_matches") or []
     bm25_matches = state.get("bm25_matches") or []
 
-    # Strict isolation: ensure no cross-document dense matches leak through
     if active_doc:
         dense_matches = [
             m for m in dense_matches
@@ -494,7 +454,6 @@ def text_fusion_node(state: RAGState) -> dict[str, Any]:
             print(f"[Warning] Text fusion error: {exc}")
             fused = (dense_matches or bm25_matches or [])[:5]
 
-    # If the user is asking for a document overview or summary, inject introductory chunks
     q_to_check = state.get("original_question") or state.get("question", "")
     if is_overview_query(q_to_check):
         pdf_path = Path(state.get("pdf_path") or DEFAULT_PDF_PATH)
@@ -509,7 +468,6 @@ def text_fusion_node(state: RAGState) -> dict[str, Any]:
                             intro_chunks.append(json.loads(line))
                         if len(intro_chunks) >= 3:
                             break
-                # Prepend intro chunks if not already in fused
                 existing_ids = {c.get("chunk_id") for c in fused}
                 prepends = [c for c in intro_chunks if c.get("chunk_id") not in existing_ids]
                 if prepends:
@@ -565,7 +523,6 @@ def visual_hydration_node(state: RAGState) -> dict[str, Any]:
     matched_assets: list[dict[str, Any]] = []
     seen_ids: set[str] = set()
 
-    # Priority 1: Explicit Table targeting (e.g. "what is table 1 shows?")
     if target_table_nums:
         for tab in tables:
             t_id = tab.get("table_id", "")
@@ -593,7 +550,6 @@ def visual_hydration_node(state: RAGState) -> dict[str, Any]:
                 })
                 seen_ids.add(t_id)
 
-    # Priority 2: Explicit Figure targeting (e.g. "what is the figure 5 about?")
     if target_fig_nums:
         for fig in figures:
             f_id = fig.get("figure_id", "")
@@ -625,7 +581,6 @@ def visual_hydration_node(state: RAGState) -> dict[str, Any]:
                 })
                 seen_ids.add(f_id)
 
-    # Priority 3: Match assets from top ColPali late-interaction pages
     for fig in figures:
         f_id = fig.get("figure_id", "unknown_fig")
         if f_id in seen_ids:
@@ -679,7 +634,6 @@ def visual_hydration_node(state: RAGState) -> dict[str, Any]:
             })
             seen_ids.add(t_id)
 
-    # Priority 4: Overview queries fallback
     if is_overview_query(query) and len(matched_assets) < 3:
         for tab in tables:
             t_id = tab.get("table_id", "")
@@ -707,9 +661,6 @@ def visual_hydration_node(state: RAGState) -> dict[str, Any]:
     return {"figure_table_results": matched_assets[:10]}
 
 
-# =============================================================================
-# 4. Context Formatting & CRAG Nodes
-# =============================================================================
 
 def format_context_node(state: RAGState) -> dict[str, Any]:
     """Format retrieved text chunks, tables, and figures into structured context."""
@@ -720,7 +671,6 @@ def format_context_node(state: RAGState) -> dict[str, Any]:
     context_blocks = []
     source_idx = 1
 
-    # Text Chunks
     for item in text_results:
         chunk_id = item.get("chunk_id", "Unknown")
         pages = item.get("page_numbers") or []
@@ -740,7 +690,6 @@ def format_context_node(state: RAGState) -> dict[str, Any]:
         )
         source_idx += 1
 
-    # Visual Assets (Figures and Tables)
     for item in fig_tab_results:
         rec_type = item.get("record_type", "visual")
         rec_id = item.get("record_id", item.get("figure_id", item.get("table_id", "Unknown")))
@@ -834,7 +783,6 @@ def rewrite_query_node(state: RAGState) -> dict[str, Any]:
     doc_paths = get_document_paths(pdf_path, user_id=state.get("user_id"))
     doc_name = doc_paths["doc_name"]
 
-    # Rule 1: Overview questions -> Expand with executive summary, abstract, and core topic domain terms
     if is_overview_query(original_query):
         expanded = f"{original_query} executive summary introduction abstract core overview background findings {doc_name}"
         print(f"\n[CRAG Query Expansion] Overview query expanded: '{original_query}' -> '{expanded}'")
@@ -844,7 +792,6 @@ def rewrite_query_node(state: RAGState) -> dict[str, Any]:
             "retry_count": current_retry + 1,
         }
 
-    # Rule 2: Specific Table questions -> Expand with data, rows, columns, and grid terminology
     table_m = re.search(r"\btable\s*(\d+)\b", original_query, re.IGNORECASE)
     if table_m:
         table_num = table_m.group(1)
@@ -856,7 +803,6 @@ def rewrite_query_node(state: RAGState) -> dict[str, Any]:
             "retry_count": current_retry + 1,
         }
 
-    # Rule 3: Specific Figure questions -> Expand with visual, chart, diagram, and plot terminology
     fig_m = re.search(r"\b(?:fig|figure)\.?\s*(\d+)\b", original_query, re.IGNORECASE)
     if fig_m:
         fig_num = fig_m.group(1)
@@ -868,7 +814,6 @@ def rewrite_query_node(state: RAGState) -> dict[str, Any]:
             "retry_count": current_retry + 1,
         }
 
-    # Rule 4: General domain query expansion with LLM (completely document-agnostic)
     expansion_prompt = f"""You are an expert search specialist and information retrieval engineer.
 The initial search for the query below in the document '{doc_name}' returned insufficient passages.
 Perform CLASSICAL PRODUCTION QUERY EXPANSION: expand the query by appending domain-specific technical terms, authoritative synonyms, and related vocabulary likely found in '{doc_name}' without altering the user's intent.
@@ -886,7 +831,6 @@ Expanded Query:"""
 
     try:
         expanded = get_llm(state.get("groq_api_key")).complete(expansion_prompt).text.strip().strip('"').strip("'")
-        # Ensure original query is retained at the start
         if original_query.lower() not in expanded.lower():
             expanded = f"{original_query} {expanded}"
         print(f"\n[CRAG Query Expansion] Query expanded: '{original_query}' -> '{expanded}'")
@@ -957,7 +901,6 @@ def _is_unanswerable_response(text: str) -> bool:
         return True
     lower = text.lower().strip()
 
-    # Exact or prefix match
     if lower.startswith("i could not find this information") or lower.startswith("i cannot find this information"):
         return True
     if lower.startswith("i don't have information") or lower.startswith("i do not have information"):
@@ -971,7 +914,6 @@ def _is_unanswerable_response(text: str) -> bool:
     if lower.startswith("based on the provided document context, there is no"):
         return True
 
-    # Substring checks
     unanswerable_phrases = [
         "could not find this information in the provided documents",
         "cannot find this information in the provided documents",
@@ -1009,7 +951,6 @@ def filter_relevant_sources(response: str, sources: list[dict[str, Any]], questi
     text_sources = [s for s in sources if s.get("type") == "text"]
     visual_sources = [s for s in sources if s.get("type") in ("figure", "table", "visual")]
 
-    # 1. Parse cited source indices from LLM response (e.g. [Source 1, Page 2], [Source 3])
     cited_source_indices = set()
     for m in re.finditer(r"\[Source\s*(\d+)", response, re.IGNORECASE):
         try:
@@ -1017,14 +958,12 @@ def filter_relevant_sources(response: str, sources: list[dict[str, Any]], questi
         except ValueError:
             pass
 
-    # 2. Check if the question explicitly requested specific figures or tables
     target_table_nums = [int(m) for m in re.findall(r"\btable\s*(\d+)\b", question, re.IGNORECASE)]
     target_fig_nums = [int(m) for m in re.findall(r"\b(?:fig|figure)\.?\s*(\d+)\b", question, re.IGNORECASE)]
 
     relevant_visuals: list[dict[str, Any]] = []
     seen_ids: set[str] = set()
 
-    # Priority A: Targeted visual assets explicitly requested in the query
     if target_table_nums or target_fig_nums:
         for v in visual_sources:
             v_id = str(v.get("id", "")).lower()
@@ -1047,13 +986,11 @@ def filter_relevant_sources(response: str, sources: list[dict[str, Any]], questi
                 relevant_visuals.append(v)
                 seen_ids.add(v.get("id"))
 
-    # Priority B: Visual assets that are explicitly cited by [Source N] in the answer
     for v in visual_sources:
         if v.get("source") in cited_source_indices and v.get("id") not in seen_ids:
             relevant_visuals.append(v)
             seen_ids.add(v.get("id"))
 
-    # Priority C: Visual assets mentioned by name/number in the answer prose (e.g. "Figure 1", "Table 2")
     resp_lower = response.lower()
     for v in visual_sources:
         v_id = str(v.get("id", "")).lower()
@@ -1066,23 +1003,17 @@ def filter_relevant_sources(response: str, sources: list[dict[str, Any]], questi
                 relevant_visuals.append(v)
                 seen_ids.add(v.get("id"))
 
-    # Priority D: If the query is an explicit visual query, and nothing was matched yet,
-    # include AT MOST the single highest-scoring visual asset
     q_lower = question.lower()
     has_visual_keyword = any(k in q_lower for k in ["figure", "fig", "table", "diagram", "chart", "plot", "image", "visual", "architecture", "flowchart"])
     if not relevant_visuals and visual_sources and has_visual_keyword:
         relevant_visuals.append(visual_sources[0])
         seen_ids.add(visual_sources[0].get("id"))
 
-    # Priority E: If the user is asking a broad overview/summary without requesting figures/tables,
-    # suppress visual mounts so the response remains a clean, focused summary.
     if is_overview_query(question) and not has_visual_keyword and not (target_table_nums or target_fig_nums):
         relevant_visuals = []
 
-    # Strictly cap relevant visual sources to at most 2 to avoid visual clutter
     relevant_visuals = relevant_visuals[:2]
 
-    # Filter text sources: keep cited text sources, or top 3 if citations are unindexed
     relevant_text = [t for t in text_sources if t.get("source") in cited_source_indices]
     if not relevant_text:
         relevant_text = text_sources[:3]
@@ -1128,7 +1059,6 @@ def build_vlm_messages(state: RAGState) -> tuple[list[ChatMessage], list[Any], s
     max_images = 1
     attached_images = 0
 
-    # 1. Text Chunks (strictly budgeted by default to stay well under Groq's 7,000 ITPM limit)
     max_chunks = 3
     selected_text_results = text_results[:max_chunks]
     if selected_text_results:
@@ -1143,7 +1073,6 @@ def build_vlm_messages(state: RAGState) -> tuple[list[ChatMessage], list[Any], s
             page_str = ", ".join(str(p) for p in pages) if pages else "Unknown"
             raw_text = item.get("text") or item.get("contextualized_text") or ""
             text = str(raw_text).strip()
-            # Truncate individual chunk to 650 chars max to guarantee low token usage
             if len(text) > 650:
                 text = text[:650] + "..."
             entry = f"[Source {source_idx} | Text Chunk {chunk_id} | Page(s): {page_str}]\n{text}"
@@ -1152,7 +1081,6 @@ def build_vlm_messages(state: RAGState) -> tuple[list[ChatMessage], list[Any], s
             source_idx += 1
         user_blocks.append(TextBlock(text="\n\n".join(text_parts)))
 
-    # 2. Visual Assets (Figures and Tables with cropped images)
     if fig_tab_results:
         for item in fig_tab_results:
             rec_type = item.get("record_type", "visual")
@@ -1164,7 +1092,6 @@ def build_vlm_messages(state: RAGState) -> tuple[list[ChatMessage], list[Any], s
 
             if rec_type == "table":
                 table_md = str(item.get("table_markdown", "")).strip()
-                # Truncate table markdown to 350 chars to prevent rate limit spikes
                 if len(table_md) > 350:
                     table_md = table_md[:350] + "\n... [table truncated for token budget]"
                 lines = [f"[Source {source_idx} | Table {rec_id} | Page: {page}]"]
@@ -1174,7 +1101,6 @@ def build_vlm_messages(state: RAGState) -> tuple[list[ChatMessage], list[Any], s
                     lines.append(f"Table Markdown Grid:\n{table_md}")
                 block_content = "\n".join(lines)
                 user_blocks.append(TextBlock(text=block_content))
-                # Tables with text markdown do not need redundant heavy image tokens
                 if (
                     resolved_img
                     and not table_md
@@ -1207,7 +1133,6 @@ def build_vlm_messages(state: RAGState) -> tuple[list[ChatMessage], list[Any], s
                     attached_images += 1
             source_idx += 1
 
-    # 3. Question Prompt
     q_to_eval = state.get("original_question") or question
     if is_overview_query(q_to_eval):
         prompt_instruction = (
@@ -1225,8 +1150,6 @@ def build_vlm_messages(state: RAGState) -> tuple[list[ChatMessage], list[Any], s
         ChatMessage(role=MessageRole.SYSTEM, content=system_prompt),
     ]
 
-    # Prepend up to last 2 conversation messages (1 dialogue turn) as short-term memory context,
-    # strictly truncating previous assistant replies so history doesn't consume the token budget
     if chat_history:
         for msg in chat_history[-2:]:
             role = MessageRole.USER if msg.get("role") == "user" else MessageRole.ASSISTANT
@@ -1240,7 +1163,6 @@ def build_vlm_messages(state: RAGState) -> tuple[list[ChatMessage], list[Any], s
 
     messages.append(ChatMessage(role=MessageRole.USER, blocks=user_blocks))
 
-    # Terminal Logging: Complete VLM Payload Inspection
     print("\n" + "=" * 75)
     print(">>> [VLM INPUT DISPATCH] Payload sent to Vision LLM (qwen/qwen3.8-27b):")
     print(f"  * Question: '{_safe_str(question, 120)}'")
@@ -1289,7 +1211,6 @@ def generate_answer_node(state: RAGState) -> dict[str, Any]:
         else:
             response = f"An error occurred while generating the answer: {exc}"
 
-    # If response indicates unanswerable topic, enforce clean single-sentence response and purge sources
     if _is_unanswerable_response(response):
         response = "I could not find this information in the provided documents."
         sources = []

@@ -1,3 +1,5 @@
+"""Parse PDFs with Docling and chunk them for retrieval."""
+
 import json
 from pathlib import Path
 from typing import Any
@@ -15,13 +17,9 @@ from rag.config import (
 
 
 def get_chunk_metadata(chunk: Any) -> dict:
-    """
-    Extract useful metadata from a Docling chunk.
-    No additional LLM call is used.
-    """
+    """Extract useful metadata from a Docling chunk."""
     meta = chunk.meta
 
-    # Extract page numbers and bounding boxes from source provenance.
     page_numbers = set()
     bounding_boxes = []
 
@@ -45,17 +43,14 @@ def get_chunk_metadata(chunk: Any) -> dict:
 
     page_numbers = sorted(page_numbers)
 
-    # Identify the types of source document items.
     item_types = sorted({
         type(item).__name__
         for item in (meta.doc_items or [])
     })
 
-    # Extract headings and captions assigned by Docling.
     headings = list(meta.headings or [])
     captions = list(meta.captions or [])
 
-    # Document origin information.
     origin = getattr(meta, "origin", None)
 
     return {
@@ -92,7 +87,6 @@ def parse_pdf_to_chunks(
 
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    # 1. Convert the PDF into a structured document.
     print(f"Parsing PDF: {pdf_path.name}")
     try:
         from docling.document_converter import PdfFormatOption
@@ -112,7 +106,6 @@ def parse_pdf_to_chunks(
     document.save_as_json(document_json_path)
     print(f"Structured document saved to: {document_json_path}")
 
-    # Extract raw formula strings from Docling JSON to heal un-decoded formula placeholders
     formula_strings: list[str] = []
     try:
         with open(document_json_path, "r", encoding="utf-8") as f:
@@ -127,7 +120,6 @@ def parse_pdf_to_chunks(
     except Exception as exc:
         print(f"[Warning] Could not extract formula strings from {document_json_path.name}: {exc}")
 
-    # 2. Save Markdown for inspection (with healed formulas).
     markdown = document.export_to_markdown()
     if formula_strings:
         for f_str in formula_strings:
@@ -135,7 +127,6 @@ def parse_pdf_to_chunks(
     markdown_path.write_text(markdown, encoding="utf-8")
     print(f"Parsed Markdown saved to: {markdown_path}")
 
-    # 3. Chunk the document using its structure and heal formula placeholders.
     chunker = HybridChunker()
     chunks = []
     f_idx = 0
@@ -164,7 +155,6 @@ def parse_pdf_to_chunks(
         }
         chunks.append(chunk_data)
 
-    # 4. Save as JSON Lines.
     with chunks_path.open("w", encoding="utf-8") as file:
         for chunk_data in chunks:
             file.write(
@@ -184,6 +174,7 @@ def create_chunks(
     markdown_path: Path = PARSED_MD_PATH,
     chunks_path: Path = TEXT_CHUNKS_PATH,
 ) -> list[dict]:
+    """Parse a PDF and return chunks using default paths."""
     doc_paths = {
         "chunks_dir": output_dir,
         "document_json_path": document_json_path,
@@ -194,6 +185,7 @@ def create_chunks(
 
 
 def main():
+    """Run the parser from the command line."""
     chunks = create_chunks()
 
     for chunk in chunks[:5]:

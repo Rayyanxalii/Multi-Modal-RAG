@@ -3,7 +3,6 @@
 import sys
 from pathlib import Path
 
-# Ensure project root, backend, and backend/src are available on sys.path
 PROJECT_ROOT = Path(__file__).resolve().parent
 for p in (str(PROJECT_ROOT), str(PROJECT_ROOT / "backend"), str(PROJECT_ROOT / "backend" / "src")):
     if p not in sys.path:

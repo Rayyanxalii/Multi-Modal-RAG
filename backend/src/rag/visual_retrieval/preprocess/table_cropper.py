@@ -1,3 +1,4 @@
+"""Crop table images from rendered PDF pages based on metadata."""
 import json
 from pathlib import Path
 
@@ -20,6 +21,7 @@ def crop_tables(
     output_dir: Path = TABLES_DIR,
     rendered_pages_dir: Path = RENDERED_PAGES_DIR,
 ):
+    """Crop tables from rendered PDF pages and update their metadata."""
     output_dir.mkdir(parents=True, exist_ok=True)
 
     if not tables_jsonl.exists():
@@ -84,7 +86,6 @@ def crop_tables(
                 updated_tables.append(table)
                 continue
 
-            # Convert Docling coordinates to top-left PDF coordinates.
             origin = bbox.get("coordinate_origin", "")
 
             if origin.endswith("BOTTOMLEFT"):
@@ -122,8 +123,6 @@ def crop_tables(
 
                 output_path = output_dir / f"{table_id}.png"
 
-                # Tiny crops (icons, bullets, stray glyphs) are unusable by the
-                # vision API and only waste tokens, so drop them at the source.
                 if min(cropped.size) < MIN_VISION_IMAGE_DIM:
                     output_path.unlink(missing_ok=True)
                     table.pop("image_path", None)

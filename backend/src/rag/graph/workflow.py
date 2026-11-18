@@ -48,25 +48,6 @@ def decide_ingestion(state: RAGState) -> Literal["render_pages", "route_query"]:
 
 def branch_retrieval(state: RAGState) -> list[str]:
     """Conditional edge: always invoke both Dense + BM25 and ColPali visual retrieval (routing commented out)."""
-    # -------------------------------------------------------------------------
-    # Intent-based routing logic (commented out per user instruction):
-    # route = (state.get("route") or "both").lower()
-    # if route == "dense":
-    #     print(f"[Query Path: DENSE ONLY] Executing dense semantic vector search (Qdrant).")
-    #     branches = ["dense_retriever"]
-    # elif route == "bm25":
-    #     print(f"[Query Path: BM25 ONLY] Executing lexical keyword search (BM25).")
-    #     branches = ["bm25_retriever"]
-    # elif route == "text":
-    #     print(f"[Query Path: TEXT ONLY] Executing Dense Vector (Qdrant) + BM25 Keywords (Reciprocal Rank Fusion). ColPali is bypassed.")
-    #     branches = ["dense_retriever", "bm25_retriever"]
-    # elif route == "visual":
-    #     print(f"[Query Path: COLPALI ONLY] Executing ColPali visual late-interaction on page embeddings. Dense/BM25 are bypassed.")
-    #     branches = ["colpali_retriever"]
-    # else:
-    #     print(f"[Query Path: BOTH MULTIMODAL] Executing parallel Dense, BM25, AND ColPali visual late-interaction.")
-    #     branches = ["dense_retriever", "bm25_retriever", "colpali_retriever"]
-    # -------------------------------------------------------------------------
     print("\n" + "-" * 65)
     print("[Query Path: FIXED MULTIMODAL] Executing parallel Dense, BM25, AND ColPali (figures & tables).")
     print("-" * 65)
@@ -78,11 +59,9 @@ def decide_after_grading(state: RAGState) -> Literal["generate_answer", "rewrite
     is_relevant = state.get("is_relevant", True)
     retry_count = state.get("retry_count", 0)
 
-    # If relevant OR maximum retries reached
     if is_relevant or retry_count >= 1:
         return "generate_answer"
 
-    # CRAG corrective loop: reformulate query and retry retrieval
     return "rewrite_query"
 
 
@@ -90,7 +69,6 @@ def build_rag_graph() -> StateGraph:
     """Build and compile the unified Multimodal Agentic RAG StateGraph."""
     workflow = StateGraph(RAGState)
 
-    # 1. Document Ingestion Nodes
     workflow.add_node("check_doc_status", check_doc_status_node)
     workflow.add_node("render_pages", render_pages_node)
     workflow.add_node("parse_document", parse_document_node)
@@ -98,30 +76,22 @@ def build_rag_graph() -> StateGraph:
     workflow.add_node("index_vectors", index_vectors_node)
     workflow.add_node("index_colpali", index_colpali_node)
 
-    # 2. Query Routing Node
     workflow.add_node("route_query", route_query_node)
 
-    # 3. Granular Retrieval Nodes
     workflow.add_node("dense_retriever", dense_retriever_node)
     workflow.add_node("bm25_retriever", bm25_retriever_node)
     workflow.add_node("text_fusion", text_fusion_node)
     workflow.add_node("colpali_retriever", colpali_retriever_node)
     workflow.add_node("visual_hydration", visual_hydration_node)
 
-    # 4. Context Formatting & CRAG Nodes
     workflow.add_node("format_context", format_context_node)
     workflow.add_node("grade_context", grade_context_node)
     workflow.add_node("rewrite_query", rewrite_query_node)
     workflow.add_node("generate_answer", generate_answer_node)
 
-    # -------------------------------------------------------------------------
-    # Edges & Flow
-    # -------------------------------------------------------------------------
 
-    # Entry point -> Check document status
     workflow.add_edge(START, "check_doc_status")
 
-    # Conditional Branch 1: Ingest if new document, else fast path to route_query
     workflow.add_conditional_edges(
         "check_doc_status",
         decide_ingestion,
@@ -131,30 +101,25 @@ def build_rag_graph() -> StateGraph:
         },
     )
 
-    # Ingestion Pipeline Linear Flow
     workflow.add_edge("render_pages", "parse_document")
     workflow.add_edge("parse_document", "extract_and_crop")
     workflow.add_edge("extract_and_crop", "index_vectors")
     workflow.add_edge("index_vectors", "index_colpali")
     workflow.add_edge("index_colpali", "route_query")
 
-    # Conditional Branch 2: Intent-based Multi-Modal Retrieval
     workflow.add_conditional_edges(
         "route_query",
         branch_retrieval,
         ["dense_retriever", "bm25_retriever", "colpali_retriever"],
     )
 
-    # Text Retrieval Path (Dense + BM25 -> RRF Fusion -> Format Context)
     workflow.add_edge("dense_retriever", "text_fusion")
     workflow.add_edge("bm25_retriever", "text_fusion")
     workflow.add_edge("text_fusion", "format_context")
 
-    # Visual Retrieval Path (ColPali -> Asset Hydration -> Format Context)
     workflow.add_edge("colpali_retriever", "visual_hydration")
     workflow.add_edge("visual_hydration", "format_context")
 
-    # CRAG Corrective Loop Path
     workflow.add_edge("format_context", "grade_context")
     workflow.add_conditional_edges(
         "grade_context",
@@ -165,16 +130,13 @@ def build_rag_graph() -> StateGraph:
         },
     )
 
-    # Self-Correction Loop: Route reformulated query back to intent router
     workflow.add_edge("rewrite_query", "route_query")
 
-    # Final Edge: Grounded generation to END
     workflow.add_edge("generate_answer", END)
 
     return workflow
 
 
-# Persistent SQLite database checkpointer for Short-Term Memory (STM)
 DB_PATH = Path("data/chat_history.db")
 DB_PATH.parent.mkdir(parents=True, exist_ok=True)
 _sqlite_conn = sqlite3.connect(str(DB_PATH), check_same_thread=False)
@@ -184,7 +146,6 @@ try:
 except Exception as exc:
     print(f"[Warning] SqliteSaver setup notice: {exc}")
 
-# Compile the graph into a runnable application with persistent SQLite checkpointer
 app = build_rag_graph().compile(checkpointer=checkpointer)
 
 
@@ -276,7 +237,6 @@ def stream_ingest_document(
             if doc_paths["rendered_pages_dir"].exists()
             else []
         )
-        # A crash mid-render can leave a partial set; require every page.
         local_pages_exist = expected_pages > 0 and len(rendered) >= expected_pages
     except Exception as exc:
         print(f"[Ingestion] Page-cache check skipped: {exc}")
@@ -291,7 +251,6 @@ def stream_ingest_document(
         or doc_paths["figures_cleaned"].exists()
     )
 
-    # Stage 1: Render pages
     import gc
     log_memory("ingest:start")
     if local_pages_exist:
@@ -302,7 +261,6 @@ def stream_ingest_document(
         gc.collect()
         log_memory("ingest:after-render")
 
-    # Stage 2: Layout parsing & hierarchical chunks
     if local_chunks_exist:
         yield {"stage": "parsing", "progress": 40, "message": "Layout & text chunks already exist — skipping re-parsing..."}
     else:
@@ -311,7 +269,6 @@ def stream_ingest_document(
         gc.collect()
         log_memory("ingest:after-parse")
 
-    # Stage 3: Figure & table extraction and cropping
     if local_visuals_exist:
         yield {"stage": "cropping", "progress": 65, "message": "Cropped figures & tables already exist — skipping cropping..."}
     else:
@@ -320,7 +277,6 @@ def stream_ingest_document(
         gc.collect()
         log_memory("ingest:after-crop")
 
-    # Stage 4: Dense vector indexing into Qdrant
     yield {"stage": "vectors", "progress": 82, "message": "Indexing text vectors into Qdrant..."}
     vec_res = index_vectors_node(state) or {}
     gc.collect()
@@ -330,7 +286,6 @@ def stream_ingest_document(
         pts = vec_res.get("qdrant_points", "")
         yield {"stage": "vectors", "progress": 88, "message": f"Text vectors already exist in Qdrant ({pts} chunks) — reusing index!"}
 
-    # Stage 5: ColPali visual late-interaction indexing
     yield {"stage": "colpali", "progress": 92, "message": "Checking visual pages on ColPali ZeroGPU Space..."}
     colpali_res = index_colpali_node(state) or {}
     log_memory("ingest:after-colpali")
@@ -401,7 +356,6 @@ def stream_agentic_rag(
     active_thread = thread_id or f"user_{clean_user}_doc_{clean_doc}"
     config = {"configurable": {"thread_id": active_thread}}
 
-    # Retrieve existing checkpointer history for multi-turn dialogue
     try:
         checkpoint_state = app.get_state(config)
         existing_history = (
@@ -424,23 +378,19 @@ def stream_agentic_rag(
         "groq_api_key": groq_api_key,
     }
 
-    # 1. Routing & Anaphora resolution
     yield {"type": "status", "stage": "intent", "message": "Looking into document..."}
     state.update(route_query_node(state))
 
-    # 2. Parallel Tri-Hybrid Retrieval (Dense + BM25 + ColPali)
     yield {"type": "status", "stage": "retrieval", "message": "Searching document..."}
     state.update(dense_retriever_node(state))
     state.update(bm25_retriever_node(state))
     state.update(colpali_retriever_node(state))
 
-    # 3. Text Fusion & Visual Hydration
     yield {"type": "status", "stage": "fusion", "message": "Combining results..."}
     state.update(text_fusion_node(state))
     state.update(visual_hydration_node(state))
     state.update(format_context_node(state))
 
-    # 4. Relevance Grading & CRAG Query Expansion
     state.update(grade_context_node(state))
 
     if not state.get("is_relevant", True) and state.get("retry_count", 0) < 1:
@@ -453,7 +403,6 @@ def stream_agentic_rag(
         state.update(visual_hydration_node(state))
         state.update(format_context_node(state))
 
-    # 5. Build Vision LLM Payload
     messages, user_blocks, system_prompt, user_dialogue_question, selected_text = build_vlm_messages(state)
 
     if not messages:
@@ -470,7 +419,6 @@ def stream_agentic_rag(
         yield {"type": "done"}
         return
 
-    # 6. Stream Answer Generation
     yield {"type": "status", "stage": "generating", "message": "Synthesizing answer..."}
     full_answer = ""
     try:
@@ -517,7 +465,6 @@ def stream_agentic_rag(
             full_answer = err_msg
             yield {"type": "token", "delta": err_msg}
 
-    # 7. Grounding filter & checkpointer update
     is_error_answer = full_answer.startswith("An error occurred:")
     if is_error_answer:
         sources = []

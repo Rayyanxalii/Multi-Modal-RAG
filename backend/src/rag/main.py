@@ -66,6 +66,7 @@ def run_interactive(pdf_path: str | None = None) -> None:
 
 
 def main():
+    """Parse CLI arguments and dispatch the requested RAG command."""
     parser = argparse.ArgumentParser(description="Multi-Modal Agentic RAG CLI")
     parser.add_argument(
         "--question", "-q",

@@ -1,3 +1,4 @@
+"""Crop figure images from rendered PDF pages based on metadata."""
 import json
 from pathlib import Path
 
@@ -21,12 +22,12 @@ def crop_figures(
     output_dir: Path = FIGURES_DIR,
     rendered_pages_dir: Path = RENDERED_PAGES_DIR,
 ):
+    """Crop figures from rendered PDF pages and update their metadata."""
     output_dir.mkdir(parents=True, exist_ok=True)
 
     if not figures_jsonl.exists():
         raise FileNotFoundError(f"Metadata not found: {figures_jsonl}")
 
-    # Read existing figure metadata.
     with figures_jsonl.open("r", encoding="utf-8") as file:
         figures = [json.loads(line) for line in file if line.strip()]
 
@@ -82,7 +83,6 @@ def crop_figures(
                 updated_figures.append(figure)
                 continue
 
-            # Convert bottom-left PDF coordinates to top-left coordinates.
             if bbox.get("coordinate_origin", "").endswith("BOTTOMLEFT"):
                 x0_pt = left
                 y0_pt = page.rect.height - top
@@ -93,7 +93,6 @@ def crop_figures(
                     left, top, right, bottom
                 )
 
-            # Map PDF points to the actual rendered image dimensions.
             with Image.open(page_image_path) as page_image:
                 page_image = page_image.convert("RGB")
 
@@ -105,7 +104,6 @@ def crop_figures(
                 x1 = round(x1_pt * scale_x)
                 y1 = round(y1_pt * scale_y)
 
-                # Clamp coordinates to image boundaries.
                 x0 = max(0, min(x0, page_image.width))
                 x1 = max(0, min(x1, page_image.width))
                 y0 = max(0, min(y0, page_image.height))
@@ -120,9 +118,6 @@ def crop_figures(
 
                 output_path = output_dir / f"{figure_id}.png"
 
-                # Drop signature/logo/icon fragments and anything below the
-                # vision API minimum. These are not useful visual evidence and
-                # only add retrieval noise, so exclude them from the index too.
                 crop_width, crop_height = cropped.size
                 if (
                     min(crop_width, crop_height) < MIN_VISION_IMAGE_DIM
@@ -155,7 +150,6 @@ def crop_figures(
     finally:
         pdf.close()
 
-    # Update metadata with the paths and dimensions of the crops.
     temporary_path = figures_jsonl.with_suffix(".tmp")
 
     with temporary_path.open("w", encoding="utf-8") as file:

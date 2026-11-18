@@ -1,3 +1,5 @@
+"""Retrieve figures and tables using ColPali visual page rankings."""
+
 import json
 import re
 from pathlib import Path
@@ -32,18 +34,13 @@ def load_jsonl(path: Path) -> list[dict[str, Any]]:
     return records
 
 
-
-
 def extract_page_number(page_str: str) -> int:
     """Extract integer page number from page names like 'page_0003.png' or '3'."""
     stem = Path(page_str).stem
-    # Match any sequence of digits in the stem
     match = re.search(r"\d+", stem)
     if match:
         return int(match.group())
     raise ValueError(f"Cannot extract page number from: {page_str}")
-
-
 
 
 def retrieve_visual_assets(
@@ -52,13 +49,7 @@ def retrieve_visual_assets(
     top_k: int = 10,
     record_type: str | None = None,
 ) -> list[dict[str, Any]]:
-    """Retrieve figures and tables by mapping ColPali page rankings.
-
-    Option A Implementation:
-    1. Runs ColPali Late-Interaction (MaxSim) on rendered page embeddings.
-    2. Maps top-scoring pages to the figures and tables residing on those pages.
-    3. Returns sorted visual records with ColPali rank, score, and content.
-    """
+    """Retrieve figures and tables by mapping ColPali page rankings."""
     if not query or not query.strip():
         raise ValueError("Query cannot be empty.")
 
@@ -68,7 +59,6 @@ def retrieve_visual_assets(
     if record_type not in (None, "figure", "table"):
         raise ValueError("record_type must be None, 'figure', or 'table'.")
 
-    # 1. Run ColPali page search
     retriever = get_colpali_retriever()
     try:
         page_results = retriever.search(
@@ -79,19 +69,16 @@ def retrieve_visual_assets(
         print(f"[Visual Retrieval] ColPali search encountered exception: {exc}")
         page_results = []
 
-    # Map page number to ColPali ranking metadata
     page_rankings: dict[int, dict[str, Any]] = {}
     for res in page_results:
         page_num = extract_page_number(res["page"])
         page_rankings[page_num] = res
 
-    # 2. Load figures and tables
     figures = load_jsonl(FIGURES_PATH) if FIGURES_PATH.exists() else []
     tables = load_jsonl(TABLES_PATH) if TABLES_PATH.exists() else []
 
     matched_assets: list[dict[str, Any]] = []
 
-    # 3. Match figures on retrieved pages
     if record_type in (None, "figure"):
         for fig in figures:
             fig_page = fig.get("page_number")
@@ -115,7 +102,6 @@ def retrieve_visual_assets(
                     "item_type": fig.get("item_type", "PictureItem"),
                 })
 
-    # 4. Match tables on retrieved pages
     if record_type in (None, "table"):
         for tab in tables:
             tab_page = tab.get("page_number")
@@ -139,7 +125,6 @@ def retrieve_visual_assets(
                     "item_type": tab.get("item_type", "TableItem"),
                 })
 
-    # Fallback if ColPali returns 0 assets (e.g. cloud ZeroGPU rate-limit or network timeout)
     if not matched_assets:
         query_words = set(re.findall(r"\w+", query.lower()))
         if record_type in (None, "figure"):
@@ -181,7 +166,6 @@ def retrieve_visual_assets(
                         "item_type": tab.get("item_type", "TableItem"),
                     })
 
-    # 5. Sort by ColPali page rank, then highest ColPali score
     matched_assets.sort(
         key=lambda item: (
             item["colpali_rank"],
@@ -189,7 +173,6 @@ def retrieve_visual_assets(
         )
     )
 
-    # 6. Assign final overall visual ranks
     for rank, item in enumerate(matched_assets, start=1):
         item["rank"] = rank
 
@@ -202,19 +185,13 @@ def hybrid_retrieve(
     candidate_k: int = 10,
     record_type: str | None = None,
 ) -> list[dict[str, Any]]:
-    """Retrieve figures and tables using ColPali visual retrieval.
-
-    Maintains backwards compatibility while delegating directly to
-    ColPali visual page-to-asset mapping.
-    """
+    """Retrieve figures and tables using ColPali visual retrieval."""
     return retrieve_visual_assets(
         query=query,
         top_pages=candidate_k,
         top_k=top_k,
         record_type=record_type,
     )
-
-
 
 
 if __name__ == "__main__":
@@ -232,3 +209,4 @@ if __name__ == "__main__":
             if res.get("table_markdown"):
                 print("Table preview:\n" + res["table_markdown"][:200])
             print("-" * 50)
+

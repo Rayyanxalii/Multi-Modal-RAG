@@ -1,3 +1,5 @@
+"""Render PDF pages to images."""
+
 import gc
 import os
 from pathlib import Path
@@ -79,6 +81,7 @@ render_pdf_images = render_pdf_to_images
 
 
 def main():
+    """Render the default PDF and report the saved image paths."""
     image_paths = render_pdf_images()
     print(f"Rendered {len(image_paths)} pages.")
     print(f"Images saved to: {RENDERED_PAGES_DIR}")

@@ -1,15 +1,11 @@
+"""Dataset of evaluation samples for the Nestlé Pakistan financial report."""
+
 from ragas import Dataset
 
-# Evaluation set for: Nestlé Pakistan Limited, condensed interim financial
-# information for the nine months ended September 30, 2026 (16-page PDF).
-# Page numbers refer to PDF pages (1 = cover).
-# All PKR figures in the statements are in '000 unless stated otherwise.
 
 dataset = Dataset(name="nestle_pk_9m_2026_eval", backend="local/csv", root_dir="./data")
 
-# (query, expected_answer, complexity, question_type, modality, page)
 SAMPLES = [
-    # ---------- Directors' review (text) ----------
     ("What were Nestlé Pakistan's net sales for the nine months ended September 30, 2026, and how did they change versus the prior year?",
      "Net sales were about PKR 160 billion (PKR 160,260 million), an increase of 6.3% over the same period of 2025 (PKR 150,819 million).",
      "simple", "fact_lookup", "text", 2),
@@ -40,8 +36,6 @@ SAMPLES = [
     ("Who signed the Directors' Review on behalf of the Board, and when and where was it dated?",
      "Joselito Jr Avancena (Chief Executive Officer) and Syed Yawar Ali (Chairman), dated October 22, 2026, in Lahore.",
      "simple", "fact_lookup", "image", 3),
-
-    # ---------- Statement of financial position ----------
     ("What were total assets at September 30, 2026 versus December 31, 2025?",
      "Total assets were PKR 85,867,828 thousand at Sep 30, 2026 versus PKR 93,893,396 thousand at Dec 31, 2025.",
      "simple", "fact_lookup", "table", 4),
@@ -63,8 +57,6 @@ SAMPLES = [
     ("Which factories does Nestlé Pakistan operate and where is its head office?",
      "Factories: Sheikhupura, Kabirwala (Khanewal), Port Qasim (Karachi) and Islamabad (Sector I-10/3). The head office is at Packages Mall, Shahrah-e-Roomi, Lahore.",
      "simple", "fact_lookup", "text", 10),
-
-    # ---------- Statement of profit or loss ----------
     ("What was Q3 2026 (three months ended Sep 30, 2026) revenue and gross profit compared with Q3 2025?",
      "Q3 2026 revenue was PKR 53,237,069 thousand (Q3 2025: 49,526,393) and gross profit was PKR 19,776,653 thousand (Q3 2025: 17,409,588).",
      "medium", "fact_lookup", "table", 5),
@@ -83,16 +75,12 @@ SAMPLES = [
     ("Did the company report any other comprehensive income in the nine months of 2026?",
      "No. Other comprehensive income was nil, so total comprehensive income equals profit after tax of PKR 14,525,996 thousand.",
      "simple", "fact_lookup", "table", 6),
-
-    # ---------- Changes in equity ----------
     ("What dividend per share was declared as the final dividend for the year ended December 31, 2025, and what was the H1 2026 interim dividend per share?",
      "Final dividend for 2025: Rs. 256 per share. Interim dividend for the six months ended June 30, 2026: Rs. 213 per share.",
      "simple", "fact_lookup", "table", 7),
     ("What interim dividend did the Board propose for the nine months ended September 30, 2026?",
      "Rs. 97 per share, amounting to Rs. 4,398.91 million (versus Rs. 78 per share and Rs. 3,537.27 million a year earlier). It is not reflected in these financial statements.",
      "medium", "fact_lookup", "text", 16),
-
-    # ---------- Cash flows ----------
     ("What was net cash generated from operating activities for the nine months, and how does it compare with last year?",
      "PKR 13,368,412 thousand in 2026 versus PKR 24,910,010 thousand in 2025.",
      "simple", "fact_lookup", "table", 9),
@@ -108,8 +96,6 @@ SAMPLES = [
     ("What were cash and cash equivalents at the end of the period, and how are they reconciled?",
      "PKR 2,985,245 thousand: cash and bank balances of PKR 3,338,587 thousand less running finance of PKR 353,342 thousand.",
      "medium", "multi_hop", "table", "9,12"),
-
-    # ---------- Segments and geography ----------
     ("What is the revenue of the Dairy and Nutrition segment and what share of total revenue is it?",
      "PKR 124,858,941 thousand, about 77.9% of total revenue of PKR 160,259,856 thousand.",
      "medium", "calculation", "table", 13),
@@ -128,8 +114,6 @@ SAMPLES = [
     ("What percentage of 2026 net sales came from outside Pakistan?",
      "Export/foreign sales were about PKR 3,245,290 thousand (160,259,856 - 157,014,566), roughly 2.0% of total sales.",
      "hard", "calculation", "table", 14),
-
-    # ---------- Related parties, corporate events ----------
     ("What was the general licensing fee paid to associated companies in 2026 versus 2025?",
      "PKR 2,126,517 thousand in 2026 versus PKR 5,210,396 thousand in 2025.",
      "simple", "fact_lookup", "table", 12),
@@ -139,13 +123,9 @@ SAMPLES = [
     ("What is the proposed joint venture mentioned in the subsequent events/subsidiary note, and what has Nestlé Pakistan done about it?",
      "On 23 July 2026 Nestlé S.A. announced a proposed 50:50 joint venture with Platinum Equity covering its waters and premium beverages business including Pakistan operations, subject to definitive agreements and approvals. Nestlé Pakistan incorporated a wholly owned subsidiary, Waters and Premium Beverages PK (Private) Limited, on 28 July 2026. It has not commenced operations and is not consolidated, under an SECP exemption under section 228.",
      "hard", "multi_hop", "text", 16),
-
-    # ---------- Visual / layout ----------
     ("What does the cover page of the document show?",
      "A blue gradient background with the title 'Condensed interim financial information for the nine months ended September 30, 2026', and the Nestlé logo (a bird's nest with birds) with the tagline 'Good Food, Good Life' at the bottom right.",
      "simple", "visual", "image", 1),
-
-    # ---------- Out-of-scope (hallucination / refusal checks) ----------
     ("What was Nestlé Pakistan's net profit for the fourth quarter of 2026?",
      "Not available in the document. It only covers the nine months ended September 30, 2026.",
      "medium", "unanswerable", "text", None),
@@ -155,8 +135,6 @@ SAMPLES = [
     ("What was the total number of employees at Nestlé Pakistan as of September 30, 2026?",
      "Not available in the document. Headcount is not disclosed.",
      "simple", "unanswerable", "text", None),
-
-    # ======================= TABLE UNDERSTANDING =======================
     ("In the Condensed Interim Statement of Financial Position, which column contains audited figures and as of what date?",
      "The Dec 31, 2025 column is audited. The Sep 30, 2026 column is un-audited.",
      "simple", "table_understanding", "table", 4),
@@ -187,8 +165,6 @@ SAMPLES = [
     ("In the related party table, what did associated companies receive in dividends in 2026 versus 2025, and what was key management remuneration?",
      "Dividends to associated companies: PKR 11,791,859 thousand (2025: 9,352,010). Remuneration to key management personnel: PKR 7,392,519 thousand (2025: 6,982,948).",
      "medium", "table_understanding", "table", 12),
-
-    # ======================= REASONING =======================
     ("Operating margin stayed at 17.9% even though gross margin improved. Using the profit or loss statement, explain why.",
      "Gross margin rose from 37.6% to 38.3%, but distribution and selling expenses rose from about 16.3% to 17.2% of sales, offsetting the gain. Administration expenses fell slightly as a share of sales (about 3.3% to 3.2%), so operating margin was essentially flat.",
      "hard", "reasoning", "table", 5),
@@ -204,8 +180,6 @@ SAMPLES = [
     ("Does the cash flow statement suggest the dividend payout was funded from current-period operating cash flow alone?",
      "No. Dividends paid (PKR 21,263,202 thousand) exceeded operating cash flow (PKR 13,368,412 thousand). The gap was covered by about PKR 9.59 billion from disposing of Treasury Bills and by existing cash.",
      "hard", "reasoning", "table", 9),
-
-    # ======================= SUMMARIZATION =======================
     ("Summarize the business performance review in the Directors' Review in 3-4 sentences.",
      "Net sales grew 6.3% to about PKR 160 billion despite inflation, political instability and fuel price spikes tied to the US-Iran war. Gross profit rose 8.1% (helped by green energy and cost discipline), operating profit rose 5.9% as brand investment and distribution costs absorbed gains, and net profit after tax grew 3.1% despite higher taxation. The company also localized and secured inventory to limit FX exposure.",
      "medium", "summarization", "text", 2),
@@ -218,8 +192,6 @@ SAMPLES = [
     ("Summarize the significant related-party transactions disclosed.",
      "Associated companies: dividends PKR 11.79 billion, purchases of goods, services, assets and rent PKR 15.23 billion, sales of goods PKR 1.14 billion, general licensing fee PKR 2.13 billion (down from 5.21), insurance premium PKR 468 million. Other related parties: retirement plan contributions PKR 874 million and key management remuneration PKR 7.39 billion.",
      "medium", "summarization", "table", 12),
-
-    # ======================= VISUAL / IMAGE =======================
     ("Describe the Nestlé logo as it appears at the top of the Directors' Review page.",
      "A grey line-drawn bird's nest with birds at the top left of the page, with the 'Nestlé' wordmark beneath it.",
      "simple", "visual", "image", 2),
@@ -235,8 +207,6 @@ SAMPLES = [
     ("Describe the colour scheme of the cover page.",
      "A blue gradient that is darker at the top and fades to near-white at the bottom, with white title text at the top and the grey Nestlé logo at the bottom right.",
      "simple", "visual", "image", 1),
-
-    # ======================= UNANSWERABLE =======================
     ("What is Nestlé Pakistan's market share in the dairy category?",
      "Not available in the document. Market share is not disclosed.",
      "simple", "unanswerable", "text", None),
@@ -261,4 +231,4 @@ if __name__ == "__main__":
                 "doc_id": "nestle_financial_report",
             },
         })
-    print(f"Dataset successfully populated with {len(dataset)} samples.")   
+    print(f"Dataset successfully populated with {len(dataset)} samples.")

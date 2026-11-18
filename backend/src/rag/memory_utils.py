@@ -1,9 +1,4 @@
-"""Memory telemetry and MuPDF cache controls for constrained cloud containers.
-
-Render/HF Spaces commonly run the app with 512 MB RAM.  These helpers make
-memory pressure visible in the logs and release PyMuPDF's internal caches
-between pages so peak RSS stays below the container ceiling.
-"""
+"""Memory telemetry and MuPDF cache helpers for constrained containers."""
 
 from __future__ import annotations
 
@@ -31,7 +26,7 @@ _CLOUD_ENV_VARS = (
 
 @dataclass(frozen=True)
 class MemorySnapshot:
-    """Raw memory measurements from the host and cgroup (values in MB)."""
+    """Raw memory measurements from the host and cgroup, in MB."""
 
     total_mb: float | None = None
     available_mb: float | None = None
@@ -55,7 +50,9 @@ class ResourceProfile:
     reason: str
 
     def summary(self) -> str:
+        """Return a short text summary of this profile."""
         def _fmt(value: float | None) -> str:
+            """Format a value in MB or 'unknown'."""
             return f"{value:.0f} MB" if value is not None else "unknown"
 
         parser = "docling" if self.use_docling else "pymupdf-lite"
@@ -78,6 +75,7 @@ def _env_flag(name: str) -> bool | None:
 
 
 def _env_float(name: str, default: float) -> float:
+    """Read a positive float from an env var, or return the default."""
     try:
         value = float(os.getenv(name, "") or default)
     except (TypeError, ValueError):
@@ -201,17 +199,7 @@ def _memory_snapshot() -> MemorySnapshot:
 
 
 def get_resource_profile() -> ResourceProfile:
-    """Detect the usable memory budget and select Docling vs. PyMuPDF Lite.
-
-    Priority:
-    1. ``USE_DOCLING=1`` forces full mode (and therefore the larger upload caps).
-    2. ``LOW_MEMORY_PARSER=1/0`` explicitly forces low/full mode.
-    3. Otherwise the effective budget is ``min(host RAM, cgroup limit)`` and
-       Docling is enabled only when both the total and currently available RAM
-       are sufficient.
-
-    The safe choice is always low-memory mode when the budget cannot be read.
-    """
+    """Detect the usable memory budget and choose Docling or PyMuPDF Lite."""
     snapshot = _memory_snapshot()
     threshold_mb = _env_float("DOCLING_MIN_RAM_MB", 3500.0)
     headroom_mb = _env_float("DOCLING_MIN_AVAILABLE_MB", 1800.0)
@@ -368,12 +356,7 @@ def configure_mupdf_low_memory() -> None:
 
 
 def release_mupdf_caches() -> None:
-    """Flush MuPDF's decoded-object store and run a Python GC cycle.
-
-    Safe to call between pages: any still-referenced object is simply reloaded
-    on demand.  This prevents decoded images, fonts and display lists from
-    accumulating across a multi-page parse.
-    """
+    """Flush MuPDF caches and run garbage collection to free memory."""
     try:
         import pymupdf
 

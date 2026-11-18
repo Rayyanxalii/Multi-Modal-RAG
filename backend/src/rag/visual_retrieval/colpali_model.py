@@ -6,7 +6,6 @@ from rag.visual_retrieval.colpali_client import (
     get_colpali_cloud_client,
 )
 
-# ColPaliRetriever is now an alias to the Cloud Client (no 6 GB local weights needed!)
 ColPaliRetriever = ColPaliCloudClient
 
 

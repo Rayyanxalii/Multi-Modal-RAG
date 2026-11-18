@@ -1,3 +1,4 @@
+"""Process figure captions and associate shared captions across panels."""
 import json
 import re
 from pathlib import Path
@@ -16,21 +17,25 @@ MIN_AREA = 1500
 
 
 def read_jsonl(path):
+    """Read JSONL records from a file."""
     with path.open("r", encoding="utf-8") as f:
         return [json.loads(line) for line in f if line.strip()]
 
 
 def write_jsonl(path, records):
+    """Write records to a JSONL file."""
     with path.open("w", encoding="utf-8", newline="\n") as f:
         for record in records:
             f.write(json.dumps(record, ensure_ascii=False) + "\n")
 
 
 def figure_id(record):
+    """Return a record's figure identifier."""
     return record.get("figure_id", record.get("id", "unknown"))
 
 
 def page_number(record):
+    """Return a record's page number."""
     value = record.get("page_number")
 
     if value is None:
@@ -44,11 +49,13 @@ def page_number(record):
 
 
 def caption_text(record):
+    """Return a record's stripped caption text."""
     value = record.get("caption")
     return value.strip() if isinstance(value, str) and value.strip() else ""
 
 
 def bbox(record):
+    """Return a record's first bounding box."""
     boxes = record.get("bounding_boxes") or []
 
     if not boxes or not isinstance(boxes[0], dict):
@@ -68,6 +75,7 @@ def bbox(record):
 
 
 def dimensions(record):
+    """Return a record's bounding box dimensions and area."""
     box = bbox(record)
 
     if box is None:
@@ -80,6 +88,7 @@ def dimensions(record):
 
 
 def suspicious_reasons(record):
+    """Return reasons a record's detection looks suspicious."""
     reasons = []
     size = dimensions(record)
 
@@ -104,6 +113,7 @@ def suspicious_reasons(record):
 
 
 def has_left_right_caption(text):
+    """Check whether text mentions both left and right panels."""
     return bool(
         re.search(r"\bleft\b", text, re.I)
         and re.search(r"\bright\b", text, re.I)
@@ -111,11 +121,13 @@ def has_left_right_caption(text):
 
 
 def parent_figure(text):
+    """Return the parent figure label from text."""
     match = re.search(r"\bFigure\s+(\d+[a-z]?)\b", text, re.I)
     return f"Figure {match.group(1)}" if match else None
 
 
 def panel_caption(text, panel):
+    """Extract a panel's caption from a shared caption."""
     pattern = (
         r"\(\s*" + re.escape(panel) + r"\s*\)\s*(.*?)"
         r"(?=\(\s*(?:left|right)\s*\)|$)"
@@ -130,6 +142,7 @@ def panel_caption(text, panel):
 
 
 def horizontal_order(first, second):
+    """Order two records by their horizontal center."""
     a, b = bbox(first), bbox(second)
 
     if a is None or b is None:
@@ -149,9 +162,9 @@ def process_captions(
     cleaned_path: Path = CLEANED_PATH,
     report_path: Path = REPORT_PATH,
 ):
+    """Process captions and associate shared captions across panels."""
     original = read_jsonl(input_path)
 
-    # Work on independent copies. Never modify the raw input file.
     cleaned = [dict(record) for record in original]
     report = []
     by_page = defaultdict(list)
@@ -171,7 +184,6 @@ def process_captions(
                 "image_path": record.get("image_path"),
             })
 
-    # Associate shared captions using same-page geometry.
     for page, records in by_page.items():
         for first, second in combinations(records, 2):
             first_caption = caption_text(first)
@@ -256,6 +268,7 @@ def process_captions(
 
 
 def main():
+    """Run caption processing and print the review report."""
     cleaned, report = process_captions()
     for item in report:
         print(json.dumps(item, ensure_ascii=False))

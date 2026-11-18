@@ -1,4 +1,4 @@
-"""Ultra-low-memory PDF parser using PyMuPDF (fitz) for cloud containers (512 MB RAM safe)."""
+"""PDF parser using PyMuPDF, tuned for low-memory containers."""
 
 from __future__ import annotations
 
@@ -50,18 +50,7 @@ def is_fast_parsed_doc(document_json_path: Path) -> bool:
 
 
 def should_extract_tables(low_mem: bool | None = None) -> bool:
-    """Decide whether PyMuPDF table detection may run.
-
-    PyMuPDF 1.28's ``page.find_tables()`` extracts every character via
-    ``rawdict`` and (with the default "lines" strategy) calls
-    ``page.get_drawings()``.  On vector-heavy financial reports that can
-    allocate hundreds of MB per page and OOM a 512 MB container, so it is
-    disabled by default on low-memory/cloud instances.
-
-    Override with ``ENABLE_TABLE_DETECTION=1`` on a larger plan.  When enabled
-    on a low-memory instance the cheaper text strategy is used instead of the
-    drawing-based line detector.
-    """
+    """Decide whether PyMuPDF table detection may run."""
     flag = os.getenv("ENABLE_TABLE_DETECTION", "").strip().lower()
     if flag in ("1", "true", "yes", "on"):
         return True
@@ -94,6 +83,7 @@ def _detect_body_font_size(pdf: pymupdf.Document, sample_limit: int = 8) -> floa
 
 
 def _clean_text(text: str) -> str:
+    """Collapse whitespace and trim a text string."""
     return " ".join((text or "").split()).strip()
 
 
@@ -201,6 +191,7 @@ def parse_pdf_fast(
     acc_words = 0
 
     def flush_chunk() -> None:
+        """Flush accumulated text into a new chunk."""
         nonlocal acc_texts, acc_pages, acc_bboxes, acc_words
         combined = "\n\n".join(t for t in acc_texts if t.strip()).strip()
         if not combined:
@@ -238,7 +229,6 @@ def parse_pdf_fast(
             page_no = page_idx + 1
             page_dict = page.get_text("dict")
 
-            # 1. Extract text blocks & detect headings
             for block in page_dict.get("blocks", []):
                 if block.get("type") != 0:
                     continue
@@ -293,7 +283,6 @@ def parse_pdf_fast(
                 acc_words += words
                 md_sections.append(block_text)
 
-            # 2. Extract structured tables via PyMuPDF native table finder.
             # Disabled by default on low-memory containers: get_drawings()+rawdict
             # can allocate hundreds of MB on vector-heavy financial pages.
             try:
@@ -354,7 +343,6 @@ def parse_pdf_fast(
             except Exception as exc:
                 print(f"[FastPDF] Table scan warning on page {page_no}: {exc}")
 
-            # 3. Extract figures / raster images via PyMuPDF
             try:
                 seen_boxes: list[tuple[float, float, float, float]] = []
                 for info in page.get_image_info(xrefs=True):
@@ -428,8 +416,6 @@ def parse_pdf_fast(
             "contextualized_text": f"Visual document: {pdf_path.name} ({total_pages} pages).",
         })
 
-    # Write outputs atomically so a killed process never leaves partial files
-    # that later runs would mistake for completed stages.
     _atomic_write_text(markdown_path, "\n\n".join(md_sections))
     _atomic_write_jsonl(chunks_path, chunks)
     _atomic_write_jsonl(figures_path, figures)

@@ -1,3 +1,4 @@
+"""Extract figures and tables from a saved Docling document."""
 import json
 from pathlib import Path
 
@@ -19,7 +20,6 @@ from rag.config import (
 
 def get_item_metadata(item) -> dict:
     """Extract provenance metadata from a Docling document item."""
-
     page_numbers = set()
     bounding_boxes = []
 
@@ -54,7 +54,6 @@ def get_item_metadata(item) -> dict:
 
 def get_caption(item, document) -> str | None:
     """Return the caption if Docling provides one."""
-
     try:
         caption = item.caption_text(doc=document)
         return caption or None
@@ -181,7 +180,6 @@ def extract_tables(
 
 def inspect_rendered_pages(rendered_pages_dir: Path = RENDERED_PAGES_DIR):
     """Check whether the existing rendered page images are available."""
-
     if not rendered_pages_dir.exists():
         print(f"Rendered pages directory not found: {rendered_pages_dir}")
         return
@@ -196,6 +194,7 @@ def inspect_rendered_pages(rendered_pages_dir: Path = RENDERED_PAGES_DIR):
 
 
 def main():
+    """Run figure and table extraction from the saved document."""
     if not DOCUMENT_JSON_PATH.exists():
         raise FileNotFoundError(
             f"Saved Docling JSON not found: {DOCUMENT_JSON_PATH}\n"

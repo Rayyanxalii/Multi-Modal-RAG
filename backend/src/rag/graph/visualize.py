@@ -20,7 +20,6 @@ def save_graph_artifacts(
 
     graph_view = app.get_graph()
 
-    # 1. Export Mermaid markdown definition
     try:
         mermaid_syntax = graph_view.draw_mermaid()
         output_mmd.write_text(mermaid_syntax, encoding="utf-8")
@@ -28,7 +27,6 @@ def save_graph_artifacts(
     except Exception as exc:
         print(f"Could not export Mermaid syntax: {exc}")
 
-    # 2. Generate Mermaid PNG via LangGraph draw_mermaid_png()
     png_data = graph_view.draw_mermaid_png()
 
     with open(output_png, "wb") as f:

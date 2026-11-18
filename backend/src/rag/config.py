@@ -1,13 +1,13 @@
+"""Configuration constants and helpers for the RAG backend."""
+
 import os
 from pathlib import Path
 from typing import Any
 from dotenv import load_dotenv
 
-# Base paths
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 DATA_DIR = PROJECT_ROOT / "data"
 
-# Subdirectories for data assets
 RAW_DATA_DIR = DATA_DIR / "raw"
 DEFAULT_PDF_PATH = RAW_DATA_DIR / "attention.pdf"
 RENDERED_PAGES_DIR = DATA_DIR / "rendered_pages"
@@ -17,7 +17,6 @@ TABLES_DIR = DATA_DIR / "tables"
 EMBEDDINGS_DIR = DATA_DIR / "embeddings"
 RUNS_DIR = DATA_DIR / "retrieval_runs"
 
-# Canonical chunk & metadata files
 TEXT_CHUNKS_PATH = CHUNKS_DIR / "attention_chunks.jsonl"
 DOCUMENT_JSON_PATH = CHUNKS_DIR / "attention_document.json"
 PARSED_MD_PATH = CHUNKS_DIR / "attention_parsed.md"
@@ -31,7 +30,6 @@ COLPALI_EMBEDDINGS_PATH = (
     else EMBEDDINGS_DIR / "attention_colpali.pt"
 )
 
-# Vector database & retrieval constants
 TEXT_COLLECTION_NAME = os.getenv("QDRANT_TEXT_COLLECTION", "omni_documents")
 VISUAL_COLLECTION_NAME = "research_figures_tables"
 EMBEDDING_MODEL = "gemini-embedding-001"
@@ -44,18 +42,12 @@ DEFAULT_CANDIDATE_K = 10
 # Vision APIs reject images smaller than this on either dimension.
 MIN_VISION_IMAGE_DIM = 32
 
-# Environment variables
 ENV_PATH = PROJECT_ROOT / ".env"
 load_dotenv(ENV_PATH, override=True)
 
 
 def get_min_figure_area_px() -> int:
-    """Minimum pixel area for a cropped figure to be indexed.
-
-    Small signature/logo/icon fragments add noise to visual retrieval and can
-    be rejected by vision APIs, so they are dropped during cropping. Override
-    with ``MIN_FIGURE_AREA_PX`` when a document has genuinely tiny diagrams.
-    """
+    """Return the minimum pixel area for a cropped figure to be indexed."""
     try:
         return int(os.getenv("MIN_FIGURE_AREA_PX", "8000"))
     except (TypeError, ValueError):
@@ -63,7 +55,7 @@ def get_min_figure_area_px() -> int:
 
 
 def get_qdrant_credentials() -> tuple[str, str]:
-    """Retrieve Qdrant URL and API key from environment."""
+    """Return the Qdrant URL and API key from the environment."""
     url = os.getenv("QDRANT_URL")
     api_key = os.getenv("QDRANT_API_KEY")
     if not url or not api_key:
@@ -115,7 +107,7 @@ def get_document_paths(
             tables_dir = TABLES_DIR / doc_id
         embeddings_path = EMBEDDINGS_DIR / f"{doc_id}.pt"
 
-    # Cleaned figures preference
+    # Prefer cleaned figures when available.
     cleaned_fig = chunks_dir / f"{doc_id}_figures_cleaned.jsonl"
     raw_fig = chunks_dir / f"{doc_id}_figures.jsonl"
     figures_jsonl = cleaned_fig if cleaned_fig.exists() else raw_fig
