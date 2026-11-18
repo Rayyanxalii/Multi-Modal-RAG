@@ -237,6 +237,12 @@ When deploying to containerized platforms like Railway or Render:
 3. **Environment Variables**:
    Configure `GROQ_API`, `QDRANT_URL`, `QDRANT_API_KEY`, `COLPALI_SPACE`, `HF_TOKEN`, and `OLLAMA_HOST` in the platform's Environment dashboard.
    *(For Ollama, you can either host Ollama on an external instance or deploy a companion Ollama service on the platform).*
+4. **Memory / Instance Size**:
+   The FastAPI + LangGraph baseline uses roughly 200–260 MB RSS, so a 512 MB instance is tight while a PDF is being parsed. The Docker image therefore defaults to `LOW_MEMORY_PARSER=true` and `ENABLE_TABLE_DETECTION=false`.
+   - Keep table detection **off** on a 512 MB plan. Table text is still extracted from normal text blocks and indexed; page images remain searchable through ColPali.
+   - On a **1 GB or larger** instance you can set `ENABLE_TABLE_DETECTION=true` to add structured GFM table chunks (low-memory instances then use PyMuPDF's cheaper text strategy).
+   - Ingestion is serialized per instance, so concurrent uploads queue instead of doubling peak memory.
+   - Watch `[Memory] ...` lines in the Render logs to see current/peak RSS at each ingestion stage.
 
 ---
 

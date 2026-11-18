@@ -14,6 +14,7 @@ from llama_index.core.llms import ChatMessage, MessageRole, ImageBlock
 
 from services.llm_service import get_llm_vision
 from rag.config import DEFAULT_PDF_PATH, get_document_paths
+from rag.memory_utils import log_memory
 from rag.graph.state import RAGState
 from rag.graph.nodes import (
     check_doc_status_node,
@@ -260,13 +261,30 @@ def stream_ingest_document(
         "retry_count": 0,
     }
 
-    local_pages_exist = (
-        doc_paths["rendered_pages_dir"].exists()
-        and any(doc_paths["rendered_pages_dir"].glob("*.png"))
-    )
+    local_pages_exist = False
+    try:
+        import pymupdf
+
+        with pymupdf.open(pdf_obj) as _pdf:
+            expected_pages = len(_pdf)
+        rendered = (
+            [
+                p
+                for p in doc_paths["rendered_pages_dir"].glob("page_*.png")
+                if p.stat().st_size > 0
+            ]
+            if doc_paths["rendered_pages_dir"].exists()
+            else []
+        )
+        # A crash mid-render can leave a partial set; require every page.
+        local_pages_exist = expected_pages > 0 and len(rendered) >= expected_pages
+    except Exception as exc:
+        print(f"[Ingestion] Page-cache check skipped: {exc}")
+
     local_chunks_exist = (
         doc_paths["chunks_path"].exists()
         and doc_paths["chunks_path"].stat().st_size > 0
+        and doc_paths["document_json_path"].exists()
     )
     local_visuals_exist = (
         doc_paths["figures_raw_jsonl"].exists()
@@ -275,12 +293,14 @@ def stream_ingest_document(
 
     # Stage 1: Render pages
     import gc
+    log_memory("ingest:start")
     if local_pages_exist:
         yield {"stage": "rendering", "progress": 15, "message": "Rendered pages already exist locally — skipping rendering..."}
     else:
         yield {"stage": "rendering", "progress": 15, "message": "Rendering high-resolution document pages..."}
         render_pages_node(state)
         gc.collect()
+        log_memory("ingest:after-render")
 
     # Stage 2: Layout parsing & hierarchical chunks
     if local_chunks_exist:
@@ -289,6 +309,7 @@ def stream_ingest_document(
         yield {"stage": "parsing", "progress": 40, "message": "Parsing document layout, headings & tables..."}
         parse_document_node(state)
         gc.collect()
+        log_memory("ingest:after-parse")
 
     # Stage 3: Figure & table extraction and cropping
     if local_visuals_exist:
@@ -297,11 +318,13 @@ def stream_ingest_document(
         yield {"stage": "cropping", "progress": 65, "message": "Extracting and cropping figures & data tables..."}
         extract_and_crop_node(state)
         gc.collect()
+        log_memory("ingest:after-crop")
 
     # Stage 4: Dense vector indexing into Qdrant
     yield {"stage": "vectors", "progress": 82, "message": "Indexing text vectors into Qdrant..."}
     vec_res = index_vectors_node(state) or {}
     gc.collect()
+    log_memory("ingest:after-vectors")
     qdrant_existed = bool(vec_res.get("qdrant_existed"))
     if qdrant_existed:
         pts = vec_res.get("qdrant_points", "")
@@ -310,6 +333,7 @@ def stream_ingest_document(
     # Stage 5: ColPali visual late-interaction indexing
     yield {"stage": "colpali", "progress": 92, "message": "Checking visual pages on ColPali ZeroGPU Space..."}
     colpali_res = index_colpali_node(state) or {}
+    log_memory("ingest:after-colpali")
     colpali_existed = bool(colpali_res.get("colpali_existed"))
     if colpali_existed:
         yield {
@@ -336,6 +360,7 @@ def stream_ingest_document(
         "qdrant_existed": qdrant_existed,
         "already_existed": bool(colpali_existed or local_chunks_exist or qdrant_existed),
     }
+    log_memory("ingest:complete")
 
 
 def ingest_document(pdf_path: str | Path) -> dict[str, Any]:

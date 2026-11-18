@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import gc
 import json
 import os
+import uuid
 from collections import Counter
 from pathlib import Path
 from typing import Any
@@ -11,6 +13,12 @@ from typing import Any
 import pymupdf
 
 from rag.config import DEFAULT_PDF_PATH, get_document_paths
+from rag.memory_utils import (
+    configure_mupdf_low_memory,
+    current_rss_mb,
+    log_memory,
+    release_mupdf_caches,
+)
 
 
 def is_low_memory_env() -> bool:
@@ -85,10 +93,33 @@ def is_fast_parsed_doc(document_json_path: Path) -> bool:
         return False
 
 
-def _detect_body_font_size(pdf: pymupdf.Document) -> float:
+def should_extract_tables(low_mem: bool | None = None) -> bool:
+    """Decide whether PyMuPDF table detection may run.
+
+    PyMuPDF 1.28's ``page.find_tables()`` extracts every character via
+    ``rawdict`` and (with the default "lines" strategy) calls
+    ``page.get_drawings()``.  On vector-heavy financial reports that can
+    allocate hundreds of MB per page and OOM a 512 MB container, so it is
+    disabled by default on low-memory/cloud instances.
+
+    Override with ``ENABLE_TABLE_DETECTION=1`` on a larger plan.  When enabled
+    on a low-memory instance the cheaper text strategy is used instead of the
+    drawing-based line detector.
+    """
+    flag = os.getenv("ENABLE_TABLE_DETECTION", "").strip().lower()
+    if flag in ("1", "true", "yes", "on"):
+        return True
+    if flag in ("0", "false", "no", "off"):
+        return False
+    if low_mem is None:
+        low_mem = is_low_memory_env()
+    return not low_mem
+
+
+def _detect_body_font_size(pdf: pymupdf.Document, sample_limit: int = 8) -> float:
     """Estimate primary body font size by weighting character frequency across sample pages."""
     size_counts: Counter[float] = Counter()
-    sample_pages = min(len(pdf), 8)
+    sample_pages = min(len(pdf), max(1, sample_limit))
     for idx in range(sample_pages):
         page_dict = pdf[idx].get_text("dict")
         for block in page_dict.get("blocks", []):
@@ -100,6 +131,7 @@ def _detect_body_font_size(pdf: pymupdf.Document) -> float:
                     if txt:
                         size = round(float(span.get("size", 10.0)), 1)
                         size_counts[size] += len(txt)
+        del page_dict
     if not size_counts:
         return 10.0
     return size_counts.most_common(1)[0][0]
@@ -130,12 +162,34 @@ def _format_table_markdown(rows: list[list[Any]]) -> str:
     return "\n".join(lines)
 
 
+def _atomic_write_text(path: Path, text: str) -> None:
+    """Write text via a temp file + rename so interrupted parsers never look complete."""
+    tmp = path.with_name(f".{path.name}.{uuid.uuid4().hex[:8]}.tmp")
+    try:
+        tmp.write_text(text, encoding="utf-8")
+        os.replace(tmp, path)
+    finally:
+        tmp.unlink(missing_ok=True)
+
+
+def _atomic_write_jsonl(path: Path, records: list[dict[str, Any]]) -> None:
+    """Write JSONL via a temp file + rename so interrupted parsers never look complete."""
+    tmp = path.with_name(f".{path.name}.{uuid.uuid4().hex[:8]}.tmp")
+    try:
+        with tmp.open("w", encoding="utf-8") as f:
+            for record in records:
+                f.write(json.dumps(record, ensure_ascii=False) + "\n")
+        os.replace(tmp, path)
+    finally:
+        tmp.unlink(missing_ok=True)
+
+
 def parse_pdf_fast(
     pdf_path: Path = DEFAULT_PDF_PATH,
     doc_paths: dict[str, Any] | None = None,
     max_words_per_chunk: int = 380,
 ) -> list[dict[str, Any]]:
-    """Parse PDF text chunks, headings, figures, and tables using minimal RAM (< 35 MB)."""
+    """Parse PDF text chunks, headings, figures and (optionally) tables with a page-bounded memory footprint."""
     pdf_path = Path(pdf_path)
     if not pdf_path.exists():
         raise FileNotFoundError(f"PDF not found: {pdf_path.resolve()}")
@@ -153,7 +207,29 @@ def parse_pdf_fast(
     figures_path: Path = doc_paths["figures_raw_jsonl"]
     tables_jsonl_path: Path = doc_paths["tables_jsonl"]
 
-    print(f"[FastPDF] Parsing '{pdf_path.name}' with low-memory PyMuPDF engine...")
+    print(f"[FastPDF] Parsing '{pdf_path.name}' with PyMuPDF engine...")
+    low_mem = is_low_memory_env()
+    if low_mem:
+        configure_mupdf_low_memory()
+
+    extract_tables = should_extract_tables(low_mem)
+    if extract_tables:
+        rss = current_rss_mb()
+        if rss is not None and rss > 320:
+            print(
+                f"[FastPDF] RSS already {rss:.0f} MB — skipping table detection to protect the container "
+                "(set ENABLE_TABLE_DETECTION=1 on an instance with more RAM to re-enable it)."
+            )
+            extract_tables = False
+
+    if not extract_tables:
+        table_mode = "off"
+    elif low_mem:
+        table_mode = "on (text strategy)"
+    else:
+        table_mode = "on (lines strategy)"
+    print(f"[FastPDF] Mode: low_memory={low_mem}, table_detection={table_mode}")
+    log_memory("parse:start")
 
     chunks: list[dict[str, Any]] = []
     figures: list[dict[str, Any]] = []
@@ -198,7 +274,7 @@ def parse_pdf_fast(
 
     with pymupdf.open(pdf_path) as pdf:
         total_pages = len(pdf)
-        body_size = _detect_body_font_size(pdf)
+        body_size = _detect_body_font_size(pdf, sample_limit=3 if low_mem else 8)
 
         for page_idx, page in enumerate(pdf):
             page_no = page_idx + 1
@@ -247,20 +323,29 @@ def parse_pdf_fast(
 
                 acc_texts.append(block_text)
                 acc_pages.add(page_no)
-                acc_bboxes.append({
-                    "page_number": page_no,
-                    "left": round(float(bbox[0]), 2),
-                    "top": round(float(bbox[1]), 2),
-                    "right": round(float(bbox[2]), 2),
-                    "bottom": round(float(bbox[3]), 2),
-                    "coordinate_origin": "TOPLEFT",
-                })
+                if len(acc_bboxes) < 20:
+                    acc_bboxes.append({
+                        "page_number": page_no,
+                        "left": round(float(bbox[0]), 2),
+                        "top": round(float(bbox[1]), 2),
+                        "right": round(float(bbox[2]), 2),
+                        "bottom": round(float(bbox[3]), 2),
+                        "coordinate_origin": "TOPLEFT",
+                    })
                 acc_words += words
                 md_sections.append(block_text)
 
-            # 2. Extract structured tables via PyMuPDF native table finder
+            # 2. Extract structured tables via PyMuPDF native table finder.
+            # Disabled by default on low-memory containers: get_drawings()+rawdict
+            # can allocate hundreds of MB on vector-heavy financial pages.
             try:
-                tab_finder = page.find_tables()
+                tab_finder = None
+                if extract_tables:
+                    find_kwargs: dict[str, Any] = {"use_layout": False}
+                    if low_mem:
+                        # The text strategy avoids page.get_drawings() entirely.
+                        find_kwargs["strategy"] = "text"
+                    tab_finder = page.find_tables(**find_kwargs)
                 for tbl in (tab_finder.tables if tab_finder else []):
                     rows = tbl.extract()
                     md_tbl = _format_table_markdown(rows)
@@ -356,6 +441,14 @@ def parse_pdf_fast(
             except Exception as exc:
                 print(f"[FastPDF] Figure scan warning on page {page_no}: {exc}")
 
+            # Release per-page extraction structures and MuPDF decoded-object caches.
+            del page_dict
+            tab_finder = None
+            if low_mem:
+                release_mupdf_caches()
+            elif page_no % 5 == 0:
+                gc.collect()
+
         flush_chunk()
 
     # Handle scanned/image-only PDF edge case where no text chunks were found
@@ -377,33 +470,25 @@ def parse_pdf_fast(
             "contextualized_text": f"Visual document: {pdf_path.name} ({total_pages} pages).",
         })
 
-    # Write outputs atomically
-    with markdown_path.open("w", encoding="utf-8") as f:
-        f.write("\n\n".join(md_sections))
-
-    with chunks_path.open("w", encoding="utf-8") as f:
-        for chunk in chunks:
-            f.write(json.dumps(chunk, ensure_ascii=False) + "\n")
-
-    with figures_path.open("w", encoding="utf-8") as f:
-        for fig in figures:
-            f.write(json.dumps(fig, ensure_ascii=False) + "\n")
-
-    with tables_jsonl_path.open("w", encoding="utf-8") as f:
-        for tbl in tables:
-            f.write(json.dumps(tbl, ensure_ascii=False) + "\n")
-
-    with document_json_path.open("w", encoding="utf-8") as f:
-        json.dump(
+    # Write outputs atomically so a killed process never leaves partial files
+    # that later runs would mistake for completed stages.
+    _atomic_write_text(markdown_path, "\n\n".join(md_sections))
+    _atomic_write_jsonl(chunks_path, chunks)
+    _atomic_write_jsonl(figures_path, figures)
+    _atomic_write_jsonl(tables_jsonl_path, tables)
+    _atomic_write_text(
+        document_json_path,
+        json.dumps(
             {
                 "parser": "pymupdf_lite",
                 "doc_id": doc_name,
                 "file_name": pdf_path.name,
                 "pages": total_pages,
-            },
-            f,
-        )
+            }
+        ),
+    )
 
+    log_memory("parse:end")
     print(
         f"[FastPDF] Complete: {len(chunks)} chunks, {len(figures)} figures, {len(tables)} tables "
         f"({total_pages} pages) saved."

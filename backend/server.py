@@ -48,8 +48,10 @@ from rag.graph import (
     stream_ingest_document,
 )
 from rag.document_manager import list_all_documents, delete_document
+from rag.memory_utils import log_memory
 
 app = FastAPI(title="Omni Retrieve")
+log_memory("server:startup")
 
 # Enable CORS
 app.add_middleware(
@@ -561,10 +563,43 @@ def stream_chat_question(
 _INGEST_JOBS: dict[str, dict[str, Any]] = {}
 _INGEST_LOCK = threading.Lock()
 
+# Only one ingestion may run per instance: parallel parsing doubles peak memory
+# and OOMs 512 MB containers.  Additional uploads wait in a FIFO queue.
+_INGEST_GATE = threading.Lock()
+try:
+    _INGEST_GATE_TIMEOUT = max(60, int(os.getenv("INGEST_QUEUE_TIMEOUT_SECONDS", "900")))
+except ValueError:
+    _INGEST_GATE_TIMEOUT = 900
+
 
 def _run_ingest_job(job_id: str, target_pdf: Path, user_id: str | None = None) -> None:
     """Execute document ingestion in a background daemon thread updating job progress."""
+    gate_acquired = False
     try:
+        with _INGEST_LOCK:
+            job = _INGEST_JOBS.get(job_id)
+            if job is not None:
+                job.update({
+                    "stage": "queued",
+                    "progress": 8,
+                    "message": (
+                        "Waiting for the current ingestion to finish..."
+                        if _INGEST_GATE.locked()
+                        else "Preparing ingestion pipeline..."
+                    ),
+                })
+
+        gate_acquired = _INGEST_GATE.acquire(timeout=_INGEST_GATE_TIMEOUT)
+        if not gate_acquired:
+            raise RuntimeError(
+                "Another document is still being ingested. Please retry in a few minutes."
+            )
+
+        with _INGEST_LOCK:
+            job = _INGEST_JOBS.get(job_id)
+            if job is not None:
+                job.update({"stage": "starting", "progress": 10, "message": "Preparing ingestion pipeline..."})
+
         for event in stream_ingest_document(target_pdf, user_id=user_id):
             with _INGEST_LOCK:
                 job = _INGEST_JOBS.get(job_id)
@@ -599,6 +634,8 @@ def _run_ingest_job(job_id: str, target_pdf: Path, user_id: str | None = None) -
                 job["message"] = str(exc)
                 job["done"] = True
     finally:
+        if gate_acquired:
+            _INGEST_GATE.release()
         gc.collect()
 
 
@@ -830,12 +867,22 @@ async def upload_document(
         q: queue_mod.Queue = queue_mod.Queue()
 
         def worker():
+            gate_acquired = _INGEST_GATE.acquire(timeout=_INGEST_GATE_TIMEOUT)
+            if not gate_acquired:
+                q.put({
+                    "stage": "error",
+                    "progress": 100,
+                    "message": "Another document is still being ingested. Please retry in a few minutes.",
+                })
+                q.put(None)
+                return
             try:
                 for event in stream_ingest_document(target_pdf, user_id=uid):
                     q.put(event)
             except Exception as exc:
                 q.put({"stage": "error", "progress": 100, "message": str(exc)})
             finally:
+                _INGEST_GATE.release()
                 gc.collect()
                 q.put(None)
 

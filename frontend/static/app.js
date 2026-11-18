@@ -1773,44 +1773,55 @@ function initUploadModal() {
       return;
     }
 
-    const formData = new FormData();
-    formData.append("file", file);
-    formData.append("user_id", currentUserId);
+    const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-    startIngestionProgress(file.name);
-    btnSubmitUpload.disabled = true;
-    btnSubmitUpload.innerHTML = `<span>Ingesting...</span> <span aria-hidden="true">⏳</span>`;
-    btnCloseUpload.disabled = true;
+    const buildUploadFormData = () => {
+      const fd = new FormData();
+      fd.append("file", file);
+      fd.append("user_id", currentUserId);
+      return fd;
+    };
 
-    try {
-      // Launch asynchronous background ingestion job (avoids Cloudflare/Render 100s timeouts)
-      const res = await fetch("/api/upload", {
-        method: "POST",
-        headers: { "X-User-ID": currentUserId },
-        body: formData,
-      });
+    // POST with a bounded retry window so an in-progress Render restart does not
+    // surface as an immediate failure. Only 4xx validation errors are fatal.
+    const startIngestJob = async () => {
+      let lastError = null;
+      for (let attempt = 0; attempt < 30; attempt += 1) {
+        try {
+          const res = await fetch("/api/upload", {
+            method: "POST",
+            headers: { "X-User-ID": currentUserId },
+            body: buildUploadFormData(),
+          });
+          if (res.ok) return await res.json();
 
-      if (!res.ok) {
-        const errorData = await res.json().catch(() => ({}));
-        throw new Error(errorData.detail || `Upload failed: ${res.status}`);
+          if (res.status >= 500) {
+            lastError = new Error(`Upload service returned HTTP ${res.status}.`);
+          } else {
+            const errorData = await res.json().catch(() => ({}));
+            const error = new Error(errorData.detail || `Upload failed: ${res.status}`);
+            error.userFacing = true;
+            throw error;
+          }
+        } catch (err) {
+          if (err && err.userFacing) throw err;
+          lastError = err;
+        }
+
+        if (attempt < 29) {
+          updateIngestionUI(4, "Waiting for the server to come back online...", file.name);
+          await sleep(3000);
+        }
       }
+      throw new Error(
+        `Could not reach the upload service${lastError ? `: ${lastError.message}` : "."}`
+      );
+    };
 
-      const initData = await res.json();
-      const jobId = initData.job_id;
-      let finalDocId = initData.doc_id || null;
-      let finalMessage = "";
-      let colpaliExisted = false;
-      let alreadyExisted = false;
-
-      if (!jobId) {
-        throw new Error("Server did not return an ingestion job ID.");
-      }
-
-      updateIngestionUI(5, `Uploaded ${file.name}. Starting pipeline...`, file.name);
-
+    const pollIngestJob = async (jobId) => {
       let transientErrors = 0;
       while (true) {
-        await new Promise((resolve) => setTimeout(resolve, 900));
+        await sleep(900);
 
         let statusRes;
         try {
@@ -1818,21 +1829,31 @@ function initUploadModal() {
         } catch (netErr) {
           transientErrors += 1;
           if (transientErrors >= 15) {
-            throw new Error(`Network connection lost while checking ingestion status: ${netErr.message}`);
+            const error = new Error(`Network connection lost while checking ingestion status: ${netErr.message}`);
+            error.serverRestarted = true;
+            throw error;
           }
           continue;
         }
 
         if (statusRes.status === 404) {
           const errJson = await statusRes.json().catch(() => ({}));
-          throw new Error(errJson.detail || "Ingestion job expired or server restarted (memory limit reached).");
+          const error = new Error(
+            errJson.detail || "The server restarted while ingesting this document."
+          );
+          error.serverRestarted = true;
+          throw error;
         }
 
         if (!statusRes.ok) {
           transientErrors += 1;
           if (transientErrors >= 15) {
             if (statusRes.status === 502 || statusRes.status === 503 || statusRes.status === 504) {
-              throw new Error(`Server temporarily unreachable (HTTP ${statusRes.status} Bad Gateway). The container may have restarted.`);
+              const error = new Error(
+                `The server became unreachable (HTTP ${statusRes.status}) while ingesting this document.`
+              );
+              error.serverRestarted = true;
+              throw error;
             }
             throw new Error(`Server status check failed (HTTP ${statusRes.status}).`);
           }
@@ -1851,11 +1872,61 @@ function initUploadModal() {
         }
 
         if (job.done || job.stage === "complete") {
+          return job;
+        }
+      }
+    };
+
+    startIngestionProgress(file.name);
+    btnSubmitUpload.disabled = true;
+    btnSubmitUpload.innerHTML = `<span>Ingesting...</span> <span aria-hidden="true">⏳</span>`;
+    btnCloseUpload.disabled = true;
+
+    try {
+      // Launch asynchronous background ingestion job (avoids Cloudflare/Render 100s timeouts)
+      let initData = await startIngestJob();
+      let finalDocId = initData.doc_id || null;
+      let finalMessage = "";
+      let colpaliExisted = false;
+      let alreadyExisted = false;
+
+      if (!initData.job_id) {
+        throw new Error("Server did not return an ingestion job ID.");
+      }
+
+      updateIngestionUI(5, `Uploaded ${file.name}. Starting pipeline...`, file.name);
+
+      for (let restartRetries = 0; ; restartRetries += 1) {
+        try {
+          const job = await pollIngestJob(initData.job_id);
           finalDocId = job.doc_id || finalDocId;
           finalMessage = job.message || `Successfully ingested ${file.name}!`;
           colpaliExisted = Boolean(job.colpali_existed);
           alreadyExisted = Boolean(job.already_existed);
           break;
+        } catch (err) {
+          if (err && err.serverRestarted && restartRetries < 1) {
+            updateIngestionUI(
+              5,
+              "The server restarted during ingestion. Resuming automatically — completed steps are cached...",
+              file.name
+            );
+            await sleep(3000);
+            initData = await startIngestJob();
+            if (!initData.job_id) {
+              throw new Error("Server did not return an ingestion job ID after restart.");
+            }
+            finalDocId = initData.doc_id || finalDocId;
+            continue;
+          }
+          if (err && err.serverRestarted) {
+            throw new Error(
+              "The server restarted again while ingesting this document, most likely because the instance ran out of memory. " +
+              "Completed steps are cached, so retrying the upload will resume from the last finished stage. " +
+              "If this repeats, upgrade the Render instance to more RAM."
+            );
+          }
+          throw err;
         }
       }
 

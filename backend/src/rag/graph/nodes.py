@@ -137,7 +137,7 @@ def parse_document_node(state: RAGState) -> dict[str, Any]:
 
     use_docling = os.getenv("USE_DOCLING", "").strip().lower() in ("1", "true", "yes")
     if not use_docling or is_low_memory_env():
-        print(f"[Ingestion] Parsing '{pdf_path.name}' with high-speed PyMuPDF Lite engine (<35 MB RAM)...")
+        print(f"[Ingestion] Parsing '{pdf_path.name}' with high-speed PyMuPDF Lite engine (low-RAM mode)...")
         parse_pdf_fast(pdf_path, doc_paths=doc_paths)
         return {}
 

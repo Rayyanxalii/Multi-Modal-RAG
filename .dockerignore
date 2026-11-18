@@ -15,3 +15,12 @@ __pycache__
 data/chat_history.db*
 data/retrieval_runs/*
 data/experiments/*
+
+# Never bake user uploads or generated ingestion assets into the image
+data/users
+data/raw/*.pdf
+data/rendered_pages/*
+data/chunks/*
+data/figures/*
+data/tables/*
+data/embeddings/*
