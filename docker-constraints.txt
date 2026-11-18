@@ -1,0 +1,5 @@
+# Docker images run Docling's layout models on CPU. Pin the CPU-only PyTorch
+# build so the image does not pull several GB of unused NVIDIA CUDA libraries.
+# Keep these versions aligned with the resolved torch/torchvision versions.
+torch==2.15.0+cpu
+torchvision==0.29.2+cpu

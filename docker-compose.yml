@@ -29,7 +29,8 @@ services:
       dockerfile: Dockerfile
     container_name: rag-app
     ports:
-      - "8000:8000"
+      # Container listens on 7860 by default (see Dockerfile CMD)
+      - "8000:7860"
     environment:
       - GROQ_API=${GROQ_API}
       - QDRANT_URL=${QDRANT_URL}

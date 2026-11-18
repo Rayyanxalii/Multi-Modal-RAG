@@ -28,13 +28,18 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv 
 
 # Copy package definitions and source tree
-COPY pyproject.toml /app/
+COPY pyproject.toml docker-constraints.txt /app/
 COPY backend /app/backend
 COPY frontend /app/frontend
 COPY data /app/data
 
-# Install dependencies into system Python
-RUN uv pip install --system -e .
+# Install dependencies into system Python. The constraint file selects the
+# CPU-only PyTorch wheel, avoiding several GB of unused CUDA libraries.
+RUN uv pip install --system \
+    --constraint /app/docker-constraints.txt \
+    --extra-index-url https://download.pytorch.org/whl/cpu \
+    --index-strategy unsafe-best-match \
+    -e .
 
 # Prepare persistent data mount points with full write permissions (for Hugging Face Spaces user 1000)
 RUN mkdir -p /app/data/raw \
@@ -46,7 +51,7 @@ RUN mkdir -p /app/data/raw \
     /app/data/retrieval_runs \
     && chmod -R 777 /app/data
 
-ENV PYTHONPATH="/app/backend:/app/backend/src:/app:$PYTHONPATH"
+ENV PYTHONPATH="/app/backend:/app/backend/src:/app"
 
 # Expose ports for both Hugging Face Spaces (7860) and Render/Local (8000)
 EXPOSE 7860
